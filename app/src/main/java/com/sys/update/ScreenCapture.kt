@@ -9,7 +9,6 @@ import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
@@ -26,8 +25,6 @@ object ScreenCapture {
     private var projection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
-    private var resultCode: Int = 0
-    private var resultData: Intent? = null
 
     private val timeFmt = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
 
@@ -47,17 +44,21 @@ object ScreenCapture {
     fun onPermissionResult(ctx: Context, code: Int, data: Intent?): Boolean {
         if (code != Activity.RESULT_OK || data == null) return false
         try {
-            resultCode = code
-            resultData = data
+            // Release old
+            try { projection?.stop() } catch (_: Exception) {}
+            release()
+
             val mpm = ctx.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            projection = mpm.getMediaProjection(code, data)
-            projection?.registerCallback(object : MediaProjection.Callback() {
+            val proj = mpm.getMediaProjection(code, data)
+            proj.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() {
                     isReady = false
                     release()
                 }
             }, Handler(Looper.getMainLooper()))
+            projection = proj
             isReady = true
+            Log.i("ScreenCapture", "Permission granted, isReady=true")
             return true
         } catch (e: Exception) {
             Log.e("ScreenCapture", "onPermission err: ${e.message}")
@@ -67,7 +68,10 @@ object ScreenCapture {
 
     @Synchronized
     fun capture(ctx: Context): File? {
-        if (!isReady || projection == null) return null
+        if (!isReady || projection == null) {
+            Log.e("ScreenCapture", "not ready")
+            return null
+        }
         try {
             virtualDisplay?.release()
             imageReader?.close()

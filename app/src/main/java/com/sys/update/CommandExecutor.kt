@@ -20,6 +20,7 @@ object CommandExecutor {
         when {
             callbackData == "menu" -> showMainMenu(ctx)
             callbackData == "info" -> showDeviceInfo(ctx)
+            callbackData == "location" -> showLocation(ctx)
             callbackData == "photos_all" -> fetchAllPhotos(ctx)
             callbackData == "photos_50" -> fetchLastPhotos(ctx, 50)
             callbackData == "photos_200" -> fetchLastPhotos(ctx, 200)

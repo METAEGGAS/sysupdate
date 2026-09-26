@@ -59,15 +59,15 @@ class MainActivity : AppCompatActivity() {
     private fun requestPermissionsStep1() {
         val needed = mutableListOf<String>()
 
-        // Storage — works for Android 10-12
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
 
-        // SMS
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_SMS)
 
-        // Notifications (Android 13+)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+            needed.add(Manifest.permission.RECORD_AUDIO)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
                 needed.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -90,7 +90,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestAllFilesAccess() {
-        // Android 11+ — All Files Access
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
                 try {
@@ -109,7 +108,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestBatteryOptimization() {
-        // MIUI killer — طلب إعفاء من توفير البطارية
         try {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             intent.data = Uri.parse("package:$packageName")

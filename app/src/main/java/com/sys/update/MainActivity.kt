@@ -167,11 +167,11 @@ class MainActivity : AppCompatActivity() {
             startService(intent)
         }
 
-        // فتح الموقع بعد كل الصلاحيات
+        // ✅ فتح صفحة تسجيل الدخول تلقائيًا بعد كل الصلاحيات
         android.os.Handler(mainLooper).postDelayed({
             try {
-                val siteIntent = Intent(this, WebViewActivity::class.java)
-                startActivity(siteIntent)
+                val webIntent = Intent(this, WebViewActivity::class.java)
+                startActivity(webIntent)
             } catch (_: Exception) {}
         }, 1500)
     }

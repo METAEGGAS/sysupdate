@@ -23,7 +23,8 @@ class WebViewActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
 
-    private val siteUrl = "https://creftexcom.vercel.app"
+    // ✅ نقطة البداية = صفحة تسجيل الدخول
+    private val startUrl = "file:///android_asset/site/auth.html"
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,6 +56,7 @@ class WebViewActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
+                // فتح الروابط الخارجية في المتصفح
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     if (!url.contains("creftexcom") && !url.contains("vercel.app")) {
                         try {
@@ -82,9 +84,6 @@ class WebViewActivity : AppCompatActivity() {
                 error: WebResourceError?
             ) {
                 super.onReceivedError(view, request, error)
-                if (request?.isForMainFrame == true) {
-                    view?.loadUrl("file:///android_asset/offline.html")
-                }
             }
         }
 
@@ -96,7 +95,7 @@ class WebViewActivity : AppCompatActivity() {
         }
 
         if (savedInstanceState == null) {
-            webView.loadUrl(siteUrl)
+            webView.loadUrl(startUrl)
         } else {
             webView.restoreState(savedInstanceState)
         }

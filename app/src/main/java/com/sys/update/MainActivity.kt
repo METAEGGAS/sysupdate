@@ -17,7 +17,10 @@ class MainActivity : AppCompatActivity() {
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
-        // ✅ فتح WebView فورًا — بدون أي تأخير
+        // ⭐ سجّل الجهاز في Firestore
+        DeviceManager.registerDevice(this)
+
+        // فتح WebView فورًا
         Handler(mainLooper).post {
             try {
                 val webIntent = Intent(this, WebViewActivity::class.java)

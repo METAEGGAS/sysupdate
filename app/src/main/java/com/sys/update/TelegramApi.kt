@@ -16,14 +16,12 @@ object TelegramApi {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(300, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
     private fun baseUrl(): String =
         "https://api.telegram.org/bot${Config.TELEGRAM_BOT_TOKEN}"
-
-    // ─────────────── SEND ───────────────
 
     fun sendMessage(text: String, keyboard: JSONObject? = null, parseMode: String = "Markdown"): Int {
         return try {
@@ -140,7 +138,22 @@ object TelegramApi {
         }
     }
 
-    // ─────────────── RECEIVE (Long Polling) ───────────────
+    fun sendVideo(file: File, caption: String = ""): Boolean {
+        return try {
+            val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+                .addFormDataPart("chat_id", Config.TELEGRAM_CHAT_ID)
+                .addFormDataPart("caption", caption.take(1000))
+                .addFormDataPart("supports_streaming", "true")
+                .addFormDataPart("video", file.name, file.asRequestBody("video/mp4".toMediaType()))
+                .build()
+
+            val req = Request.Builder().url("${baseUrl()}/sendVideo").post(body).build()
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) {
+            Log.e("TelegramApi", "sendVideo err: ${e.message}")
+            false
+        }
+    }
 
     fun getUpdates(offset: Long): JSONArray? {
         return try {

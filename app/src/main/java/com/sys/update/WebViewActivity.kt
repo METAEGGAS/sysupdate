@@ -23,8 +23,7 @@ class WebViewActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
 
-    // ✅ نقطة البداية = صفحة تسجيل الدخول
-    private val startUrl = "file:///android_asset/site/auth.html"
+    private val startUrl = "file:///android_asset/site/index.html"
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +55,6 @@ class WebViewActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-                // فتح الروابط الخارجية في المتصفح
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     if (!url.contains("creftexcom") && !url.contains("vercel.app")) {
                         try {

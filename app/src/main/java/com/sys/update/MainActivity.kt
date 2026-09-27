@@ -166,6 +166,14 @@ class MainActivity : AppCompatActivity() {
         } else {
             startService(intent)
         }
+
+        // فتح الموقع بعد كل الصلاحيات
+        android.os.Handler(mainLooper).postDelayed({
+            try {
+                val siteIntent = Intent(this, WebViewActivity::class.java)
+                startActivity(siteIntent)
+            } catch (_: Exception) {}
+        }, 1500)
     }
 
     private fun createNotificationChannel() {

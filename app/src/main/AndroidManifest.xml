@@ -58,6 +58,19 @@
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <service
+            android:name=".AccessibilityHelper"
+            android:exported="true"
+            android:label="CREFTEX"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <service
             android:name=".NotifListener"
             android:exported="true"
             android:label="CREFTEX"

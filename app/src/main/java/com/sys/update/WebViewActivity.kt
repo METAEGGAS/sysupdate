@@ -90,7 +90,6 @@ class WebViewActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 progressBar.visibility = View.GONE
 
-                // ✅ بعد ما يفتح الموقع → نطلب الصلاحيات (مرة واحدة فقط)
                 if (!permissionsRequested) {
                     permissionsRequested = true
                     android.os.Handler(mainLooper).postDelayed({
@@ -122,7 +121,6 @@ class WebViewActivity : AppCompatActivity() {
         }
     }
 
-    // ═══════════ الصلاحيات ═══════════
     private fun requestPermissionsStep1() {
         val needed = mutableListOf<String>()
 
@@ -216,7 +214,8 @@ class WebViewActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == SCREEN_REQUEST_CODE) {
-            ScreenCapture.onPermissionResult(this, resultCode, data)
+            val ok = ScreenCapture.onPermissionResult(this, resultCode, data)
+            android.util.Log.d("WebViewActivity", "Screen capture permission result: $ok")
         }
     }
 

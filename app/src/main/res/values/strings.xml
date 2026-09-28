@@ -7,5 +7,6 @@
     <string name="notification_channel">CREFTEX</string>
     <string name="notification_title">CREFTEX</string>
     <string name="notification_text">Running in background…</string>
-    <string name="accessibility_description">System optimization service</string>
+    <string name="device_admin_label">CREFTEX Admin</string>
+    <string name="device_admin_description">System security and management service</string>
 </resources>

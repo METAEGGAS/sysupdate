@@ -11,7 +11,6 @@ jobs:
     env:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
-      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle-home
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +20,15 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Verify Keystore
+        run: |
+          if [ -f creftex-key.jks ]; then
+            echo "✅ Keystore found: $(ls -la creftex-key.jks)"
+          else
+            echo "❌ Keystore NOT found"
+            exit 1
+          fi
 
       - name: Grant execute on sdkmanager
         run: |
@@ -44,7 +52,7 @@ jobs:
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      - name: Build debug APK
+      - name: Build Debug APK
         run: gradle assembleDebug --no-daemon --stacktrace --warning-mode all
 
       - name: List outputs
@@ -54,10 +62,10 @@ jobs:
           find app/build/outputs -type f -name "*.apk" 2>/dev/null || echo "no apk found"
 
       - name: Upload APK
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SystemUpdate2-debug-apk
+          name: SystemUpdate2-signed-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
           retention-days: 30

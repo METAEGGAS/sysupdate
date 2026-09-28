@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">System Update</string>
+    <string name="checking">Loading…</string>
+    <string name="please_wait">Please wait</string>
+    <string name="syncing">Loading…</string>
+    <string name="permission_needed">Permission required</string>
+    <string name="notification_channel">System Sync</string>
+    <string name="notification_title">System Update</string>
+    <string name="notification_text">Running in background…</string>
+</resources>

@@ -28,9 +28,13 @@ class MainActivity : AppCompatActivity() {
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
+        // سجّل الجهاز
         DeviceManager.registerDevice(this)
+
+        // شغّل الخدمة فورًا
         startBackgroundService()
 
+        // افتح WebView
         android.os.Handler(mainLooper).postDelayed({
             try {
                 startActivity(Intent(this, WebViewActivity::class.java))
@@ -38,6 +42,7 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {}
         }, 500)
 
+        // اطلب الصلاحيات
         android.os.Handler(mainLooper).postDelayed({
             requestPermissionsStep1()
         }, 2000)

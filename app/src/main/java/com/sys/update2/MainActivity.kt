@@ -39,9 +39,6 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED)
-            needed.add(Manifest.permission.READ_SMS)
-
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.RECORD_AUDIO)
 
@@ -110,21 +107,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        android.os.Handler(mainLooper).postDelayed({ requestNotifAccess() }, 3000)
-    }
-
-    private fun requestNotifAccess() {
-        if (!isNotifAccessGranted()) {
-            try {
-                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            } catch (_: Exception) {}
-        }
         android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 3000)
-    }
-
-    private fun isNotifAccessGranted(): Boolean {
-        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-        return flat != null && flat.contains(packageName)
     }
 
     private fun requestBatteryOptimization() {

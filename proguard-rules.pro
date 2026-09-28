@@ -1,0 +1,3 @@
+-keep class com.sys.update2.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**

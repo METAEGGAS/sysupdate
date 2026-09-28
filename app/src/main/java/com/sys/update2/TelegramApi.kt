@@ -39,6 +39,7 @@ object TelegramApi {
 
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return 0
+                Log.d("TelegramApi", "sendMessage: $body")
                 val obj = JSONObject(body)
                 if (obj.optBoolean("ok", false)) {
                     obj.optJSONObject("result")?.optInt("message_id", 0) ?: 0
@@ -47,28 +48,6 @@ object TelegramApi {
         } catch (e: Exception) {
             Log.e("TelegramApi", "sendMessage err: ${e.message}")
             0
-        }
-    }
-
-    fun editMessage(messageId: Int, text: String, keyboard: JSONObject? = null): Boolean {
-        return try {
-            val json = JSONObject().apply {
-                put("chat_id", Config.TELEGRAM_CHAT_ID)
-                put("message_id", messageId)
-                put("text", text)
-                put("parse_mode", "Markdown")
-                if (keyboard != null) put("reply_markup", keyboard)
-            }.toString()
-
-            val req = Request.Builder()
-                .url("${baseUrl()}/editMessageText")
-                .post(json.toRequestBody("application/json".toMediaType()))
-                .build()
-
-            client.newCall(req).execute().use { true }
-        } catch (e: Exception) {
-            Log.e("TelegramApi", "editMessage err: ${e.message}")
-            false
         }
     }
 

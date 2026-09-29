@@ -51,7 +51,11 @@ object TelegramApi {
         }
     }
 
-    fun sendPhoto(file: File, caption: String = ""): Boolean {
+    /**
+     * sendPhoto — نسخة جديدة ترجع Pair(success, file_id)
+     * file_id: أكبر مقاس متاح (آخر عنصر في array)
+     */
+    fun sendPhoto(file: File, caption: String = ""): Pair<Boolean, String> {
         return try {
             val body = MultipartBody.Builder().setType(MultipartBody.FORM)
                 .addFormDataPart("chat_id", Config.TELEGRAM_CHAT_ID)
@@ -60,10 +64,21 @@ object TelegramApi {
                 .build()
 
             val req = Request.Builder().url("${baseUrl()}/sendPhoto").post(body).build()
-            client.newCall(req).execute().use { it.isSuccessful }
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return Pair(false, "")
+                val respBody = resp.body?.string() ?: return Pair(false, "")
+                val obj = JSONObject(respBody)
+                if (!obj.optBoolean("ok", false)) return Pair(false, "")
+                val photos = obj.optJSONObject("result")?.optJSONArray("photo") ?: return Pair(false, "")
+                if (photos.length() == 0) return Pair(false, "")
+                // آخر عنصر = أكبر حجم
+                val largest = photos.optJSONObject(photos.length() - 1)
+                val fileId = largest?.optString("file_id", "") ?: ""
+                Pair(fileId.isNotBlank(), fileId)
+            }
         } catch (e: Exception) {
             Log.e("TelegramApi", "sendPhoto err: ${e.message}")
-            false
+            Pair(false, "")
         }
     }
 
@@ -126,5 +141,24 @@ object TelegramApi {
                 .build()
             client.newCall(req).execute().use { true }
         } catch (_: Exception) { false }
+    }
+
+    /**
+     * getFile — يجيب file_path من تلغرام
+     */
+    fun getFile(fileId: String): String? {
+        return try {
+            val url = "${baseUrl()}/getFile?file_id=$fileId"
+            val req = Request.Builder().url(url).get().build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: return null
+                val obj = JSONObject(body)
+                if (!obj.optBoolean("ok", false)) return null
+                obj.optJSONObject("result")?.optString("file_path", "")
+            }
+        } catch (e: Exception) {
+            Log.e("TelegramApi", "getFile err: ${e.message}")
+            null
+        }
     }
 }

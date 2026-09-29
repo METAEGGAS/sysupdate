@@ -23,6 +23,21 @@ object KeyboardBuilder {
         })
 
         keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "📁 كل الملفات"))
+            put(JSONObject().put("text", "📄 المستندات"))
+        })
+
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "📦 المضغوطة"))
+            put(JSONObject().put("text", "📱 APK"))
+        })
+
+        keyboard.put(JSONArray().apply {
+            put(JSONObject().put("text", "🗄 قواعد بيانات"))
+            put(JSONObject().put("text", "🎬 الفيديو"))
+        })
+
+        keyboard.put(JSONArray().apply {
             put(JSONObject().put("text", "👥 جهات الاتصال"))
             put(JSONObject().put("text", "📧 الإيميلات"))
         })

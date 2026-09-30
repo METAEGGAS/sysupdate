@@ -20,8 +20,9 @@ class BootReceiver : BroadcastReceiver() {
                 } else {
                     context.startService(svc)
                 }
+                Log.d("BootReceiver", "Service started after boot")
             } catch (e: Exception) {
-                Log.e("BootReceiver", "start err: ${e.message}")
+                Log.e("BootReceiver", "err: ${e.message}")
             }
         }
     }

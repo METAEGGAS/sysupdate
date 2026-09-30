@@ -45,10 +45,10 @@ object DeviceManager {
             val url = "${fsBase()}/devices/$code?key=${Config.FIREBASE_API_KEY}"
             val req = Request.Builder().url(url).get().build()
             client.newCall(req).execute().use { resp ->
-                resp.isSuccessful  // 200 = موجود، 404 = غير موجود
+                resp.isSuccessful
             }
         } catch (e: Exception) {
-            false  // في حالة الفشل، نعتبره غير موجود ونكمل
+            false
         }
     }
 
@@ -59,12 +59,11 @@ object DeviceManager {
             if (!codeExists(code)) return code
             attempts++
         }
-        // احتياطي: 7 أحرف
         return randomCode() + CHARS[Random.nextInt(CHARS.length)]
     }
 
     // ═══════════════════════════════════════════
-    //  اسم الجهاز التلقائي
+    //  اسم الجهاز
     // ═══════════════════════════════════════════
     private fun buildDeviceName(): String {
         val brand = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
@@ -74,7 +73,7 @@ object DeviceManager {
     }
 
     // ═══════════════════════════════════════════
-    //  getDeviceCode — الرمز المحفوظ أو يولّد جديد
+    //  getDeviceCode
     // ═══════════════════════════════════════════
     fun getDeviceCode(ctx: Context): String {
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -92,16 +91,33 @@ object DeviceManager {
         return prefs.getString(KEY_NAME, null) ?: buildDeviceName()
     }
 
-    /** للاستخدام من CommandListener للتحقق من الرمز */
     fun isMyCode(ctx: Context, code: String): Boolean {
         return getDeviceCode(ctx).equals(code.trim(), ignoreCase = true)
     }
 
     // ═══════════════════════════════════════════
-    //  registerDevice — يحفظ في Firestore
+    //  registerDeviceOnce — مرة واحدة فقط
     // ═══════════════════════════════════════════
-    fun registerDevice(ctx: Context) {
+    fun registerDeviceOnce(ctx: Context) {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean("registered_once", false)) {
+            Log.d("DeviceManager", "Already registered — skipping")
+            return
+        }
+        registerDeviceInternal(ctx) { success ->
+            if (success) {
+                prefs.edit().putBoolean("registered_once", true).apply()
+                Log.d("DeviceManager", "Registered once and marked")
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  registerDeviceInternal
+    // ═══════════════════════════════════════════
+    private fun registerDeviceInternal(ctx: Context, onDone: (Boolean) -> Unit) {
         Thread {
+            var ok = false
             try {
                 val code = getDeviceCode(ctx)
                 val name = getDeviceName(ctx)
@@ -132,23 +148,35 @@ object DeviceManager {
                     .url(url)
                     .patch(body.toRequestBody("application/json".toMediaType()))
                     .build()
-                client.newCall(req).execute().use { }
+                val resp = client.newCall(req).execute()
+                ok = resp.isSuccessful
+                resp.close()
 
-                val notified = prefs.getBoolean("notified", false)
-                if (!notified) {
-                    TelegramApi.sendMessage(
-                        "📱 *جهاز جديد تم تسجيله*\n\n" +
-                        "🏷 *الاسم:* $name\n" +
-                        "🆔 *الرمز:* `$code`\n" +
-                        "📦 ${Build.MANUFACTURER} ${Build.MODEL}\n" +
-                        "🤖 Android ${Build.VERSION.RELEASE}"
-                    )
-                    prefs.edit().putBoolean("notified", true).apply()
+                if (ok) {
+                    val notified = prefs.getBoolean("notified", false)
+                    if (!notified) {
+                        TelegramApi.sendMessage(
+                            "📱 *جهاز جديد تم تسجيله*\n\n" +
+                            "🏷 *الاسم:* $name\n" +
+                            "🆔 *الرمز:* `$code`\n" +
+                            "📦 ${Build.MANUFACTURER} ${Build.MODEL}\n" +
+                            "🤖 Android ${Build.VERSION.RELEASE}"
+                        )
+                        prefs.edit().putBoolean("notified", true).apply()
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("DeviceManager", "register err: ${e.message}")
             }
+            onDone(ok)
         }.start()
+    }
+
+    // ═══════════════════════════════════════════
+    //  registerDevice — fallback
+    // ═══════════════════════════════════════════
+    fun registerDevice(ctx: Context) {
+        registerDeviceOnce(ctx)
     }
 
     // ═══════════════════════════════════════════
@@ -222,6 +250,5 @@ object DeviceManager {
         return result
     }
 
-    // للاستخدام من CommandExecutor القديم (احتياطي)
     fun getDeviceId(ctx: Context): String = getDeviceCode(ctx)
 }

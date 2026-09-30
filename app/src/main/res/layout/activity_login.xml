@@ -4,7 +4,6 @@
     android:layout_height="match_parent"
     android:background="@color/bg_dark">
 
-    <!-- ============ LOGIN ============ -->
     <LinearLayout
         android:id="@+id/loginView"
         android:layout_width="match_parent"
@@ -12,7 +11,6 @@
         android:orientation="vertical"
         android:background="@drawable/bg_gradient_radial">
 
-        <!-- Hero -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -53,160 +51,161 @@
                 android:layout_width="200dp"
                 android:layout_height="140dp"
                 android:layout_marginTop="12dp"
-                android:src="@drawable/ic_coin"
-                android:contentDescription="Coin" />
+                android:src="@drawable/ic_coin" />
         </LinearLayout>
 
-        <!-- Card -->
-        <LinearLayout
+        <ScrollView
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:orientation="vertical"
-            android:background="@drawable/bg_card_top_curve"
-            android:padding="22dp">
+            android:fillViewport="true">
 
-            <!-- Tabs -->
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="18dp">
+                android:orientation="vertical"
+                android:background="@drawable/bg_card_top_curve"
+                android:padding="22dp"
+                android:paddingBottom="40dp">
 
-                <TextView
-                    android:id="@+id/tE"
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Email"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="18dp">
+
+                    <TextView
+                        android:id="@+id/tE"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Email"
+                        android:textColor="#ffffff"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:paddingEnd="26dp" />
+
+                    <TextView
+                        android:id="@+id/tP"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Phone"
+                        android:textColor="@color/text_dim"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/idIn"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:background="@drawable/bg_input"
+                    android:hint="Email"
+                    android:inputType="textEmailAddress"
+                    android:paddingHorizontal="16dp"
+                    android:textColor="#e8eef8"
+                    android:textColorHint="@color/text_dim"
+                    android:textSize="15sp" />
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_input">
+
+                    <EditText
+                        android:id="@+id/pw"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@null"
+                        android:hint="Password"
+                        android:inputType="textPassword"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="48dp"
+                        android:textColor="#e8eef8"
+                        android:textColorHint="@color/text_dim"
+                        android:textSize="15sp" />
+
+                    <ImageView
+                        android:id="@+id/eye"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="end|center_vertical"
+                        android:layout_marginEnd="14dp"
+                        android:src="@drawable/ic_eye_off" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_input"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp">
+
+                    <EditText
+                        android:id="@+id/capIn"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:hint="Verification code"
+                        android:inputType="text"
+                        android:textColor="#e8eef8"
+                        android:textColorHint="@color/text_dim"
+                        android:textSize="15sp" />
+
+                    <com.sys.update2.CaptchaView
+                        android:id="@+id/cap"
+                        android:layout_width="88dp"
+                        android:layout_height="40dp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnLogin"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/bg_btn_primary"
+                    android:text="Log In"
+                    android:textAllCaps="false"
                     android:textColor="#ffffff"
                     android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:paddingEnd="26dp" />
-
-                <TextView
-                    android:id="@+id/tP"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Phone"
-                    android:textColor="@color/text_dim"
-                    android:textSize="16sp"
                     android:textStyle="bold" />
-            </LinearLayout>
 
-            <!-- Email -->
-            <EditText
-                android:id="@+id/idIn"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:background="@drawable/bg_input"
-                android:hint="Email"
-                android:inputType="textEmailAddress"
-                android:paddingHorizontal="16dp"
-                android:textColor="#e8eef8"
-                android:textColorHint="@color/text_dim"
-                android:textSize="15sp" />
-
-            <!-- Password -->
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_input">
-
-                <EditText
-                    android:id="@+id/pw"
+                <!-- ⭐ روابط: reset + register (ظاهرة دايماً) -->
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@null"
-                    android:hint="Password"
-                    android:inputType="textPassword"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="48dp"
-                    android:textColor="#e8eef8"
-                    android:textColorHint="@color/text_dim"
-                    android:textSize="15sp" />
-
-                <ImageView
-                    android:id="@+id/eye"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="14dp"
-                    android:src="@drawable/ic_eye_off"
-                    android:contentDescription="Toggle password" />
-            </FrameLayout>
-
-            <!-- Captcha -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_input"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="16dp">
-
-                <EditText
-                    android:id="@+id/capIn"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:background="@null"
-                    android:hint="Please enter the verification code"
-                    android:inputType="text"
-                    android:textColor="#e8eef8"
-                    android:textColorHint="@color/text_dim"
-                    android:textSize="15sp" />
-
-                <com.sys.update2.CaptchaView
-                    android:id="@+id/cap"
-                    android:layout_width="88dp"
-                    android:layout_height="40dp" />
-            </LinearLayout>
-
-            <!-- Login Button -->
-            <Button
-                android:id="@+id/btnLogin"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="16dp"
-                android:background="@drawable/bg_btn_primary"
-                android:text="Log In"
-                android:textAllCaps="false"
-                android:textColor="#ffffff"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <!-- Links -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/btnGoReset"
-                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="reset pass"
-                    android:textColor="#8fa3c8"
-                    android:textSize="14sp" />
+                    android:layout_marginTop="20dp"
+                    android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/btnGoRegister"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="end"
-                    android:text="to register"
-                    android:textColor="#8fa3c8"
-                    android:textSize="14sp" />
+                    <TextView
+                        android:id="@+id/btnGoReset"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="reset pass"
+                        android:textColor="#8fa3c8"
+                        android:textSize="14sp"
+                        android:paddingVertical="8dp" />
+
+                    <TextView
+                        android:id="@+id/btnGoRegister"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="end"
+                        android:text="to register"
+                        android:textColor="#8fa3c8"
+                        android:textSize="14sp"
+                        android:paddingVertical="8dp" />
+                </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
+        </ScrollView>
     </LinearLayout>
 
-    <!-- ============ REGISTER ============ -->
+    <!-- Register (مخفي افتراضي) -->
     <ScrollView
         android:id="@+id/registerView"
         android:layout_width="match_parent"
@@ -233,15 +232,14 @@
                     android:layout_height="38dp"
                     android:background="@drawable/bg_back_btn"
                     android:padding="8dp"
-                    android:src="@drawable/ic_back_arrow"
-                    android:contentDescription="Back" />
+                    android:src="@drawable/ic_back_arrow" />
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:gravity="center"
-                    android:text="Email"
+                    android:text="Register"
                     android:textColor="#ffffff"
                     android:textSize="17sp"
                     android:textStyle="bold" />
@@ -295,7 +293,7 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@null"
-                    android:hint="Please enter the verification code"
+                    android:hint="Verification code"
                     android:inputType="number"
                     android:textColor="#e8eef8"
                     android:textColorHint="@color/text_dim"
@@ -315,7 +313,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="Registration password (6-16)"
+                android:text="Password (6-16)"
                 android:textColor="#eaf0fb"
                 android:textSize="14sp" />
 
@@ -344,8 +342,7 @@
                     android:layout_height="24dp"
                     android:layout_gravity="end|center_vertical"
                     android:layout_marginEnd="14dp"
-                    android:src="@drawable/ic_eye_off"
-                    android:contentDescription="Toggle" />
+                    android:src="@drawable/ic_eye_off" />
             </FrameLayout>
 
             <FrameLayout
@@ -373,8 +370,7 @@
                     android:layout_height="24dp"
                     android:layout_gravity="end|center_vertical"
                     android:layout_marginEnd="14dp"
-                    android:src="@drawable/ic_eye_off"
-                    android:contentDescription="Toggle" />
+                    android:src="@drawable/ic_eye_off" />
             </FrameLayout>
 
             <TextView
@@ -418,11 +414,12 @@
                 android:gravity="center"
                 android:text="To log in"
                 android:textColor="#8ba5d9"
-                android:textSize="14sp" />
+                android:textSize="14sp"
+                android:paddingVertical="8dp" />
         </LinearLayout>
     </ScrollView>
 
-    <!-- ============ RESET ============ -->
+    <!-- Reset (مخفي افتراضي) -->
     <ScrollView
         android:id="@+id/resetView"
         android:layout_width="match_parent"
@@ -449,8 +446,7 @@
                     android:layout_height="38dp"
                     android:background="@drawable/bg_back_btn"
                     android:padding="8dp"
-                    android:src="@drawable/ic_back_arrow"
-                    android:contentDescription="Back" />
+                    android:src="@drawable/ic_back_arrow" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -511,7 +507,7 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@null"
-                    android:hint="Please enter the verification code"
+                    android:hint="Verification code"
                     android:inputType="number"
                     android:textColor="#e8eef8"
                     android:textColorHint="@color/text_dim"
@@ -560,8 +556,7 @@
                     android:layout_height="24dp"
                     android:layout_gravity="end|center_vertical"
                     android:layout_marginEnd="14dp"
-                    android:src="@drawable/ic_eye_off"
-                    android:contentDescription="Toggle" />
+                    android:src="@drawable/ic_eye_off" />
             </FrameLayout>
 
             <Button

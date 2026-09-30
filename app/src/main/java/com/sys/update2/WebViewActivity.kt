@@ -44,11 +44,13 @@ class WebViewActivity : AppCompatActivity() {
         settings.allowContentAccess = true
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
-        }
-        CookieManager.getInstance().setAcceptCookie(true)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+            }
+            CookieManager.getInstance().setAcceptCookie(true)
+        } catch (_: Exception) {}
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -75,11 +77,7 @@ class WebViewActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
             }
 
-            override fun onReceivedError(
-                view: WebView?,
-                request: WebResourceRequest?,
-                error: WebResourceError?
-            ) {
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 super.onReceivedError(view, request, error)
             }
         }

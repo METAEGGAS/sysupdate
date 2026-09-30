@@ -4,7 +4,6 @@
     android:layout_height="match_parent"
     android:background="@color/bg_dark">
 
-    <!-- ══════════ صفحة اللوجين ══════════ -->
     <ScrollView
         android:id="@+id/loginView"
         android:layout_width="match_parent"
@@ -17,7 +16,6 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- HERO -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -27,18 +25,12 @@
                 android:paddingStart="22dp"
                 android:paddingEnd="22dp">
 
-                <!-- اللوجو: لو عندك صورة اللوجو حطها في drawable باسم ic_logo
-                     واستبدل الـ TextView ده بـ ImageView ارتفاعه 40dp -->
-                <TextView
+                <ImageView
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
-                    android:gravity="center"
-                    android:text="ExCoreX"
-                    android:textColor="#3d8bff"
-                    android:textSize="28sp"
-                    android:textStyle="bold" />
+                    android:layout_height="60dp"
+                    android:adjustViewBounds="true"
+                    android:src="@drawable/logo" />
 
-                <!-- Badge: أيقونة البيت + النص -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -63,7 +55,6 @@
                         android:textSize="13sp" />
                 </LinearLayout>
 
-                <!-- العنوان (كلمة cryptocurrency بتتلون أزرق من الكود) -->
                 <TextView
                     android:id="@+id/heroTitle"
                     android:layout_width="wrap_content"
@@ -76,7 +67,6 @@
                     android:textSize="30sp"
                     android:textStyle="bold" />
 
-                <!-- صورة العملة — بتتداخل فوق الكارت بـ -32dp زي auth.html -->
                 <ImageView
                     android:layout_width="290dp"
                     android:layout_height="wrap_content"
@@ -84,10 +74,9 @@
                     android:layout_marginBottom="-32dp"
                     android:adjustViewBounds="true"
                     android:translationZ="10dp"
-                    android:src="@drawable/ic_coin" />
+                    android:src="@drawable/coin" />
             </LinearLayout>
 
-            <!-- CARD -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -98,7 +87,6 @@
                 android:paddingEnd="22dp"
                 android:paddingBottom="36dp">
 
-                <!-- Tabs -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -237,7 +225,6 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- ══════════ صفحة Register ══════════ -->
     <ScrollView
         android:id="@+id/registerView"
         android:layout_width="match_parent"
@@ -454,7 +441,6 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- ══════════ صفحة Reset Password ══════════ -->
     <ScrollView
         android:id="@+id/resetView"
         android:layout_width="match_parent"

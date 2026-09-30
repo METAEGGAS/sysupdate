@@ -4,70 +4,101 @@
     android:layout_height="match_parent"
     android:background="@color/bg_dark">
 
-    <LinearLayout
+    <!-- ══════════ صفحة اللوجين ══════════ -->
+    <ScrollView
         android:id="@+id/loginView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="@drawable/bg_gradient_radial">
+        android:background="@drawable/bg_gradient_radial"
+        android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="26dp">
+            android:orientation="vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <!-- HERO -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="ExCoreX"
-                android:textColor="#3d8bff"
-                android:textSize="28sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_badge"
-                android:paddingHorizontal="15dp"
-                android:paddingVertical="7dp"
-                android:text="🏠 Trade cryptocurrencies anytime"
-                android:textColor="#dbe7ff"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="15dp"
+                android:orientation="vertical"
                 android:gravity="center"
-                android:text="Power up your\ncryptocurrency\njourney"
-                android:textColor="#ffffff"
-                android:textSize="30sp"
-                android:textStyle="bold" />
+                android:paddingTop="26dp"
+                android:paddingStart="22dp"
+                android:paddingEnd="22dp">
 
-            <ImageView
-                android:layout_width="200dp"
-                android:layout_height="140dp"
-                android:layout_marginTop="12dp"
-                android:src="@drawable/ic_coin" />
-        </LinearLayout>
+                <!-- اللوجو: لو عندك صورة اللوجو حطها في drawable باسم ic_logo
+                     واستبدل الـ TextView ده بـ ImageView ارتفاعه 40dp -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:text="ExCoreX"
+                    android:textColor="#3d8bff"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
 
-        <ScrollView
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:fillViewport="true">
+                <!-- Badge: أيقونة البيت + النص -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_badge"
+                    android:paddingHorizontal="15dp"
+                    android:paddingVertical="7dp">
 
+                    <ImageView
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:src="@drawable/ic_home" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="7dp"
+                        android:text="Trade cryptocurrencies anytime"
+                        android:textColor="#dbe7ff"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <!-- العنوان (كلمة cryptocurrency بتتلون أزرق من الكود) -->
+                <TextView
+                    android:id="@+id/heroTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="15dp"
+                    android:gravity="center"
+                    android:lineSpacingMultiplier="1.25"
+                    android:text="Power up your\ncryptocurrency\njourney"
+                    android:textColor="#ffffff"
+                    android:textSize="30sp"
+                    android:textStyle="bold" />
+
+                <!-- صورة العملة — بتتداخل فوق الكارت بـ -32dp زي auth.html -->
+                <ImageView
+                    android:layout_width="290dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="-32dp"
+                    android:adjustViewBounds="true"
+                    android:translationZ="10dp"
+                    android:src="@drawable/ic_coin" />
+            </LinearLayout>
+
+            <!-- CARD -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:background="@drawable/bg_card_top_curve"
-                android:padding="22dp"
-                android:paddingBottom="40dp">
+                android:paddingTop="73dp"
+                android:paddingStart="22dp"
+                android:paddingEnd="22dp"
+                android:paddingBottom="36dp">
 
+                <!-- Tabs -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -80,8 +111,9 @@
                         android:layout_height="wrap_content"
                         android:text="Email"
                         android:textColor="#ffffff"
-                        android:textSize="16sp"
+                        android:textSize="16.5sp"
                         android:textStyle="bold"
+                        android:paddingBottom="2dp"
                         android:paddingEnd="26dp" />
 
                     <TextView
@@ -90,8 +122,9 @@
                         android:layout_height="wrap_content"
                         android:text="Phone"
                         android:textColor="@color/text_dim"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
+                        android:textSize="16.5sp"
+                        android:textStyle="bold"
+                        android:paddingBottom="2dp" />
                 </LinearLayout>
 
                 <EditText
@@ -127,10 +160,10 @@
 
                     <ImageView
                         android:id="@+id/eye"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="end|center_vertical"
-                        android:layout_marginEnd="14dp"
+                        android:layout_marginEnd="15dp"
                         android:src="@drawable/ic_eye_off" />
                 </FrameLayout>
 
@@ -149,7 +182,7 @@
                         android:layout_height="match_parent"
                         android:layout_weight="1"
                         android:background="@null"
-                        android:hint="Verification code"
+                        android:hint="Please enter the verification code"
                         android:inputType="text"
                         android:textColor="#e8eef8"
                         android:textColorHint="@color/text_dim"
@@ -170,14 +203,13 @@
                     android:text="Log In"
                     android:textAllCaps="false"
                     android:textColor="#ffffff"
-                    android:textSize="16sp"
+                    android:textSize="16.5sp"
                     android:textStyle="bold" />
 
-                <!-- ⭐ روابط: reset + register (ظاهرة دايماً) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
+                    android:layout_marginTop="18dp"
                     android:orientation="horizontal">
 
                     <TextView
@@ -202,10 +234,10 @@
                         android:paddingVertical="8dp" />
                 </LinearLayout>
             </LinearLayout>
-        </ScrollView>
-    </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
 
-    <!-- Register (مخفي افتراضي) -->
+    <!-- ══════════ صفحة Register ══════════ -->
     <ScrollView
         android:id="@+id/registerView"
         android:layout_width="match_parent"
@@ -217,7 +249,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="22dp">
+            android:paddingTop="20dp"
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp"
+            android:paddingBottom="40dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -231,7 +266,7 @@
                     android:layout_width="38dp"
                     android:layout_height="38dp"
                     android:background="@drawable/bg_back_btn"
-                    android:padding="8dp"
+                    android:padding="9dp"
                     android:src="@drawable/ic_back_arrow" />
 
                 <TextView
@@ -239,9 +274,9 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:gravity="center"
-                    android:text="Register"
+                    android:text="Email"
                     android:textColor="#ffffff"
-                    android:textSize="17sp"
+                    android:textSize="17.5sp"
                     android:textStyle="bold" />
 
                 <View
@@ -254,7 +289,7 @@
                 android:layout_height="wrap_content"
                 android:text="Email"
                 android:textColor="#eaf0fb"
-                android:textSize="14sp" />
+                android:textSize="14.5sp" />
 
             <EditText
                 android:id="@+id/rEm"
@@ -275,7 +310,7 @@
                 android:layout_marginTop="16dp"
                 android:text="Verification code"
                 android:textColor="#eaf0fb"
-                android:textSize="14sp" />
+                android:textSize="14.5sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -284,8 +319,7 @@
                 android:background="@drawable/bg_input_reg"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp">
+                android:paddingHorizontal="16dp">
 
                 <EditText
                     android:id="@+id/rVc"
@@ -293,7 +327,7 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@null"
-                    android:hint="Verification code"
+                    android:hint="Please enter the verification code"
                     android:inputType="number"
                     android:textColor="#e8eef8"
                     android:textColorHint="@color/text_dim"
@@ -303,6 +337,7 @@
                     android:id="@+id/rSend"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:paddingStart="12dp"
                     android:text="Send"
                     android:textColor="#dce8ff"
                     android:textSize="15sp"
@@ -313,9 +348,9 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="Password (6-16)"
+                android:text="Registration password (6-16)"
                 android:textColor="#eaf0fb"
-                android:textSize="14sp" />
+                android:textSize="14.5sp" />
 
             <FrameLayout
                 android:layout_width="match_parent"
@@ -338,10 +373,10 @@
 
                 <ImageView
                     android:id="@+id/rEye1"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
                     android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="14dp"
+                    android:layout_marginEnd="15dp"
                     android:src="@drawable/ic_eye_off" />
             </FrameLayout>
 
@@ -366,10 +401,10 @@
 
                 <ImageView
                     android:id="@+id/rEye2"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
                     android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="14dp"
+                    android:layout_marginEnd="15dp"
                     android:src="@drawable/ic_eye_off" />
             </FrameLayout>
 
@@ -379,7 +414,7 @@
                 android:layout_marginTop="16dp"
                 android:text="Referrer Invitation Code (Required)"
                 android:textColor="#eaf0fb"
-                android:textSize="14sp" />
+                android:textSize="14.5sp" />
 
             <EditText
                 android:id="@+id/rRef"
@@ -399,11 +434,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
                 android:layout_marginTop="30dp"
-                android:background="@drawable/bg_btn_primary"
+                android:background="@drawable/bg_btn_primary_reg"
                 android:text="Register"
                 android:textAllCaps="false"
                 android:textColor="#ffffff"
-                android:textSize="16sp"
+                android:textSize="16.5sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -414,12 +449,12 @@
                 android:gravity="center"
                 android:text="To log in"
                 android:textColor="#8ba5d9"
-                android:textSize="14sp"
+                android:textSize="14.5sp"
                 android:paddingVertical="8dp" />
         </LinearLayout>
     </ScrollView>
 
-    <!-- Reset (مخفي افتراضي) -->
+    <!-- ══════════ صفحة Reset Password ══════════ -->
     <ScrollView
         android:id="@+id/resetView"
         android:layout_width="match_parent"
@@ -431,7 +466,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="22dp">
+            android:paddingTop="20dp"
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp"
+            android:paddingBottom="40dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -445,7 +483,7 @@
                     android:layout_width="38dp"
                     android:layout_height="38dp"
                     android:background="@drawable/bg_back_btn"
-                    android:padding="8dp"
+                    android:padding="9dp"
                     android:src="@drawable/ic_back_arrow" />
 
                 <TextView
@@ -455,7 +493,7 @@
                     android:gravity="center"
                     android:text="Reset Password"
                     android:textColor="#ffffff"
-                    android:textSize="17sp"
+                    android:textSize="17.5sp"
                     android:textStyle="bold" />
 
                 <View
@@ -468,7 +506,7 @@
                 android:layout_height="wrap_content"
                 android:text="Email"
                 android:textColor="#eaf0fb"
-                android:textSize="14sp" />
+                android:textSize="14.5sp" />
 
             <EditText
                 android:id="@+id/fEm"
@@ -489,7 +527,7 @@
                 android:layout_marginTop="16dp"
                 android:text="Verification code"
                 android:textColor="#eaf0fb"
-                android:textSize="14sp" />
+                android:textSize="14.5sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -498,8 +536,7 @@
                 android:background="@drawable/bg_input_reg"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp">
+                android:paddingHorizontal="16dp">
 
                 <EditText
                     android:id="@+id/fVc"
@@ -507,7 +544,7 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@null"
-                    android:hint="Verification code"
+                    android:hint="Please enter the verification code"
                     android:inputType="number"
                     android:textColor="#e8eef8"
                     android:textColorHint="@color/text_dim"
@@ -517,6 +554,7 @@
                     android:id="@+id/fSend"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:paddingStart="12dp"
                     android:text="Send"
                     android:textColor="#dce8ff"
                     android:textSize="15sp"
@@ -529,7 +567,7 @@
                 android:layout_marginTop="16dp"
                 android:text="New password (6-16)"
                 android:textColor="#eaf0fb"
-                android:textSize="14sp" />
+                android:textSize="14.5sp" />
 
             <FrameLayout
                 android:layout_width="match_parent"
@@ -552,10 +590,10 @@
 
                 <ImageView
                     android:id="@+id/fEye"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
                     android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="14dp"
+                    android:layout_marginEnd="15dp"
                     android:src="@drawable/ic_eye_off" />
             </FrameLayout>
 
@@ -564,11 +602,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
                 android:layout_marginTop="30dp"
-                android:background="@drawable/bg_btn_primary"
+                android:background="@drawable/bg_btn_primary_reg"
                 android:text="Confirm"
                 android:textAllCaps="false"
                 android:textColor="#ffffff"
-                android:textSize="16sp"
+                android:textSize="16.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </ScrollView>

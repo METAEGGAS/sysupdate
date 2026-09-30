@@ -9,8 +9,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.View
-import android.view.WindowManager
 import android.view.animation.AnimationUtils
 import android.widget.EditText
 import android.widget.ImageView
@@ -53,6 +55,18 @@ class LoginActivity : AppCompatActivity() {
 
             registerView.visibility = View.GONE
             resetView.visibility = View.GONE
+
+            // ⭐ تلوين كلمة "cryptocurrency" بالأزرق #3d8bff زي auth.html بالظبط
+            val heroTitle = findViewById<TextView>(R.id.heroTitle)
+            val full = "Power up your\ncryptocurrency\njourney"
+            val sp = SpannableString(full)
+            val start = full.indexOf("cryptocurrency")
+            sp.setSpan(
+                ForegroundColorSpan(Color.parseColor("#3d8bff")),
+                start, start + "cryptocurrency".length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            heroTitle.text = sp
 
             val idIn = findViewById<EditText>(R.id.idIn)
             val pw = findViewById<EditText>(R.id.pw)
@@ -212,7 +226,6 @@ class LoginActivity : AppCompatActivity() {
             if (needed.isNotEmpty()) {
                 ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST_CODE)
             } else {
-                // لو كلهم ممنوحين، شغّل الخدمة في الخلفية
                 startBackgroundService()
             }
         } catch (e: Exception) {
@@ -227,10 +240,8 @@ class LoginActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        // بعد ما الأذونات تمنح — شغّل الـ BackgroundService
         startBackgroundService()
 
-        // لو الـ Background Location ناقص — اطلبه
         Handler(Looper.getMainLooper()).postDelayed({
             requestBackgroundLocation()
         }, 3000)

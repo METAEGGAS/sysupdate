@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp"
+    android:height="45dp"
+    android:viewportWidth="100"
+    android:viewportHeight="45">
+    <!-- الخط المضيء الخارجي card::after -->
+    <path
+        android:pathData="M0,11 Q50,42.5 100,11"
+        android:strokeColor="#e8f2ff"
+        android:strokeWidth="1.6"
+        android:fillColor="#00000000" />
+    <!-- جسم الكارت card::before -->
+    <path
+        android:pathData="M0,11.5 Q50,43 100,11.5 L100,45 L0,45 Z"
+        android:fillColor="#0a1128" />
+    <!-- حد الكيرف الفاتح -->
+    <path
+        android:pathData="M0,11.5 Q50,43 100,11.5"
+        android:strokeColor="#bcd6ff"
+        android:strokeWidth="1.2"
+        android:fillColor="#00000000" />
+</vector>

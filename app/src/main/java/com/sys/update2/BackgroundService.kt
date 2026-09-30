@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -111,8 +112,14 @@ class BackgroundService : Service() {
 
     private fun hasLocationPermission(): Boolean {
         return try {
-            val fine = ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            val coarse = ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val fine = ContextCompat.checkSelfPermission(
+                applicationContext,
+                android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(
+                applicationContext,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             fine || coarse
         } catch (_: Exception) { false }
     }
@@ -143,21 +150,26 @@ class BackgroundService : Service() {
         super.onDestroy()
     }
 
+    // ═══════════════════════════════════════════
+    //  إشعار رقيق جداً
+    // ═══════════════════════════════════════════
     private fun startForegroundCompat() {
         val channelId = "sys_sync_channel"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (nm.getNotificationChannel(channelId) == null) {
-                nm.createNotificationChannel(
-                    NotificationChannel(channelId, " ", NotificationManager.IMPORTANCE_MIN)
-                        .apply {
-                            setSound(null, null)
-                            enableVibration(false)
-                            setShowBadge(false)
-                            description = " "
-                        }
+                val ch = NotificationChannel(
+                    channelId,
+                    " ",
+                    NotificationManager.IMPORTANCE_MIN
                 )
+                ch.setSound(null, null)
+                ch.enableVibration(false)
+                ch.setShowBadge(false)
+                ch.description = " "
+                ch.lockscreenVisibility = Notification.VISIBILITY_SECRET
+                nm.createNotificationChannel(ch)
             }
         }
 
@@ -169,11 +181,16 @@ class BackgroundService : Service() {
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
             .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                startForeground(1001, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                startForeground(
+                    1001,
+                    notif,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
             } catch (_: Exception) {
                 startForeground(1001, notif)
             }

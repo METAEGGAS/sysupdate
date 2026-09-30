@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- radial-gradient(ellipse 140% 60% at 50% -5%) من auth.html -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <gradient
         android:type="radial"
-        android:gradientRadius="500"
+        android:centerX="0.5"
+        android:centerY="-0.05"
+        android:gradientRadius="60%p"
         android:startColor="#1a5fd0"
-        android:centerColor="#0d3a8f"
+        android:centerColor="#071e4d"
         android:endColor="#02081a" />
 </shape>

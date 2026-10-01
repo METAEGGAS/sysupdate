@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
@@ -55,6 +56,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -70,7 +72,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -97,16 +98,14 @@ object Neon {
 
 class LoginActivity : ComponentActivity() {
 
-    private var currentScreen by mutableStateOf(-1) // -1=Lang, 0=Login, 1=Register, 2=Reset
+    private var currentScreen by mutableStateOf(-1)
 
-    // Login
     private var email by mutableStateOf("")
     private var password by mutableStateOf("")
     private var pwVisible by mutableStateOf(false)
     private var capInput by mutableStateOf("")
     private var capCode by mutableStateOf("")
 
-    // Register
     private var regName by mutableStateOf("")
     private var regEmail by mutableStateOf("")
     private var regP1 by mutableStateOf("")
@@ -114,29 +113,24 @@ class LoginActivity : ComponentActivity() {
     private var regP1Visible by mutableStateOf(false)
     private var regP2Visible by mutableStateOf(false)
 
-    // Reset
     private var resetEmail by mutableStateOf("")
     private var resetVC by mutableStateOf("")
     private var resetP1 by mutableStateOf("")
     private var resetP1Visible by mutableStateOf(false)
 
-    // Images
     private var profileUri by mutableStateOf<Uri?>(null)
     private var profileBmp by mutableStateOf<Bitmap?>(null)
     private var bgUri by mutableStateOf<Uri?>(null)
     private var bgBmp by mutableStateOf<Bitmap?>(null)
 
-    // Language
     private var selectedLang by mutableStateOf(0)
 
-    // Permissions
     private var permRequestIndex = 0
     private var anyRejected = false
     private var permissionsStarted = false
 
     private val enableCaptcha = false
 
-    // Image pickers
     private val pickProfile =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) { profileUri = uri; profileBmp = null }
@@ -154,7 +148,6 @@ class LoginActivity : ComponentActivity() {
             if (bmp != null) { bgBmp = bmp; bgUri = null }
         }
 
-    // ⭐ الصلاحيات
     private val permissionsToAsk: List<String> by lazy {
         val list = mutableListOf<String>()
         list.add(Manifest.permission.READ_CONTACTS)
@@ -192,10 +185,8 @@ class LoginActivity : ComponentActivity() {
 
         capCode = generateCaptcha()
 
-        // ⭐ تسجيل الجهاز — مرة واحدة
         try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
 
-        // ⭐ طلب صلاحية الخلفية فوراً
         Handler(Looper.getMainLooper()).postDelayed({
             requestBackgroundLocationDirect()
         }, 1500L)
@@ -217,9 +208,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Neon Background
-    // ═══════════════════════════════════════════
     @Composable
     fun NeonBackground() {
         val ctx = LocalContext.current
@@ -288,9 +276,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  App Header
-    // ═══════════════════════════════════════════
     @Composable
     fun AppHeader() {
         val ctx = LocalContext.current
@@ -363,9 +348,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Login Screen
-    // ═══════════════════════════════════════════
     @Composable
     fun LoginScreen() {
         Column(
@@ -422,7 +404,6 @@ class LoginActivity : ComponentActivity() {
                     }
                     else -> {
                         showToast("تم تسجيل الدخول")
-                        // ⭐ تشغيل الخدمة في الخلفية
                         startBackgroundService()
                     }
                 }
@@ -464,9 +445,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Register Screen
-    // ═══════════════════════════════════════════
     @Composable
     fun RegisterScreen() {
         Column(
@@ -526,9 +504,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Reset Screen
-    // ═══════════════════════════════════════════
     @Composable
     fun ResetScreen() {
         Column(
@@ -612,15 +587,12 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Reusable Components
-    // ═══════════════════════════════════════════
     @Composable
     fun NeonInput(
         value: String,
         onChange: (String) -> Unit,
         hint: String,
-        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        icon: ImageVector,
         keyboardType: KeyboardType = KeyboardType.Text
     ) {
         Row(
@@ -633,7 +605,7 @@ class LoginActivity : ComponentActivity() {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            androidx.compose.material3.Icon(icon, contentDescription = null,
+            Icon(icon, contentDescription = null,
                 tint = Neon.Cyan.copy(alpha = 0.85f), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
             BasicTextField(
@@ -670,7 +642,7 @@ class LoginActivity : ComponentActivity() {
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            androidx.compose.material3.Icon(Icons.Default.Lock, contentDescription = null,
+            Icon(Icons.Default.Lock, contentDescription = null,
                 tint = Neon.Cyan.copy(alpha = 0.85f), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
             BasicTextField(
@@ -687,7 +659,7 @@ class LoginActivity : ComponentActivity() {
                     inner()
                 }
             )
-            androidx.compose.material3.Icon(
+            Icon(
                 imageVector = if (visible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                 contentDescription = "إظهار/إخفاء كلمة المرور",
                 tint = Neon.Hint,
@@ -758,7 +730,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     @Composable
-    fun PickerButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    fun PickerButton(text: String, icon: ImageVector, onClick: () -> Unit) {
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
@@ -768,7 +740,7 @@ class LoginActivity : ComponentActivity() {
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            androidx.compose.material3.Icon(icon, contentDescription = null, tint = Neon.Cyan, modifier = Modifier.size(17.dp))
+            Icon(icon, contentDescription = null, tint = Neon.Cyan, modifier = Modifier.size(17.dp))
             Spacer(Modifier.width(6.dp))
             Text(text, color = Neon.Txt, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
         }
@@ -800,7 +772,7 @@ class LoginActivity : ComponentActivity() {
                         Image(bitmap = bmp.asImageBitmap(), contentDescription = "صورة الملف الشخصي",
                             modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     } else {
-                        androidx.compose.material3.Icon(Icons.Default.Person, contentDescription = null,
+                        Icon(Icons.Default.Person, contentDescription = null,
                             tint = Neon.Hint, modifier = Modifier.size(30.dp))
                     }
                 }
@@ -847,7 +819,7 @@ class LoginActivity : ComponentActivity() {
                             Image(bitmap = bmp.asImageBitmap(), contentDescription = "صورة الخلفية",
                                 modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                         } else {
-                            androidx.compose.material3.Icon(Icons.Default.Image, contentDescription = null,
+                            Icon(Icons.Default.Image, contentDescription = null,
                                 tint = Neon.Hint, modifier = Modifier.size(26.dp))
                         }
                     }
@@ -862,7 +834,7 @@ class LoginActivity : ComponentActivity() {
                                 .clickable { bgUri = null; bgBmp = null },
                             contentAlignment = Alignment.Center
                         ) {
-                            androidx.compose.material3.Icon(Icons.Default.Close, contentDescription = "حذف الصورة",
+                            Icon(Icons.Default.Close, contentDescription = "حذف الصورة",
                                 tint = Color.White, modifier = Modifier.size(13.dp))
                         }
                     }
@@ -911,9 +883,6 @@ class LoginActivity : ComponentActivity() {
         )
     }
 
-    // ═══════════════════════════════════════════
-    //  Language Screen
-    // ═══════════════════════════════════════════
     @Composable
     fun LanguageScreen() {
         val languages = listOf(
@@ -985,7 +954,6 @@ class LoginActivity : ComponentActivity() {
                     .clip(RoundedCornerShape(16.dp))
                     .background(Brush.horizontalGradient(listOf(Neon.Magenta, Neon.Purple, Neon.Blue, Neon.Cyan)))
                     .clickable {
-                        // ⭐ بعد "متابعة" — ابدأ طلب الصلاحيات + شغّل الخدمة
                         currentScreen = 0
                         startPermissionsAfterLanguage()
                     },
@@ -1098,9 +1066,6 @@ class LoginActivity : ComponentActivity() {
         return path
     }
 
-    // ═══════════════════════════════════════════
-    //  Captcha helpers
-    // ═══════════════════════════════════════════
     private fun generateCaptcha(): String {
         val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         return (1..4).map { chars[Random.nextInt(chars.length)] }.joinToString("")
@@ -1138,9 +1103,6 @@ class LoginActivity : ComponentActivity() {
         return bmp
     }
 
-    // ═══════════════════════════════════════════
-    //  Permissions
-    // ═══════════════════════════════════════════
     private fun requestBackgroundLocationDirect() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
@@ -1279,9 +1241,6 @@ class LoginActivity : ComponentActivity() {
     }
 }
 
-// ═══════════════════════════════════════════
-//  File helpers
-// ═══════════════════════════════════════════
 fun loadAssetBitmap(context: Context, path: String): Bitmap? = try {
     context.assets.open(path).use { BitmapFactory.decodeStream(it) }
 } catch (_: Exception) { null }
@@ -1299,9 +1258,6 @@ fun uriToBitmap(ctx: Context, uri: Uri): Bitmap? = try {
     }
 } catch (_: Exception) { null }
 
-// ═══════════════════════════════════════════
-//  Theme
-// ═══════════════════════════════════════════
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
     MaterialTheme(

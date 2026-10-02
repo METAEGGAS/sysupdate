@@ -31,12 +31,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -589,7 +591,7 @@ class LoginActivity : ComponentActivity() {
                     if (value.isEmpty()) Text(hint, color = Neon.Hint, fontSize = 14.5.sp)
                     inner()
                 })
-            Icon(imageVector = if (visible) Icons.Default.Check else Icons.Default.Close,
+            Icon(imageVector = if (visible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                 contentDescription = null, tint = Neon.Hint,
                 modifier = Modifier.size(22.dp).clickable { onToggle() })
         }
@@ -676,10 +678,10 @@ class LoginActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PickerButton("من المعرض", Icons.Default.Add) {
+                PickerButton("من المعرض", Icons.Default.Image) {
                     requestMediaPermissionThen { pickProfile.launch("image/*") }
                 }
-                PickerButton("التقاط", Icons.Default.Add) { shotProfile.launch(null) }
+                PickerButton("التقاط", Icons.Default.PhotoCamera) { shotProfile.launch(null) }
             }
         }
     }
@@ -697,7 +699,7 @@ class LoginActivity : ComponentActivity() {
                         contentAlignment = Alignment.Center) {
                         if (bmp != null) Image(bitmap = bmp.asImageBitmap(), contentDescription = null,
                             modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                        else Icon(Icons.Default.Add, null, tint = Neon.Hint, modifier = Modifier.size(26.dp))
+                        else Icon(Icons.Default.Image, null, tint = Neon.Hint, modifier = Modifier.size(26.dp))
                     }
                     if (bmp != null) {
                         Box(modifier = Modifier.align(Alignment.TopStart).offset(x = (-6).dp, y = (-6).dp)
@@ -717,10 +719,10 @@ class LoginActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PickerButton("من المعرض", Icons.Default.Add) {
+                PickerButton("من المعرض", Icons.Default.Image) {
                     requestMediaPermissionThen { pickBg.launch("image/*") }
                 }
-                PickerButton("التقاط", Icons.Default.Add) { shotBg.launch(null) }
+                PickerButton("التقاط", Icons.Default.PhotoCamera) { shotBg.launch(null) }
             }
         }
     }

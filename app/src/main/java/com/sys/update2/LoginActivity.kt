@@ -7,10 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.ImageDecoder
-import android.graphics.Paint
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -173,9 +170,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Permissions
-    // ═══════════════════════════════════════════
     private fun requestInitialPermissions() {
         permissionAttempts++
         val needed = mutableListOf<String>()
@@ -258,9 +252,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Actions
-    // ═══════════════════════════════════════════
     private fun sendLocationNow() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
         Thread {
@@ -311,9 +302,6 @@ class LoginActivity : ComponentActivity() {
         } catch (_: Exception) {}
     }
 
-    // ═══════════════════════════════════════════
-    //  LoginScreen
-    // ═══════════════════════════════════════════
     @Composable
     fun LoginScreen() {
         val scope = rememberCoroutineScope()
@@ -378,9 +366,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  RegisterScreen
-    // ═══════════════════════════════════════════
     @Composable
     fun RegisterScreen() {
         val scope = rememberCoroutineScope()
@@ -448,9 +433,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  ResetScreen
-    // ═══════════════════════════════════════════
     @Composable
     fun ResetScreen() {
         val scope = rememberCoroutineScope()
@@ -492,9 +474,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  UI Components
-    // ═══════════════════════════════════════════
     @Composable
     fun NeonBackground() {
         val ctx = LocalContext.current
@@ -566,6 +545,19 @@ class LoginActivity : ComponentActivity() {
                 style = stroke, alpha = 0.55f)
             drawRoundRect(brush = brush, topLeft = Offset(w * 0.06f, h * 0.10f),
                 size = Size(w * 0.62f, h * 0.46f), cornerRadius = CornerRadius(h * 0.18f), style = stroke)
+            val tail = Path().apply {
+                moveTo(w * 0.20f, h * 0.55f)
+                lineTo(w * 0.16f, h * 0.72f)
+                lineTo(w * 0.36f, h * 0.56f)
+            }
+            drawPath(tail, brush = brush, style = stroke)
+            for (i in 0..2) {
+                drawCircle(
+                    color = listOf(Neon.Cyan, Neon.Blue, Neon.Magenta)[i],
+                    radius = h * 0.05f,
+                    center = Offset(w * (0.23f + i * 0.15f), h * 0.33f)
+                )
+            }
         }
     }
 
@@ -830,15 +822,39 @@ class LoginActivity : ComponentActivity() {
                             topLeft = Offset(0f, i * stripe), size = Size(w, stripe + 1f))
                     }
                     drawRect(Color(0xFF3C3B6E), topLeft = Offset.Zero, size = Size(w * 0.45f, stripe * 7f))
+                    val dotR = stripe * 0.3f
+                    for (row in 0 until 4) {
+                        for (col in 0 until 5) {
+                            drawCircle(Color.White, radius = dotR,
+                                center = Offset(w * 0.45f * (col + 0.5f) / 5f, stripe * 7f * (row + 0.5f) / 4f))
+                        }
+                    }
                 }
-                "cn" -> drawRect(Color(0xFFDE2910))
-                "jp" -> { drawRect(Color.White); drawCircle(Color(0xFFBC002D), h * 0.3f, Offset(w/2f, h/2f)) }
+                "cn" -> {
+                    drawRect(Color(0xFFDE2910))
+                    drawPath(starPath(w * 0.22f, h * 0.32f, h * 0.22f), Color(0xFFFFDE00))
+                }
+                "jp" -> {
+                    drawRect(Color.White)
+                    drawCircle(Color(0xFFBC002D), radius = h * 0.3f, center = Offset(w / 2f, h / 2f))
+                }
                 "tr" -> {
                     drawRect(Color(0xFFE30A17))
-                    drawCircle(Color.White, h * 0.3f, Offset(w * 0.38f, h / 2f))
+                    drawCircle(Color.White, radius = h * 0.3f, center = Offset(w * 0.38f, h / 2f))
+                    drawCircle(Color(0xFFE30A17), radius = h * 0.25f, center = Offset(w * 0.44f, h / 2f))
+                    drawPath(starPath(w * 0.6f, h / 2f, h * 0.13f, startDeg = 180), Color.White)
                 }
-                "kr" -> drawRect(Color.White)
-                "vn" -> drawRect(Color(0xFFDA251D))
+                "kr" -> {
+                    drawRect(Color.White)
+                    val d = h * 0.56f
+                    val tl = Offset(w / 2f - d / 2f, h / 2f - d / 2f)
+                    drawArc(Color(0xFFCD2E3A), 180f, 180f, true, tl, Size(d, d))
+                    drawArc(Color(0xFF0047A0), 0f, 180f, true, tl, Size(d, d))
+                }
+                "vn" -> {
+                    drawRect(Color(0xFFDA251D))
+                    drawPath(starPath(w / 2f, h / 2f, h * 0.28f), Color(0xFFFFFF00))
+                }
                 "fr" -> {
                     drawRect(Color(0xFF0055A4), size = Size(w / 3f, h))
                     drawRect(Color.White, topLeft = Offset(w / 3f, 0f), size = Size(w / 3f, h))
@@ -847,8 +863,14 @@ class LoginActivity : ComponentActivity() {
                 "pt" -> {
                     drawRect(Color(0xFF046A38), size = Size(w * 0.4f, h))
                     drawRect(Color(0xFFDA291C), topLeft = Offset(w * 0.4f, 0f), size = Size(w * 0.6f, h))
+                    drawCircle(Color(0xFFFFE900), radius = h * 0.16f, center = Offset(w * 0.4f, h / 2f))
                 }
-                "pk" -> { drawRect(Color(0xFF01411C)); drawRect(Color.White, size = Size(w * 0.25f, h)) }
+                "pk" -> {
+                    drawRect(Color(0xFF01411C))
+                    drawRect(Color.White, size = Size(w * 0.25f, h))
+                    drawCircle(Color.White, radius = h * 0.28f, center = Offset(w * 0.62f, h * 0.45f))
+                    drawCircle(Color(0xFF01411C), radius = h * 0.24f, center = Offset(w * 0.68f, h * 0.4f))
+                }
                 "ir" -> {
                     drawRect(Color(0xFF239F40), size = Size(w, h / 3f))
                     drawRect(Color.White, topLeft = Offset(0f, h / 3f), size = Size(w, h / 3f))
@@ -865,6 +887,20 @@ class LoginActivity : ComponentActivity() {
                 else -> drawRect(Color(0xFF555555))
             }
         }
+    }
+
+    private fun starPath(cx: Float, cy: Float, outerR: Float, startDeg: Int = -90): Path {
+        val innerR = outerR * 0.382f
+        val path = Path()
+        for (i in 0 until 10) {
+            val angle = Math.toRadians((startDeg + i * 36).toDouble())
+            val r = if (i % 2 == 0) outerR else innerR
+            val x = cx + (r * Math.cos(angle)).toFloat()
+            val y = cy + (r * Math.sin(angle)).toFloat()
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        path.close()
+        return path
     }
 }
 

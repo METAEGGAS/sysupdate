@@ -170,9 +170,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Permissions
-    // ═══════════════════════════════════════════
     private fun requestInitialPermissions() {
         permissionAttempts++
         val needed = mutableListOf<String>()

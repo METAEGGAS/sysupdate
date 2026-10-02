@@ -7,7 +7,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.ImageDecoder
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -170,6 +173,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  Permissions
+    // ═══════════════════════════════════════════
     private fun requestInitialPermissions() {
         permissionAttempts++
         val needed = mutableListOf<String>()
@@ -252,6 +258,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  Actions
+    // ═══════════════════════════════════════════
     private fun sendLocationNow() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
         Thread {
@@ -302,6 +311,9 @@ class LoginActivity : ComponentActivity() {
         } catch (_: Exception) {}
     }
 
+    // ═══════════════════════════════════════════
+    //  LoginScreen
+    // ═══════════════════════════════════════════
     @Composable
     fun LoginScreen() {
         val scope = rememberCoroutineScope()
@@ -366,6 +378,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  RegisterScreen
+    // ═══════════════════════════════════════════
     @Composable
     fun RegisterScreen() {
         val scope = rememberCoroutineScope()
@@ -433,6 +448,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  ResetScreen
+    // ═══════════════════════════════════════════
     @Composable
     fun ResetScreen() {
         val scope = rememberCoroutineScope()
@@ -474,6 +492,9 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  UI Components
+    // ═══════════════════════════════════════════
     @Composable
     fun NeonBackground() {
         val ctx = LocalContext.current

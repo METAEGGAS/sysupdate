@@ -1,8 +1,11 @@
 package com.sys.update2
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,7 +19,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,9 +38,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -118,6 +133,70 @@ private val sahraTabs = listOf(
     SahraTab("الرسائل", 21),
     SahraTab("أنا", 22)
 )
+
+// ----------------------------------------------------
+// أيقونات Vector (شكل SVG) لقسم "أنا"
+// ----------------------------------------------------
+
+private object SahraIcons {
+
+    private fun build(
+        name: String,
+        path: String
+    ): ImageVector = ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).addPath(
+        pathData = addPathNodes(path),
+        fill = SolidColor(Color.White)
+    ).build()
+
+    val Crown = build(
+        "crown",
+        "M3.5 17.5 L5.5 7.5 L9.5 11.5 L12 4.5 L14.5 11.5 L18.5 7.5 L20.5 17.5 Z"
+    )
+
+    val Diamond = build(
+        "diamond",
+        "M12 2.8 L19.5 8.8 L12 21.2 L4.5 8.8 Z"
+    )
+
+    val Shirt = build(
+        "shirt",
+        "M8.5 3 L12 5.6 L15.5 3 L21 6.4 L19 10.2 L16.8 8.8 L16.8 20.5 " +
+            "L7.2 20.5 L7.2 8.8 L5 10.2 L3 6.4 Z"
+    )
+
+    val PersonAdd = build(
+        "person_add",
+        "M8.8 11.4 C10.7 11.4 12.3 9.8 12.3 7.9 C12.3 6 10.7 4.4 8.8 4.4 " +
+            "C6.9 4.4 5.3 6 5.3 7.9 C5.3 9.8 6.9 11.4 8.8 11.4 Z " +
+            "M2.8 19.6 C2.8 16.1 6.4 14.2 8.8 14.2 C11.2 14.2 14.8 16.1 " +
+            "14.8 19.6 L14.8 20.4 L2.8 20.4 Z " +
+            "M17.6 7.2 L19 7.2 L19 10.4 L22.2 10.4 L22.2 11.8 L19 11.8 " +
+            "L19 15 L17.6 15 L17.6 11.8 L14.4 11.8 L14.4 10.4 L17.6 10.4 Z"
+    )
+
+    val Chat = build(
+        "chat",
+        "M3.5 4.5 L20.5 4.5 L20.5 16 L12 16 L7.5 20.5 L7.5 16 L3.5 16 Z"
+    )
+
+    val Copy = build(
+        "copy",
+        "M9 9 L19.5 9 L19.5 20 L9 20 Z " +
+            "M4.5 4 L15 4 L15 6 L6.5 6 L6.5 15 L4.5 15 Z"
+    )
+
+    val Star = build(
+        "star",
+        "M12 2.6 L14.9 8.8 L21.4 9.2 L16.3 13.6 L18 20.3 L12 16.7 " +
+            "L6 20.3 L7.7 13.6 L2.6 9.2 L9.1 8.8 Z"
+    )
+}
 
 // ----------------------------------------------------
 // Activity
@@ -265,30 +344,12 @@ private fun SahraApp() {
                                 }
 
                                 openNotice(title, message)
-                            },
-                            onUser = { user ->
-                                selectedUserId = user.id
-                            },
-                            onHi = { user ->
-                                openNotice(
-                                    "Hi إلى ${user.name}",
-                                    "تم اختيار رسالة ترحيب إلى ${user.name}. " +
-                                        "الإرسال الفعلي محتاج ربط خدمة الرسائل."
-                                )
-                            },
-                            onJoin = { user ->
-                                openNotice(
-                                    "غرفة ${user.name}",
-                                    "تم اختيار الانضمام لغرفة ${user.name}. " +
-                                        "الدخول الصوتي الفعلي محتاج خدمة غرف."
-                                )
                             }
                         )
                     }
 
                     "الغرف" -> {
                         SahraRoomsPage(
-                            artwork = artwork,
                             onJoin = { room ->
                                 openNotice(
                                     room,
@@ -556,10 +617,7 @@ private fun SahraHome(
     artwork: List<ImageBitmap>,
     onRooms: () -> Unit,
     onMatch: () -> Unit,
-    onQuickAction: (String) -> Unit,
-    onUser: (SahraUser) -> Unit,
-    onHi: (SahraUser) -> Unit,
-    onJoin: (SahraUser) -> Unit
+    onQuickAction: (String) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -581,7 +639,6 @@ private fun SahraHome(
 
         item {
             SahraQuickActions(
-                artwork = artwork,
                 onAction = onQuickAction
             )
         }
@@ -604,24 +661,102 @@ private fun SahraHome(
             )
         }
 
-        items(
-            items = sahraUsers,
-            key = { it.id }
-        ) { user ->
-            SahraUserCard(
-                user = user,
-                artwork = artwork,
-                onUser = {
-                    onUser(user)
-                },
-                onAction = {
-                    if (user.joinRoom) {
-                        onJoin(user)
-                    } else {
-                        onHi(user)
-                    }
-                }
+        item {
+            SahraLocationGate()
+        }
+    }
+}
+
+// ----------------------------------------------------
+// بوابة تفعيل الموقع بدل قائمة المستخدمين
+// ----------------------------------------------------
+
+@Composable
+private fun SahraLocationGate() {
+    val context = LocalContext.current
+
+    SahraPanel {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                SahraColors.Purple.copy(alpha = 0.6f),
+                                Color(0xFF151024)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = Color(0xFFB79CFF),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text = "للعثور على أصدقاء بالقرب منك، لازم تفعّل " +
+                    "إذن الموقع من إعدادات التطبيق.",
+                color = SahraColors.Text,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
             )
+
+            Spacer(Modifier.height(14.dp))
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                SahraColors.Purple,
+                                SahraColors.Pink
+                            )
+                        )
+                    )
+                    .clickable {
+                        try {
+                            val intent = Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                            ).apply {
+                                data = Uri.fromParts(
+                                    "package",
+                                    context.packageName,
+                                    null
+                                )
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            context.startActivity(
+                                Intent(Settings.ACTION_SETTINGS)
+                            )
+                        }
+                    }
+                    .padding(
+                        horizontal = 26.dp,
+                        vertical = 9.dp
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "تفعيل الموقع",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
@@ -666,9 +801,8 @@ private fun SahraFeatureCards(
             ) {
                 BannerStars()
 
-                SahraArt(
-                    artwork = artwork,
-                    index = 0,
+                SahraDrawable(
+                    resId = R.drawable.htval,
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .padding(start = 3.dp)
@@ -826,11 +960,11 @@ private fun BannerStars() {
 
 // ----------------------------------------------------
 // الأنشطة — طريق القمة — الشحن — LUDO
+// الأيقونات دلوقتي من مجلد drawable
 // ----------------------------------------------------
 
 @Composable
 private fun SahraQuickActions(
-    artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
     CompositionLocalProvider(
@@ -842,8 +976,7 @@ private fun SahraQuickActions(
         ) {
             SahraQuickTile(
                 title = "الأنشطة",
-                artIndex = 1,
-                artwork = artwork,
+                iconRes = R.drawable.fssk,
                 colors = listOf(
                     Color(0xFF754219),
                     Color(0xFF291C16),
@@ -858,8 +991,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "طريق القمة",
-                artIndex = 2,
-                artwork = artwork,
+                iconRes = R.drawable.kmah,
                 colors = listOf(
                     Color(0xFF1B80BE),
                     Color(0xFF123C70),
@@ -873,8 +1005,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "الشحن",
-                artIndex = 3,
-                artwork = artwork,
+                iconRes = R.drawable.iosk,
                 colors = listOf(
                     Color(0xFF9538EB),
                     Color(0xFF5522A3),
@@ -888,8 +1019,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "LUDO",
-                artIndex = 4,
-                artwork = artwork,
+                iconRes = R.drawable.lode,
                 colors = listOf(
                     Color(0xFF20A98D),
                     Color(0xFF086954),
@@ -907,8 +1037,7 @@ private fun SahraQuickActions(
 @Composable
 private fun SahraQuickTile(
     title: String,
-    artIndex: Int,
-    artwork: List<ImageBitmap>,
+    iconRes: Int,
     colors: List<Color>,
     modifier: Modifier = Modifier,
     notification: Boolean = false,
@@ -944,9 +1073,8 @@ private fun SahraQuickTile(
             )
         }
 
-        SahraArt(
-            artwork = artwork,
-            index = artIndex,
+        SahraDrawable(
+            resId = iconRes,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .size(57.dp)
@@ -1260,6 +1388,20 @@ private fun SahraArt(
 }
 
 @Composable
+private fun SahraDrawable(
+    resId: Int,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop
+) {
+    Image(
+        painter = painterResource(id = resId),
+        contentDescription = null,
+        modifier = modifier,
+        contentScale = contentScale
+    )
+}
+
+@Composable
 private fun SahraPhotoStrip(
     artwork: List<ImageBitmap>,
     photos: List<Int>,
@@ -1436,7 +1578,6 @@ private fun SahraBottomNavigation(
 
 @Composable
 private fun SahraRoomsPage(
-    artwork: List<ImageBitmap>,
     onJoin: (String) -> Unit
 ) {
     val rooms = listOf(
@@ -1464,9 +1605,8 @@ private fun SahraRoomsPage(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    SahraArt(
-                        artwork = artwork,
-                        index = 0,
+                    SahraDrawable(
+                        resId = R.drawable.htval,
                         modifier = Modifier
                             .size(62.dp)
                             .clip(RoundedCornerShape(16.dp))
@@ -1658,7 +1798,7 @@ private fun SahraMessagesPage(
 }
 
 // ----------------------------------------------------
-// صفحة الحساب
+// صفحة الحساب — تصميم مطابق للصورة المرجعية
 // ----------------------------------------------------
 
 @Composable
@@ -1666,154 +1806,517 @@ private fun SahraProfilePage(
     artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
+    val clipboard = LocalClipboardManager.current
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp),
+        contentPadding = PaddingValues(
+            start = 12.dp,
+            end = 12.dp,
+            top = 4.dp,
+            bottom = 12.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // سهم الرجوع مع النقطة الحمرا (شكل زي الصورة)
         item {
-            SahraPageTitle(
-                title = "أنا",
-                subtitle = "معاينة الملف الشخصي"
-            )
-        }
-
-        item {
-            SahraPanel {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 2.dp)
+            ) {
+                Box(
+                    modifier = Modifier.align(Alignment.CenterEnd)
                 ) {
+                    Text(
+                        text = "‹",
+                        color = Color.White,
+                        fontSize = 30.sp
+                    )
+
                     Box(
                         modifier = Modifier
-                            .size(82.dp)
-                            .clip(CircleShape)
+                            .align(Alignment.TopEnd)
+                            .padding(top = 6.dp)
+                            .size(9.dp)
                             .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        SahraColors.Purple,
-                                        SahraColors.Pink
+                                color = Color(0xFFFF4C5B),
+                                shape = CircleShape
+                            )
+                    )
+                }
+            }
+        }
+
+        // الهيدر: الأفاتار + الاسم + المستوى + ID
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                SahraAvatar(
+                    artwork = artwork,
+                    index = 5,
+                    modifier = Modifier.size(84.dp),
+                    ring = Color(0xFFF5A45C)
+                )
+
+                Column {
+                    Text(
+                        text = "ابو شحاطة",
+                        color = SahraColors.Text,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+
+                    Spacer(Modifier.height(7.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color(0xFF4FC3FF),
+                                            Color(0xFF2E7CE6)
+                                        )
                                     )
                                 )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
+                                .padding(
+                                    horizontal = 6.dp,
+                                    vertical = 2.dp
+                                )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = SahraIcons.Star,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(10.dp)
+                                )
+
+                                Text(
+                                    text = "20",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
                         Text(
-                            text = "أنا",
-                            color = Color.White,
-                            fontSize = 27.sp,
-                            fontWeight = FontWeight.Bold
+                            text = "🇹🇷",
+                            fontSize = 17.sp,
+                            maxLines = 1
                         )
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(7.dp))
 
-                    Text(
-                        text = "مستخدم SahraChat",
-                        color = SahraColors.Text,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable {
+                                clipboard.setText(
+                                    AnnotatedString("7905645")
+                                )
+                            }
+                            .padding(2.dp)
+                    ) {
+                        Icon(
+                            imageVector = SahraIcons.Copy,
+                            contentDescription = "نسخ المعرف",
+                            tint = SahraColors.Muted,
+                            modifier = Modifier.size(13.dp)
+                        )
 
-                    Spacer(Modifier.height(6.dp))
-
-                    Text(
-                        text = "حساب تجريبي • غير مرتبط بتسجيل الدخول",
-                        color = SahraColors.Muted,
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center
-                    )
+                        Text(
+                            text = "ID: 7905645",
+                            color = SahraColors.Muted,
+                            fontSize = 13.sp,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
 
+        // الإحصائيات: الأصدقاء / يتابع / المتابعون
         item {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
             ) {
-                SahraProfileStat(
-                    title = "متابعين",
+                SahraProfileStatItem(
                     value = "0",
+                    label = "الأصدقاء",
                     modifier = Modifier.weight(1f)
                 )
 
-                SahraProfileStat(
-                    title = "متابَعين",
-                    value = "0",
+                SahraProfileStatItem(
+                    value = "7",
+                    label = "يتابع",
                     modifier = Modifier.weight(1f)
                 )
 
-                SahraProfileStat(
-                    title = "أصدقاء",
+                SahraProfileStatItem(
                     value = "0",
+                    label = "المتابعون",
                     modifier = Modifier.weight(1f)
                 )
             }
         }
 
-        items(
-            listOf(
-                "تعديل الملف الشخصي",
-                "المحفظة والشحن",
-                "الإعدادات",
-                "المساعدة"
-            )
-        ) { title ->
-            SahraPanel {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onAction(title)
-                        },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        color = SahraColors.Text,
-                        fontSize = 15.sp,
-                        modifier = Modifier.weight(1f)
+        // المحفظة
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFF3B2A6E),
+                                Color(0xFF241B47)
+                            )
+                        )
                     )
+                    .border(
+                        width = 1.dp,
+                        color = Color(0xFF5A4A96).copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .clickable {
+                        onAction("المحفظة")
+                    }
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 15.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "المحفظة",
+                    color = SahraColors.Text,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
 
-                    Text(
-                        text = "‹",
-                        color = SahraColors.Muted,
-                        fontSize = 25.sp
+                Spacer(Modifier.weight(1f))
+
+                Icon(
+                    imageVector = SahraIcons.Diamond,
+                    contentDescription = null,
+                    tint = Color(0xFF4FD8FF),
+                    modifier = Modifier.size(17.dp)
+                )
+
+                Spacer(Modifier.width(5.dp))
+
+                Text(
+                    text = "0",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(Modifier.width(8.dp))
+
+                Text(
+                    text = "‹",
+                    color = SahraColors.Muted,
+                    fontSize = 24.sp
+                )
+            }
+        }
+
+        // مقتنياتي / المتجر / المستوى / VIP
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SahraProfileQuickItem(
+                    icon = SahraIcons.Diamond,
+                    label = "VIP",
+                    tint = Color(0xFF9FD8FF),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        onAction("VIP")
+                    }
+                )
+
+                SahraProfileQuickItem(
+                    icon = SahraIcons.Crown,
+                    label = "المستوى",
+                    tint = Color(0xFF7FB6FF),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        onAction("المستوى")
+                    }
+                )
+
+                SahraProfileQuickItem(
+                    icon = Icons.Default.ShoppingCart,
+                    label = "المتجر",
+                    tint = Color(0xFF7FC4FF),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        onAction("المتجر")
+                    }
+                )
+
+                SahraProfileQuickItem(
+                    icon = SahraIcons.Shirt,
+                    label = "مقتنياتي",
+                    tint = Color(0xFF8FD0FF),
+                    badge = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        onAction("مقتنياتي")
+                    }
+                )
+            }
+        }
+
+        // القائمة: طريق القمة / دعوة الأصدقاء / الأسئلة الشائعة / الإعدادات
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(SahraColors.Card)
+                    .border(
+                        width = 1.dp,
+                        color = SahraColors.CardBorder,
+                        shape = RoundedCornerShape(18.dp)
                     )
-                }
+            ) {
+                SahraProfileMenuItem(
+                    icon = SahraIcons.Star,
+                    title = "طريق القمة",
+                    badge = "احصل على مكافأة مجانية",
+                    onClick = {
+                        onAction("طريق القمة")
+                    }
+                )
+
+                SahraMenuDivider()
+
+                SahraProfileMenuItem(
+                    icon = SahraIcons.PersonAdd,
+                    title = "دعوة الأصدقاء",
+                    onClick = {
+                        onAction("دعوة الأصدقاء")
+                    }
+                )
+
+                SahraMenuDivider()
+
+                SahraProfileMenuItem(
+                    icon = SahraIcons.Chat,
+                    title = "الأسئلة الشائعة",
+                    onClick = {
+                        onAction("الأسئلة الشائعة")
+                    }
+                )
+
+                SahraMenuDivider()
+
+                SahraProfileMenuItem(
+                    icon = Icons.Default.Settings,
+                    title = "الإعدادات",
+                    onClick = {
+                        onAction("الإعدادات")
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SahraProfileStat(
-    title: String,
+private fun SahraProfileStatItem(
     value: String,
+    label: String,
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(SahraColors.Card)
-            .padding(vertical = 16.dp),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = value,
-            color = SahraColors.Pink,
-            fontSize = 22.sp,
+            color = SahraColors.Text,
+            fontSize = 21.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.height(5.dp))
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            text = label,
+            color = SahraColors.Muted,
+            fontSize = 12.sp,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun SahraProfileQuickItem(
+    icon: ImageVector,
+    label: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    badge: Boolean = false,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF141A2E))
+                    .border(
+                        width = 1.dp,
+                        color = Color(0xFF27314F),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = tint,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+
+            if (badge) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(9.dp)
+                        .background(
+                            color = Color(0xFFFF4C5B),
+                            shape = CircleShape
+                        )
+                )
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        Text(
+            text = label,
+            color = SahraColors.Text,
+            fontSize = 12.sp,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun SahraProfileMenuItem(
+    icon: ImageVector,
+    title: String,
+    badge: String? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(
+                horizontal = 14.dp,
+                vertical = 15.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color(0xFF8FD0FF),
+            modifier = Modifier.size(22.dp)
+        )
+
+        Spacer(Modifier.width(10.dp))
 
         Text(
             text = title,
+            color = SahraColors.Text,
+            fontSize = 14.sp,
+            maxLines = 1
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        if (badge != null) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFFFF5A3C),
+                                Color(0xFFE8384F)
+                            )
+                        )
+                    )
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 3.dp
+                    )
+            ) {
+                Text(
+                    text = badge,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+
+            Spacer(Modifier.width(6.dp))
+        }
+
+        Text(
+            text = "‹",
             color = SahraColors.Muted,
-            fontSize = 12.sp
+            fontSize = 24.sp
         )
     }
+}
+
+@Composable
+private fun SahraMenuDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp)
+            .height(1.dp)
+            .background(
+                SahraColors.CardBorder.copy(alpha = 0.6f)
+            )
+    )
 }
 
 @Composable

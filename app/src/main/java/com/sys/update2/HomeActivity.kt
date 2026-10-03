@@ -134,6 +134,26 @@ private fun SahraApp() {
         notice = SahraNotice(title, message)
     }
 
+    val context = LocalContext.current
+
+    var locationGranted by remember {
+        mutableStateOf(hasLocationPermission(context))
+    }
+
+    val lifecycleOwner = rememberLifecycleOwner(context)
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                locationGranted = hasLocationPermission(context)
+            }
+        }
+        lifecycleOwner?.lifecycle?.addObserver(observer)
+        onDispose {
+            lifecycleOwner?.lifecycle?.removeObserver(observer)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -194,31 +214,14 @@ private fun SahraApp() {
                     )
                 }
 
-                item {
-                    val context = LocalContext.current
-                    var locationGranted by remember {
-                        mutableStateOf(hasLocationPermission(context))
-                    }
-
-                    val lifecycleOwner = rememberLifecycleOwner()
-
-                    DisposableEffect(lifecycleOwner) {
-                        val observer = LifecycleEventObserver { _, event ->
-                            if (event == Lifecycle.Event.ON_RESUME) {
-                                locationGranted = hasLocationPermission(context)
-                            }
-                        }
-                        lifecycleOwner?.lifecycle?.addObserver(observer)
-                        onDispose {
-                            lifecycleOwner?.lifecycle?.removeObserver(observer)
-                        }
-                    }
-
-                    if (!locationGranted) {
+                if (!locationGranted) {
+                    item {
                         SahraLocationNotice(
                             onEnable = { openAppSettings(context) }
                         )
-                    } else {
+                    }
+                } else {
+                    item {
                         Text(
                             text = "المستخدمين الموصى بهم",
                             color = SahraColors.Text,
@@ -235,21 +238,28 @@ private fun SahraApp() {
                                 )
                         )
                     }
-                }
 
-                if (hasLocationPermission(LocalContext.current)) {
-                    items(
-                        items = listOf(
-                            Triple("🪽 اسيل", "🇸🇾  •  18 سنة", "♛ VIP1"),
-                            Triple("🌙Sàra🌙", "🇸🇾  •  23 سنة", ""),
-                            Triple("💄 رورو", "🇹🇷  •  18 سنة", "")
-                        ),
-                        key = { it.first }
-                    ) { (name, info, badge) ->
+                    item {
                         SahraSimpleUserCard(
-                            name = name,
-                            info = info,
-                            badge = badge
+                            name = "🪽 ❶❶ اسيل",
+                            info = "🇸🇾  •  18 سنة",
+                            badge = "♛ VIP1"
+                        )
+                    }
+
+                    item {
+                        SahraSimpleUserCard(
+                            name = "🌙Sàra🌙",
+                            info = "🇸🇾  •  23 سنة",
+                            badge = ""
+                        )
+                    }
+
+                    item {
+                        SahraSimpleUserCard(
+                            name = "💄 ›🅂🅁 رورو",
+                            info = "🇹🇷  •  18 سنة",
+                            badge = ""
                         )
                     }
                 }
@@ -345,7 +355,7 @@ private fun SahraFeatureCards(onRooms: () -> Unit, onMatch: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            // بطاقة الغرف الصوتية
+            // بطاقة الغرف الصوتية — htval.png
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -686,9 +696,9 @@ private fun SahraSimpleUserCard(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = name.take(1),
+                text = name.take(2),
                 color = Color.White,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold
             )
         }
@@ -880,9 +890,7 @@ private fun openAppSettings(context: Context) {
 }
 
 @Composable
-private fun rememberLifecycleOwner(): LifecycleOwner? {
-    val context = LocalContext.current
-
+private fun rememberLifecycleOwner(context: Context): LifecycleOwner? {
     return remember(context) {
         generateSequence(context) { current ->
             (current as? ContextWrapper)?.baseContext

@@ -585,7 +585,6 @@ private fun SahraHome(
 
         item {
             SahraQuickActions(
-                artwork = artwork,
                 onAction = onQuickAction
             )
         }
@@ -830,11 +829,11 @@ private fun BannerStars() {
 
 // ----------------------------------------------------
 // الأنشطة — طريق القمة — الشحن — LUDO
+// الأيقونات تُجلب من res/drawable
 // ----------------------------------------------------
 
 @Composable
 private fun SahraQuickActions(
-    artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
     CompositionLocalProvider(
@@ -844,11 +843,9 @@ private fun SahraQuickActions(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // الأنشطة — أيقونة من res/drawable/ic_action_ludo.png
             SahraQuickTile(
                 title = "الأنشطة",
-                artwork = artwork,
-                drawableRes = R.drawable.ic_action_ludo,
+                drawableRes = R.drawable.ic_action_activities,
                 colors = listOf(
                     Color(0xFF754219),
                     Color(0xFF291C16),
@@ -863,8 +860,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "طريق القمة",
-                artwork = artwork,
-                artIndex = 2,
+                drawableRes = R.drawable.ic_action_road_top,
                 colors = listOf(
                     Color(0xFF1B80BE),
                     Color(0xFF123C70),
@@ -878,8 +874,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "الشحن",
-                artwork = artwork,
-                artIndex = 3,
+                drawableRes = R.drawable.ic_action_recharge,
                 colors = listOf(
                     Color(0xFF9538EB),
                     Color(0xFF5522A3),
@@ -893,8 +888,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "LUDO",
-                artwork = artwork,
-                artIndex = 4,
+                drawableRes = R.drawable.ic_action_ludo,
                 colors = listOf(
                     Color(0xFF20A98D),
                     Color(0xFF086954),
@@ -912,11 +906,9 @@ private fun SahraQuickActions(
 @Composable
 private fun SahraQuickTile(
     title: String,
-    artwork: List<ImageBitmap>,
+    @DrawableRes drawableRes: Int,
     colors: List<Color>,
     modifier: Modifier = Modifier,
-    artIndex: Int = -1,
-    @DrawableRes drawableRes: Int = 0,
     notification: Boolean = false,
     onClick: () -> Unit
 ) {
@@ -950,32 +942,16 @@ private fun SahraQuickTile(
             )
         }
 
-        when {
-            drawableRes != 0 -> {
-                Image(
-                    painter = painterResource(id = drawableRes),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .size(57.dp)
-                        .clip(RoundedCornerShape(15.dp))
-                        .clickable(onClick = onClick),
-                    contentScale = ContentScale.Fit
-                )
-            }
-            artIndex >= 0 -> {
-                SahraArt(
-                    artwork = artwork,
-                    index = artIndex,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .size(57.dp)
-                        .clip(RoundedCornerShape(15.dp))
-                        .clickable(onClick = onClick),
-                    contentScale = ContentScale.Fit
-                )
-            }
-        }
+        Image(
+            painter = painterResource(id = drawableRes),
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .size(57.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .clickable(onClick = onClick),
+            contentScale = ContentScale.Fit
+        )
 
         if (notification) {
             Box(
@@ -1886,11 +1862,8 @@ private fun SahraPanel(
 }
 
 // ----------------------------------------------------
-// الصور والأيقونات المقتطعة من الصورة المرجعية
-//
-// الصورة المضمّنة عبارة عن شبكة:
-// 5 أعمدة × 5 صفوف.
-// حجم كل عنصر: 48 × 48.
+// atlas الأيقونات للأفاتار والتنقل السفلي فقط
+// 5 أعمدة × 5 صفوف، حجم كل قطعة 48×48
 // ----------------------------------------------------
 
 private object SahraArtwork {

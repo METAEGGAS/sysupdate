@@ -1,15 +1,8 @@
 package com.sys.update2
 
-import android.Manifest
-import android.content.Context
-import android.content.ContextWrapper
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,15 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,23 +31,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
-import com.sys.update2.R
 
 // ----------------------------------------------------
 // الألوان
@@ -102,11 +79,6 @@ private data class SahraNotice(
 private data class SahraTab(
     val title: String,
     val artIndex: Int
-)
-
-private data class SahraProfileEntry(
-    val title: String,
-    val icon: ImageVector
 )
 
 private val sahraUsers = listOf(
@@ -589,28 +561,6 @@ private fun SahraHome(
     onHi: (SahraUser) -> Unit,
     onJoin: (SahraUser) -> Unit
 ) {
-    val context = LocalContext.current
-
-    var locationGranted by remember {
-        mutableStateOf(hasLocationPermission(context))
-    }
-
-    val lifecycleOwner = rememberLifecycleOwner()
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                locationGranted = hasLocationPermission(context)
-            }
-        }
-
-        lifecycleOwner?.lifecycle?.addObserver(observer)
-
-        onDispose {
-            lifecycleOwner?.lifecycle?.removeObserver(observer)
-        }
-    }
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -631,56 +581,47 @@ private fun SahraHome(
 
         item {
             SahraQuickActions(
+                artwork = artwork,
                 onAction = onQuickAction
             )
         }
 
-        if (locationGranted) {
-            item {
-                Text(
-                    text = "المستخدمين الموصى بهم",
-                    color = SahraColors.Text,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Start,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            top = 3.dp,
-                            bottom = 1.dp,
-                            start = 12.dp,
-                            end = 7.dp
-                        )
-                )
-            }
+        item {
+            Text(
+                text = "المستخدمين الموصى بهم",
+                color = SahraColors.Text,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Start,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        top = 3.dp,
+                        bottom = 1.dp,
+                        start = 12.dp,
+                        end = 7.dp
+                    )
+            )
+        }
 
-            items(
-                items = sahraUsers,
-                key = { it.id }
-            ) { user ->
-                SahraUserCard(
-                    user = user,
-                    artwork = artwork,
-                    onUser = {
-                        onUser(user)
-                    },
-                    onAction = {
-                        if (user.joinRoom) {
-                            onJoin(user)
-                        } else {
-                            onHi(user)
-                        }
+        items(
+            items = sahraUsers,
+            key = { it.id }
+        ) { user ->
+            SahraUserCard(
+                user = user,
+                artwork = artwork,
+                onUser = {
+                    onUser(user)
+                },
+                onAction = {
+                    if (user.joinRoom) {
+                        onJoin(user)
+                    } else {
+                        onHi(user)
                     }
-                )
-            }
-        } else {
-            item {
-                SahraLocationNotice(
-                    onEnable = {
-                        openAppSettings(context)
-                    }
-                )
-            }
+                }
+            )
         }
     }
 }
@@ -725,9 +666,9 @@ private fun SahraFeatureCards(
             ) {
                 BannerStars()
 
-                Image(
-                    painter = painterResource(R.drawable.htval),
-                    contentDescription = null,
+                SahraArt(
+                    artwork = artwork,
+                    index = 0,
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .padding(start = 3.dp)
@@ -889,6 +830,7 @@ private fun BannerStars() {
 
 @Composable
 private fun SahraQuickActions(
+    artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
     CompositionLocalProvider(
@@ -900,7 +842,8 @@ private fun SahraQuickActions(
         ) {
             SahraQuickTile(
                 title = "الأنشطة",
-                iconRes = R.drawable.fssk,
+                artIndex = 1,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF754219),
                     Color(0xFF291C16),
@@ -915,7 +858,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "طريق القمة",
-                iconRes = R.drawable.kmah,
+                artIndex = 2,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF1B80BE),
                     Color(0xFF123C70),
@@ -929,7 +873,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "الشحن",
-                iconRes = R.drawable.iosk,
+                artIndex = 3,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF9538EB),
                     Color(0xFF5522A3),
@@ -943,7 +888,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "LUDO",
-                iconRes = R.drawable.lode,
+                artIndex = 4,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF20A98D),
                     Color(0xFF086954),
@@ -961,7 +907,8 @@ private fun SahraQuickActions(
 @Composable
 private fun SahraQuickTile(
     title: String,
-    iconRes: Int,
+    artIndex: Int,
+    artwork: List<ImageBitmap>,
     colors: List<Color>,
     modifier: Modifier = Modifier,
     notification: Boolean = false,
@@ -997,9 +944,9 @@ private fun SahraQuickTile(
             )
         }
 
-        Image(
-            painter = painterResource(iconRes),
-            contentDescription = title,
+        SahraArt(
+            artwork = artwork,
+            index = artIndex,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .size(57.dp)
@@ -1719,25 +1666,6 @@ private fun SahraProfilePage(
     artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
-    val entries = listOf(
-        SahraProfileEntry(
-            title = "تعديل الملف الشخصي",
-            icon = Icons.Default.Edit
-        ),
-        SahraProfileEntry(
-            title = "المحفظة والشحن",
-            icon = Icons.Default.ShoppingCart
-        ),
-        SahraProfileEntry(
-            title = "الإعدادات",
-            icon = Icons.Default.Settings
-        ),
-        SahraProfileEntry(
-            title = "المساعدة",
-            icon = Icons.Default.Info
-        )
-    )
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
@@ -1758,7 +1686,7 @@ private fun SahraProfilePage(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(88.dp)
+                            .size(82.dp)
                             .clip(CircleShape)
                             .background(
                                 Brush.linearGradient(
@@ -1767,19 +1695,14 @@ private fun SahraProfilePage(
                                         SahraColors.Pink
                                     )
                                 )
-                            )
-                            .border(
-                                width = 2.dp,
-                                color = Color(0xFF3B2A5E),
-                                shape = CircleShape
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(46.dp)
+                        Text(
+                            text = "أنا",
+                            color = Color.White,
+                            fontSize = 27.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
@@ -1792,11 +1715,7 @@ private fun SahraProfilePage(
                         fontWeight = FontWeight.Bold
                     )
 
-                    Spacer(Modifier.height(8.dp))
-
-                    SahraVipBadge()
-
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(6.dp))
 
                     Text(
                         text = "حساب تجريبي • غير مرتبط بتسجيل الدخول",
@@ -1833,44 +1752,24 @@ private fun SahraProfilePage(
         }
 
         items(
-            items = entries,
-            key = { it.title }
-        ) { entry ->
+            listOf(
+                "تعديل الملف الشخصي",
+                "المحفظة والشحن",
+                "الإعدادات",
+                "المساعدة"
+            )
+        ) { title ->
             SahraPanel {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            onAction(entry.title)
+                            onAction(title)
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        SahraColors.Purple.copy(alpha = 0.38f),
-                                        SahraColors.Pink.copy(alpha = 0.22f)
-                                    )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = entry.icon,
-                            contentDescription = entry.title,
-                            tint = Color(0xFFF0D9FF),
-                            modifier = Modifier.size(21.dp)
-                        )
-                    }
-
-                    Spacer(Modifier.width(12.dp))
-
                     Text(
-                        text = entry.title,
+                        text = title,
                         color = SahraColors.Text,
                         fontSize = 15.sp,
                         modifier = Modifier.weight(1f)
@@ -1962,160 +1861,6 @@ private fun SahraPanel(
             .padding(16.dp),
         content = content
     )
-}
-
-// ----------------------------------------------------
-// بطاقة تفعيل الموقع — بديل قائمة الحسابات
-// ----------------------------------------------------
-
-@Composable
-private fun SahraLocationNotice(
-    onEnable: () -> Unit
-) {
-    val shape = RoundedCornerShape(18.dp)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color(0xFF141A33),
-                        Color(0xFF0B0E1C)
-                    )
-                )
-            )
-            .border(
-                width = 1.dp,
-                color = Color(0xFF2A3560),
-                shape = shape
-            )
-            .padding(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(66.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        listOf(
-                            Color(0xFF3C6BFF).copy(alpha = 0.35f),
-                            Color.Transparent
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = Color(0xFF7FB4FF),
-                modifier = Modifier.size(34.dp)
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        Text(
-            text = "يجب تفعيل الموقع",
-            color = SahraColors.Text,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "للعثور على أصدقاء قريبين منك، لازم تسمح لإذن الموقع " +
-                "من إعدادات التطبيق ← الأذونات ← الموقع. " +
-                "اضغط زر \"تفعيل\" وبتفتح لك صفحة إعدادات التطبيق مباشرة.",
-            color = SahraColors.Muted,
-            fontSize = 13.sp,
-            lineHeight = 22.sp,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(30.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            SahraColors.Purple,
-                            SahraColors.Pink
-                        )
-                    )
-                )
-                .clickable(onClick = onEnable)
-                .padding(
-                    horizontal = 34.dp,
-                    vertical = 11.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(18.dp)
-            )
-
-            Text(
-                text = "تفعيل",
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-// ----------------------------------------------------
-// أدوات إذن الموقع
-// ----------------------------------------------------
-
-private fun hasLocationPermission(context: Context): Boolean {
-    val fine = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.ACCESS_FINE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED
-
-    val coarse = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.ACCESS_COARSE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED
-
-    return fine || coarse
-}
-
-private fun openAppSettings(context: Context) {
-    val intent = Intent(
-        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-        Uri.fromParts("package", context.packageName, null)
-    ).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-
-    runCatching {
-        context.startActivity(intent)
-    }
-}
-
-@Composable
-private fun rememberLifecycleOwner(): LifecycleOwner? {
-    val context = LocalContext.current
-
-    return remember(context) {
-        generateSequence(context) { current ->
-            (current as? ContextWrapper)?.baseContext
-        }.filterIsInstance<LifecycleOwner>().firstOrNull()
-    }
 }
 
 // ----------------------------------------------------

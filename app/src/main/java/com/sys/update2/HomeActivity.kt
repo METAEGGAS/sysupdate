@@ -84,7 +84,7 @@ private val sahraRooms = listOf(
     SahraRoom("r4", "قهوة آخر الليل ☕", Color(0xFFA87A3D))
 )
 
-// أيقونات التنقل السفلي — من GitHub
+// أيقونات التنقل السفلي
 private val sahraTabs = listOf(
     SahraTab("الرئيسية", "tab_home"),
     SahraTab("الغرف", "tab_rooms"),
@@ -431,7 +431,6 @@ private fun SahraHome(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 4.dp)
             ) {
-                // العنوان كما هو
                 Text(
                     text = "المستخدمين الموصى بهم",
                     color = SahraColors.Text,
@@ -444,7 +443,6 @@ private fun SahraHome(
                     )
                 )
 
-                // نص أبيض: يجب تفعيل الموقع
                 Text(
                     text = "يجب تفعيل الموقع",
                     color = Color.White,
@@ -456,7 +454,6 @@ private fun SahraHome(
 
                 Spacer(Modifier.height(6.dp))
 
-                // نص توضيح
                 Text(
                     text = "لأفضل تجربة، فعّل خدمة الموقع من إعدادات الجهاز.",
                     color = SahraColors.Muted,
@@ -468,7 +465,6 @@ private fun SahraHome(
 
                 Spacer(Modifier.height(14.dp))
 
-                // زر فتح الإعدادات
                 Box(
                     modifier = Modifier
                         .height(46.dp)
@@ -525,7 +521,7 @@ private fun SahraFeatureCards(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            // بطاقة الغرف الصوتية — من GitHub
+            // بطاقة الغرف الصوتية
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -583,7 +579,7 @@ private fun SahraFeatureCards(
                 }
             }
 
-            // بطاقة التوافق — من GitHub: tatabk1, tatabk2
+            // بطاقة التوافق — tatabk1, tatabk2
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -707,6 +703,7 @@ private fun BannerStars() {
 
 // ----------------------------------------------------
 // الأيقونات الأربع من GitHub
+// الأسماء الفعلية: ic_action_*
 // ----------------------------------------------------
 
 @Composable
@@ -722,7 +719,7 @@ private fun SahraQuickActions(
         ) {
             SahraQuickTile(
                 title = "الأنشطة",
-                remoteIconName = "icon_activities",
+                remoteIconName = "ic_action_activities",
                 colors = listOf(
                     Color(0xFF754219),
                     Color(0xFF291C16),
@@ -735,7 +732,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "طريق القمة",
-                remoteIconName = "icon_road_top",
+                remoteIconName = "ic_action_road_top",
                 colors = listOf(
                     Color(0xFF1B80BE),
                     Color(0xFF123C70),
@@ -747,7 +744,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "الشحن",
-                remoteIconName = "icon_recharge",
+                remoteIconName = "ic_action_recharge",
                 colors = listOf(
                     Color(0xFF9538EB),
                     Color(0xFF5522A3),
@@ -759,7 +756,7 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "LUDO",
-                remoteIconName = "icon_ludo",
+                remoteIconName = "ic_action_ludo",
                 colors = listOf(
                     Color(0xFF20A98D),
                     Color(0xFF086954),
@@ -833,7 +830,7 @@ private fun SahraQuickTile(
 }
 
 // ----------------------------------------------------
-// أفاتار برمجي (يُستخدم في "أنا")
+// أفاتار برمجي
 // ----------------------------------------------------
 
 @Composable

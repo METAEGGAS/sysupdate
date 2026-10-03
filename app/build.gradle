@@ -18,40 +18,20 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    // توقيع ثابت — لا تغيّره أبداً بعد الآن
     signingConfigs {
         release {
-            def envStore = System.getenv("KEYSTORE_FILE")
-            def envStorePass = System.getenv("KEYSTORE_PASSWORD")
-            def envAlias = System.getenv("KEY_ALIAS")
-            def envKeyPass = System.getenv("KEY_PASSWORD")
-
-            if (envStore && envStorePass && envAlias && envKeyPass) {
-                storeFile file(envStore)
-                storePassword envStorePass
-                keyAlias envAlias
-                keyPassword envKeyPass
-            } else {
-                def propsFile = rootProject.file("local.properties")
-                if (propsFile.exists()) {
-                    def props = new Properties()
-                    props.load(new FileInputStream(propsFile))
-                    storeFile file(props['KEYSTORE_FILE'] ?: "../creftex-key.jks")
-                    storePassword props['KEYSTORE_PASSWORD'] ?: "CREFTEX2024KEY"
-                    keyAlias props['KEY_ALIAS'] ?: "creftex"
-                    keyPassword props['KEY_PASSWORD'] ?: "CREFTEX2024KEY"
-                } else {
-                    storeFile file("../creftex-key.jks")
-                    storePassword "CREFTEX2024KEY"
-                    keyAlias "creftex"
-                    keyPassword "CREFTEX2024KEY"
-                }
-            }
+            storeFile file("../creftex-key.jks")
+            storePassword "CREFTEX2024KEY"
+            keyAlias "creftex"
+            keyPassword "CREFTEX2024KEY"
         }
     }
 
     buildTypes {
         debug {
             minifyEnabled false
+            signingConfig signingConfigs.release
         }
         release {
             minifyEnabled false
@@ -117,7 +97,6 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 
-    // تحميل الصور من الشبكة
     implementation 'io.coil-kt:coil-compose:2.6.0'
 
     implementation 'com.google.android.gms:play-services-location:21.0.1'

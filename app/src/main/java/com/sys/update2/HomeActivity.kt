@@ -1,15 +1,11 @@
-// language: Kotlin, file: HomeActivity.kt
-
 package com.sys.update2
 
-import android.content.ComponentName
-import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -33,9 +29,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,17 +59,13 @@ private object SahraColors {
     val Navigation = Color(0xFF001014)
 }
 
-// ----------------------------------------------------
-// النماذج
-// ----------------------------------------------------
-
 private data class SahraUser(
     val id: String,
     val name: String,
     val age: Int,
     val country: String,
-    @DrawableRes val avatar: Int,
-    @DrawableRes val photos: List<Int> = emptyList(),
+    val avatar: Int,
+    val photos: List<Int> = emptyList(),
     val status: String = "",
     val vip: Boolean = false,
     val joinRoom: Boolean = false
@@ -85,12 +78,8 @@ private data class SahraNotice(
 
 private data class SahraTab(
     val title: String,
-    @DrawableRes val iconRes: Int
+    val artIndex: Int
 )
-
-// ----------------------------------------------------
-// البيانات
-// ----------------------------------------------------
 
 private val sahraUsers = listOf(
     SahraUser(
@@ -98,13 +87,8 @@ private val sahraUsers = listOf(
         name = "🪽 ❶❶ اسيل",
         age = 18,
         country = "🇸🇾",
-        avatar = R.drawable.avatar_aseel,
-        photos = listOf(
-            R.drawable.photo_aseel_1,
-            R.drawable.photo_aseel_2,
-            R.drawable.photo_aseel_3,
-            R.drawable.photo_aseel_4
-        ),
+        avatar = 5,
+        photos = listOf(8, 9, 10, 11),
         vip = true
     ),
     SahraUser(
@@ -112,7 +96,7 @@ private val sahraUsers = listOf(
         name = "🌙Sàra🌙",
         age = 23,
         country = "🇸🇾",
-        avatar = R.drawable.avatar_sara,
+        avatar = 6,
         status = "💚⚔313⚔💚",
         joinRoom = true
     ),
@@ -121,23 +105,18 @@ private val sahraUsers = listOf(
         name = "💄 ›🅂🅁 رورو",
         age = 18,
         country = "🇹🇷",
-        avatar = R.drawable.avatar_roro,
-        photos = listOf(
-            R.drawable.photo_roro_1,
-            R.drawable.photo_roro_2,
-            R.drawable.photo_roro_3,
-            R.drawable.photo_roro_4
-        ),
+        avatar = 7,
+        photos = listOf(12, 13, 14, 15),
         status = "🙂🤭🌚"
     )
 )
 
 private val sahraTabs = listOf(
-    SahraTab("الرئيسية", R.drawable.ic_tab_home),
-    SahraTab("الغرف", R.drawable.ic_tab_rooms),
-    SahraTab("يستكشف", R.drawable.ic_tab_explore),
-    SahraTab("الرسائل", R.drawable.ic_tab_messages),
-    SahraTab("أنا", R.drawable.ic_tab_profile)
+    SahraTab("الرئيسية", 18),
+    SahraTab("الغرف", 19),
+    SahraTab("يستكشف", 20),
+    SahraTab("الرسائل", 21),
+    SahraTab("أنا", 22)
 )
 
 // ----------------------------------------------------
@@ -163,11 +142,6 @@ class HomeActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = false
         }
 
-        // إخفاء أيقونة الـ launcher بعد استقرار الـ UI
-        Handler(Looper.getMainLooper()).postDelayed({
-            hideLauncherIcon()
-        }, 1500L)
-
         setContent {
             SahraTheme {
                 CompositionLocalProvider(
@@ -177,28 +151,6 @@ class HomeActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // ضمان بقاء الـ service حيّاً
-        BackgroundService.startSafely(this)
-    }
-
-    private var appHidden = false
-
-    private fun hideLauncherIcon() {
-        if (appHidden) return
-        appHidden = true
-        try {
-            // نُخفي LauncherActivity — وليس HomeActivity أو LoginActivity
-            val c = ComponentName(this, LauncherActivity::class.java)
-            packageManager.setComponentEnabledSetting(
-                c,
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP
-            )
-        } catch (_: Exception) {}
     }
 }
 
@@ -247,6 +199,10 @@ private fun SahraApp() {
         mutableStateOf<String?>(null)
     }
 
+    val artwork = remember {
+        SahraArtwork.decode()
+    }
+
     val selectedUser = sahraUsers.firstOrNull {
         it.id == selectedUserId
     }
@@ -277,6 +233,7 @@ private fun SahraApp() {
                 when (selectedTab) {
                     "الرئيسية" -> {
                         SahraHome(
+                            artwork = artwork,
                             onRooms = {
                                 selectedTab = "الغرف"
                             },
@@ -331,6 +288,7 @@ private fun SahraApp() {
 
                     "الغرف" -> {
                         SahraRoomsPage(
+                            artwork = artwork,
                             onJoin = { room ->
                                 openNotice(
                                     room,
@@ -343,6 +301,7 @@ private fun SahraApp() {
 
                     "يستكشف" -> {
                         SahraExplorePage(
+                            artwork = artwork,
                             onUser = { user ->
                                 selectedUserId = user.id
                             },
@@ -358,6 +317,7 @@ private fun SahraApp() {
 
                     "الرسائل" -> {
                         SahraMessagesPage(
+                            artwork = artwork,
                             onOpen = { user ->
                                 unreadMessages = 0
 
@@ -373,6 +333,7 @@ private fun SahraApp() {
 
                     "أنا" -> {
                         SahraProfilePage(
+                            artwork = artwork,
                             onAction = { title ->
                                 openNotice(
                                     title,
@@ -386,6 +347,7 @@ private fun SahraApp() {
             }
 
             SahraBottomNavigation(
+                artwork = artwork,
                 selectedTab = selectedTab,
                 unreadMessages = unreadMessages,
                 onSelect = { tab ->
@@ -442,7 +404,8 @@ private fun SahraApp() {
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     SahraAvatar(
-                        res = user.avatar,
+                        artwork = artwork,
+                        index = user.avatar,
                         modifier = Modifier.size(64.dp),
                         ring = SahraColors.Purple
                     )
@@ -470,6 +433,7 @@ private fun SahraApp() {
                 ) {
                     if (user.photos.isNotEmpty()) {
                         SahraPhotoStrip(
+                            artwork = artwork,
                             photos = user.photos,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -589,6 +553,7 @@ private fun SahraHeader() {
 
 @Composable
 private fun SahraHome(
+    artwork: List<ImageBitmap>,
     onRooms: () -> Unit,
     onMatch: () -> Unit,
     onQuickAction: (String) -> Unit,
@@ -608,6 +573,7 @@ private fun SahraHome(
     ) {
         item {
             SahraFeatureCards(
+                artwork = artwork,
                 onRooms = onRooms,
                 onMatch = onMatch
             )
@@ -615,6 +581,7 @@ private fun SahraHome(
 
         item {
             SahraQuickActions(
+                artwork = artwork,
                 onAction = onQuickAction
             )
         }
@@ -643,6 +610,7 @@ private fun SahraHome(
         ) { user ->
             SahraUserCard(
                 user = user,
+                artwork = artwork,
                 onUser = {
                     onUser(user)
                 },
@@ -664,6 +632,7 @@ private fun SahraHome(
 
 @Composable
 private fun SahraFeatureCards(
+    artwork: List<ImageBitmap>,
     onRooms: () -> Unit,
     onMatch: () -> Unit
 ) {
@@ -698,7 +667,8 @@ private fun SahraFeatureCards(
                 BannerStars()
 
                 SahraArt(
-                    res = R.drawable.ic_banner_rooms,
+                    artwork = artwork,
+                    index = 0,
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .padding(start = 3.dp)
@@ -762,7 +732,8 @@ private fun SahraFeatureCards(
                         .height(39.dp)
                 ) {
                     SahraAvatar(
-                        res = R.drawable.avatar_match_1,
+                        artwork = artwork,
+                        index = 16,
                         ring = Color(0xFFE856FF),
                         modifier = Modifier
                             .align(Alignment.CenterStart)
@@ -770,7 +741,8 @@ private fun SahraFeatureCards(
                     )
 
                     SahraAvatar(
-                        res = R.drawable.avatar_match_2,
+                        artwork = artwork,
+                        index = 17,
                         ring = Color(0xFFE856FF),
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
@@ -858,6 +830,7 @@ private fun BannerStars() {
 
 @Composable
 private fun SahraQuickActions(
+    artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
     CompositionLocalProvider(
@@ -869,7 +842,8 @@ private fun SahraQuickActions(
         ) {
             SahraQuickTile(
                 title = "الأنشطة",
-                artRes = R.drawable.ic_action_activities,
+                artIndex = 1,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF754219),
                     Color(0xFF291C16),
@@ -884,7 +858,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "طريق القمة",
-                artRes = R.drawable.ic_action_road_top,
+                artIndex = 2,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF1B80BE),
                     Color(0xFF123C70),
@@ -898,7 +873,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "الشحن",
-                artRes = R.drawable.ic_action_recharge,
+                artIndex = 3,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF9538EB),
                     Color(0xFF5522A3),
@@ -912,7 +888,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "LUDO",
-                artRes = R.drawable.ic_action_ludo,
+                artIndex = 4,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF20A98D),
                     Color(0xFF086954),
@@ -930,7 +907,8 @@ private fun SahraQuickActions(
 @Composable
 private fun SahraQuickTile(
     title: String,
-    @DrawableRes artRes: Int,
+    artIndex: Int,
+    artwork: List<ImageBitmap>,
     colors: List<Color>,
     modifier: Modifier = Modifier,
     notification: Boolean = false,
@@ -967,7 +945,8 @@ private fun SahraQuickTile(
         }
 
         SahraArt(
-            res = artRes,
+            artwork = artwork,
+            index = artIndex,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .size(57.dp)
@@ -998,6 +977,7 @@ private fun SahraQuickTile(
 @Composable
 private fun SahraUserCard(
     user: SahraUser,
+    artwork: List<ImageBitmap>,
     onUser: () -> Unit,
     onAction: () -> Unit
 ) {
@@ -1104,7 +1084,8 @@ private fun SahraUserCard(
                 Spacer(Modifier.width(10.dp))
 
                 SahraAvatar(
-                    res = user.avatar,
+                    artwork = artwork,
+                    index = user.avatar,
                     modifier = Modifier
                         .size(57.dp)
                         .clickable(onClick = onUser),
@@ -1120,6 +1101,7 @@ private fun SahraUserCard(
                 Spacer(Modifier.height(10.dp))
 
                 SahraPhotoStrip(
+                    artwork = artwork,
                     photos = user.photos,
                     modifier = Modifier
                         .fillMaxWidth(0.84f),
@@ -1236,7 +1218,8 @@ private fun SahraVipBadge() {
 
 @Composable
 private fun SahraAvatar(
-    @DrawableRes res: Int,
+    artwork: List<ImageBitmap>,
+    index: Int,
     modifier: Modifier = Modifier,
     ring: Color = SahraColors.Purple
 ) {
@@ -1252,7 +1235,8 @@ private fun SahraAvatar(
             .padding(3.dp)
     ) {
         SahraArt(
-            res = res,
+            artwork = artwork,
+            index = index,
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
@@ -1262,12 +1246,13 @@ private fun SahraAvatar(
 
 @Composable
 private fun SahraArt(
-    @DrawableRes res: Int,
+    artwork: List<ImageBitmap>,
+    index: Int,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop
 ) {
     Image(
-        painter = painterResource(id = res),
+        bitmap = artwork[index],
         contentDescription = null,
         modifier = modifier,
         contentScale = contentScale
@@ -1276,7 +1261,8 @@ private fun SahraArt(
 
 @Composable
 private fun SahraPhotoStrip(
-    @DrawableRes photos: List<Int>,
+    artwork: List<ImageBitmap>,
+    photos: List<Int>,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
@@ -1287,14 +1273,15 @@ private fun SahraPhotoStrip(
             modifier = modifier,
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            photos.forEach { res ->
+            photos.forEach { index ->
                 val imageModifier = Modifier
                     .weight(1f)
                     .aspectRatio(1f)
                     .clip(RoundedCornerShape(7.dp))
 
                 SahraArt(
-                    res = res,
+                    artwork = artwork,
+                    index = index,
                     modifier = if (onClick != null) {
                         imageModifier.clickable(onClick = onClick)
                     } else {
@@ -1339,6 +1326,7 @@ private fun SahraPill(
 
 @Composable
 private fun SahraBottomNavigation(
+    artwork: List<ImageBitmap>,
     selectedTab: String,
     unreadMessages: Int,
     onSelect: (String) -> Unit
@@ -1387,7 +1375,8 @@ private fun SahraBottomNavigation(
                     }
 
                     SahraArt(
-                        res = tab.iconRes,
+                        artwork = artwork,
+                        index = tab.artIndex,
                         modifier = Modifier
                             .size(
                                 if (selected) 35.dp else 31.dp
@@ -1442,11 +1431,12 @@ private fun SahraBottomNavigation(
 }
 
 // ----------------------------------------------------
-// صفحة الغرف
+// صفحة الغرف — بيانات تجريبية
 // ----------------------------------------------------
 
 @Composable
 private fun SahraRoomsPage(
+    artwork: List<ImageBitmap>,
     onJoin: (String) -> Unit
 ) {
     val rooms = listOf(
@@ -1475,7 +1465,8 @@ private fun SahraRoomsPage(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     SahraArt(
-                        res = R.drawable.ic_banner_rooms,
+                        artwork = artwork,
+                        index = 0,
                         modifier = Modifier
                             .size(62.dp)
                             .clip(RoundedCornerShape(16.dp))
@@ -1519,6 +1510,7 @@ private fun SahraRoomsPage(
 
 @Composable
 private fun SahraExplorePage(
+    artwork: List<ImageBitmap>,
     onUser: (SahraUser) -> Unit,
     onHi: (SahraUser) -> Unit
 ) {
@@ -1582,6 +1574,7 @@ private fun SahraExplorePage(
         ) { user ->
             SahraUserCard(
                 user = user,
+                artwork = artwork,
                 onUser = {
                     onUser(user)
                 },
@@ -1599,6 +1592,7 @@ private fun SahraExplorePage(
 
 @Composable
 private fun SahraMessagesPage(
+    artwork: List<ImageBitmap>,
     onOpen: (SahraUser) -> Unit
 ) {
     LazyColumn(
@@ -1628,7 +1622,8 @@ private fun SahraMessagesPage(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     SahraAvatar(
-                        res = user.avatar,
+                        artwork = artwork,
+                        index = user.avatar,
                         modifier = Modifier.size(54.dp)
                     )
 
@@ -1668,6 +1663,7 @@ private fun SahraMessagesPage(
 
 @Composable
 private fun SahraProfilePage(
+    artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
     LazyColumn(
@@ -1866,3 +1862,143 @@ private fun SahraPanel(
         content = content
     )
 }
+
+// ----------------------------------------------------
+// الصور والأيقونات المقتطعة من الصورة المرجعية
+//
+// الصورة المضمّنة عبارة عن شبكة:
+// 5 أعمدة × 5 صفوف.
+// حجم كل عنصر: 48 × 48.
+//
+// لا تحتاج drawable أو الإنترنت أو مكتبة صور.
+// ----------------------------------------------------
+
+private object SahraArtwork {
+
+    fun decode(): List<ImageBitmap> {
+        val bytes = Base64.decode(
+            EMBEDDED_ART,
+            Base64.DEFAULT
+        )
+
+        val atlas = requireNotNull(
+            BitmapFactory.decodeByteArray(
+                bytes,
+                0,
+                bytes.size
+            )
+        ) {
+            "تعذر قراءة الصور المضمّنة. انسخ النص بالكامل بدون تغييره."
+        }
+
+        return List(23) { index ->
+            Bitmap.createBitmap(
+                atlas,
+                (index % 5) * 48,
+                (index / 5) * 48,
+                48,
+                48
+            ).asImageBitmap()
+        }
+    }
+
+    private const val EMBEDDED_ART = """
+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
+YR7AAAAAAAAA
+"""
+}
+

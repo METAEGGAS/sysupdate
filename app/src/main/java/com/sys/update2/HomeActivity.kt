@@ -82,7 +82,7 @@ private data class SahraNotice(
 
 private data class SahraTab(
     val title: String,
-    val artIndex: Int
+    val remoteName: String
 )
 
 private val sahraUsers = listOf(
@@ -115,12 +115,13 @@ private val sahraUsers = listOf(
     )
 )
 
+// أيقونات التنقل السفلي تُحمَّل الآن من GitHub
 private val sahraTabs = listOf(
-    SahraTab("الرئيسية", 18),
-    SahraTab("الغرف", 19),
-    SahraTab("يستكشف", 20),
-    SahraTab("الرسائل", 21),
-    SahraTab("أنا", 22)
+    SahraTab("الرئيسية", "tab_home"),
+    SahraTab("الغرف", "tab_rooms"),
+    SahraTab("يستكشف", "tab_explore"),
+    SahraTab("الرسائل", "tab_messages"),
+    SahraTab("أنا", "tab_profile")
 )
 
 // ----------------------------------------------------
@@ -351,7 +352,6 @@ private fun SahraApp() {
             }
 
             SahraBottomNavigation(
-                artwork = artwork,
                 selectedTab = selectedTab,
                 unreadMessages = unreadMessages,
                 onSelect = { tab ->
@@ -585,6 +585,7 @@ private fun SahraHome(
 
         item {
             SahraQuickActions(
+                artwork = artwork,
                 onAction = onQuickAction
             )
         }
@@ -669,9 +670,9 @@ private fun SahraFeatureCards(
             ) {
                 BannerStars()
 
-                SahraArt(
-                    artwork = artwork,
-                    index = 0,
+                // غرف صوتية — من GitHub
+                RemoteImage(
+                    name = "banner_rooms",
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .padding(start = 3.dp)
@@ -829,11 +830,12 @@ private fun BannerStars() {
 
 // ----------------------------------------------------
 // الأنشطة — طريق القمة — الشحن — LUDO
-// الأيقونات تُجلب من res/drawable
+// (تبقى من atlas — لم نرفعها لـ GitHub بعد)
 // ----------------------------------------------------
 
 @Composable
 private fun SahraQuickActions(
+    artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
     CompositionLocalProvider(
@@ -845,7 +847,8 @@ private fun SahraQuickActions(
         ) {
             SahraQuickTile(
                 title = "الأنشطة",
-                drawableRes = R.drawable.ic_action_activities,
+                artIndex = 1,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF754219),
                     Color(0xFF291C16),
@@ -860,7 +863,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "طريق القمة",
-                drawableRes = R.drawable.ic_action_road_top,
+                artIndex = 2,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF1B80BE),
                     Color(0xFF123C70),
@@ -874,7 +878,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "الشحن",
-                drawableRes = R.drawable.ic_action_recharge,
+                artIndex = 3,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF9538EB),
                     Color(0xFF5522A3),
@@ -888,7 +893,8 @@ private fun SahraQuickActions(
 
             SahraQuickTile(
                 title = "LUDO",
-                drawableRes = R.drawable.ic_action_ludo,
+                artIndex = 4,
+                artwork = artwork,
                 colors = listOf(
                     Color(0xFF20A98D),
                     Color(0xFF086954),
@@ -906,7 +912,8 @@ private fun SahraQuickActions(
 @Composable
 private fun SahraQuickTile(
     title: String,
-    @DrawableRes drawableRes: Int,
+    artIndex: Int,
+    artwork: List<ImageBitmap>,
     colors: List<Color>,
     modifier: Modifier = Modifier,
     notification: Boolean = false,
@@ -942,9 +949,9 @@ private fun SahraQuickTile(
             )
         }
 
-        Image(
-            painter = painterResource(id = drawableRes),
-            contentDescription = null,
+        SahraArt(
+            artwork = artwork,
+            index = artIndex,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .size(57.dp)
@@ -1319,12 +1326,11 @@ private fun SahraPill(
 }
 
 // ----------------------------------------------------
-// شريط التنقل السفلي
+// شريط التنقل السفلي — الأيقونات من GitHub
 // ----------------------------------------------------
 
 @Composable
 private fun SahraBottomNavigation(
-    artwork: List<ImageBitmap>,
     selectedTab: String,
     unreadMessages: Int,
     onSelect: (String) -> Unit
@@ -1372,13 +1378,12 @@ private fun SahraBottomNavigation(
                         )
                     }
 
-                    SahraArt(
-                        artwork = artwork,
-                        index = tab.artIndex,
+                    // الأيقونة من GitHub
+                    RemoteImage(
+                        name = tab.remoteName,
+                        contentDescription = tab.title,
                         modifier = Modifier
-                            .size(
-                                if (selected) 35.dp else 31.dp
-                            )
+                            .size(if (selected) 35.dp else 31.dp)
                             .clip(RoundedCornerShape(9.dp)),
                         contentScale = ContentScale.Fit
                     )
@@ -1462,9 +1467,9 @@ private fun SahraRoomsPage(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    SahraArt(
-                        artwork = artwork,
-                        index = 0,
+                    // أيقونة الغرفة — من GitHub
+                    RemoteImage(
+                        name = "banner_rooms",
                         modifier = Modifier
                             .size(62.dp)
                             .clip(RoundedCornerShape(16.dp))
@@ -1862,7 +1867,7 @@ private fun SahraPanel(
 }
 
 // ----------------------------------------------------
-// atlas الأيقونات للأفاتار والتنقل السفلي فقط
+// atlas الأيقونات — للأيقونات التي لم تُرفع بعد
 // 5 أعمدة × 5 صفوف، حجم كل قطعة 48×48
 // ----------------------------------------------------
 
@@ -1989,7 +1994,7 @@ LOGMGECcEDAO93JgEIKWLrxNVtXaVo7t1TqNrVD/k0A3HY4SyCqoQZZi61SGz1uD6h6qpVMofVKAS5LG
 J0fnBgoAAAPmUK7SPQPADLiO0xEDgVYYZYcxMNB61Pho8YOITUFfeE81NiwviFEzuqIxHBLUMLHqkfjHDxCu3tBas3MNap2hjdGe
 Gtrc0N/Qkg92cefeOqt9LK6VbAUiB42PerKUfKP9xuupsOXamSTQbrJIxt6p0lRRQyqnftPUxd4jWavDCud/qe2Kx0oz/qps7bBl
 ThSMK8V+cguvZj6Px7r0fFilglqbMFYeXiMzDMX7tEaubL3FglT9+VQPmnXjIOJC78PtJm/XJjyLpPlCrvjzbDDOY08cSKRwh0/D
-YhxlAAAAAAlFzIeh78e2dxSFagEz6VzK1nX7mKlR6gGCyzVIiVPPoKKpcyOC9URhzd4CvoI3ZHU/XVmq0n20NHDQu6bWfCW3sOB8
+YhxlAAAAAAlFzIeh78e2dxSFagEz6VzK1nX7mKlR6gGCyzVIiVPPoHKpcyOC9URhzd4CvoI3ZHU/XVmq0n20NHDQu6bWfCW3sOB8
 vu+qXl9vHQcAAUSorh9OBF5M7LIObNWLZsOUNpgcC6dVzRs1o2PTtTvViStOIEDfZ6SuCIoKVj2RHQHKqSsc3i9WsrzpZiF7lsAi
 YR7AAAAAAAAA
 """

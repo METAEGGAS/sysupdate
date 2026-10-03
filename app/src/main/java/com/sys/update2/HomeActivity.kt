@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,16 +33,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,7 +57,6 @@ private object SahraColors {
     val Purple = Color(0xFF7932DC)
     val Pink = Color(0xFFFF63A4)
     val Gold = Color(0xFFFFD866)
-    val Warning = Color(0xFFFFA726)
 
     val Navigation = Color(0xFF001014)
 }
@@ -84,7 +77,6 @@ private data class SahraRoom(
     val color: Color
 )
 
-// بيانات تجريبية للغرف
 private val sahraRooms = listOf(
     SahraRoom("r1", "سهرة وأصحاب ✨", Color(0xFF6A4CFF)),
     SahraRoom("r2", "غرفة الموسيقى 🎵", Color(0xFF00A8A8)),
@@ -160,7 +152,7 @@ private fun SahraTheme(
 }
 
 // ----------------------------------------------------
-// SahraApp — الشاشة الرئيسية
+// SahraApp
 // ----------------------------------------------------
 
 @Composable
@@ -224,9 +216,7 @@ private fun SahraApp() {
                 when (selectedTab) {
                     "الرئيسية" -> {
                         SahraHome(
-                            onRooms = {
-                                selectedTab = "الغرف"
-                            },
+                            onRooms = { selectedTab = "الغرف" },
                             onMatch = {
                                 openNotice(
                                     "التوافق الصوتي",
@@ -253,7 +243,6 @@ private fun SahraApp() {
                                         "زر LUDO جاهز للربط بشاشة اللعبة. " +
                                             "لعبة LUDO الكاملة مش مضمّنة هنا."
                                 }
-
                                 openNotice(title, message)
                             },
                             onOpenLocationSettings = openLocationSettings
@@ -305,9 +294,7 @@ private fun SahraApp() {
             SahraBottomNavigation(
                 selectedTab = selectedTab,
                 unreadMessages = unreadMessages,
-                onSelect = { tab ->
-                    selectedTab = tab
-                }
+                onSelect = { tab -> selectedTab = tab }
             )
         }
     }
@@ -437,11 +424,87 @@ private fun SahraHome(
             SahraQuickActions(onAction = onQuickAction)
         }
 
-        // قسم التفعيل بدل المستخدمين الموصى بهم
+        // قسم المستخدمين الموصى بهم + تفعيل الموقع
         item {
-            SahraActivationCard(
-                onOpenLocationSettings = onOpenLocationSettings
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                // العنوان كما هو
+                Text(
+                    text = "المستخدمين الموصى بهم",
+                    color = SahraColors.Text,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.padding(
+                        top = 3.dp,
+                        bottom = 10.dp
+                    )
+                )
+
+                // نص أبيض: يجب تفعيل الموقع
+                Text(
+                    text = "يجب تفعيل الموقع",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(6.dp))
+
+                // نص توضيح
+                Text(
+                    text = "لأفضل تجربة، فعّل خدمة الموقع من إعدادات الجهاز.",
+                    color = SahraColors.Muted,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                // زر فتح الإعدادات
+                Box(
+                    modifier = Modifier
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFF6A4CFF),
+                                    Color(0xFFB14CFF)
+                                )
+                            )
+                        )
+                        .clickable(onClick = onOpenLocationSettings)
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "فتح الإعدادات",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -462,7 +525,7 @@ private fun SahraFeatureCards(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            // بطاقة الغرف الصوتية
+            // بطاقة الغرف الصوتية — من GitHub
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -520,7 +583,7 @@ private fun SahraFeatureCards(
                 }
             }
 
-            // بطاقة التوافق الصوتي — أفاتار برمجي
+            // بطاقة التوافق — من GitHub: tatabk1, tatabk2
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -551,18 +614,22 @@ private fun SahraFeatureCards(
                         .width(66.dp)
                         .height(39.dp)
                 ) {
-                    ProgrammaticAvatar(
-                        ring = Color(0xFFE856FF),
+                    RemoteImage(
+                        name = "tatabk1",
                         modifier = Modifier
                             .align(Alignment.CenterStart)
                             .size(35.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
                     )
 
-                    ProgrammaticAvatar(
-                        ring = Color(0xFFE856FF),
+                    RemoteImage(
+                        name = "tatabk2",
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .size(35.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
                     )
                 }
 
@@ -639,8 +706,7 @@ private fun BannerStars() {
 }
 
 // ----------------------------------------------------
-// الأنشطة — طريق القمة — الشحن — LUDO
-// الأيقونات من GitHub
+// الأيقونات الأربع من GitHub
 // ----------------------------------------------------
 
 @Composable
@@ -767,106 +833,7 @@ private fun SahraQuickTile(
 }
 
 // ----------------------------------------------------
-// بطاقة "يجب تفعيل الموقع"
-// ----------------------------------------------------
-
-@Composable
-private fun SahraActivationCard(
-    onOpenLocationSettings: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color(0xFF2A1B0F),
-                        Color(0xFF1B1108)
-                    )
-                )
-            )
-            .border(
-                width = 1.dp,
-                color = SahraColors.Warning.copy(alpha = 0.45f),
-                shape = RoundedCornerShape(18.dp)
-            )
-            .padding(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(SahraColors.Warning.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = null,
-                tint = SahraColors.Warning,
-                modifier = Modifier.size(28.dp)
-            )
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        Text(
-            text = "يجب تفعيل الموقع",
-            color = SahraColors.Warning,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "لأفضل تجربة، فعّل خدمة الموقع من إعدادات الجهاز.",
-            color = SahraColors.Muted,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 20.sp
-        )
-
-        Spacer(Modifier.height(18.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            Color(0xFFFFA726),
-                            Color(0xFFFF8A00)
-                        )
-                    )
-                )
-                .clickable(onClick = onOpenLocationSettings),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = null,
-                tint = Color.Black,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "فتح الإعدادات",
-                color = Color.Black,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-// ----------------------------------------------------
-// SahraAvatar البرمجي (بدون صور)
+// أفاتار برمجي (يُستخدم في "أنا")
 // ----------------------------------------------------
 
 @Composable
@@ -973,7 +940,7 @@ private fun SahraRoomsPage(
 }
 
 // ----------------------------------------------------
-// صفحة بديلة للصفحات قيد الإنشاء
+// صفحة بديلة
 // ----------------------------------------------------
 
 @Composable
@@ -1219,7 +1186,7 @@ private fun SahraPanel(
 }
 
 // ----------------------------------------------------
-// شريط التنقل السفلي — الأيقونات من GitHub
+// شريط التنقل السفلي
 // ----------------------------------------------------
 
 @Composable
@@ -1313,7 +1280,7 @@ private fun SahraBottomNavigation(
 }
 
 // ----------------------------------------------------
-// SahraPill — زر صغير دائري
+// SahraPill
 // ----------------------------------------------------
 
 @Composable

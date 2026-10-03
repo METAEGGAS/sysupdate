@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,6 +68,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,6 +77,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import kotlin.random.Random
 import android.graphics.Color as AColor
 
 // ----------------------------------------------------
@@ -93,10 +98,6 @@ object Neon {
     val Hint = Color(0xFF7E86A8)
     val Txt  = Color(0xFFF2F5FF)
 }
-
-// ----------------------------------------------------
-// اللغة
-// ----------------------------------------------------
 
 data class LangItem(val name: String, val flag: String)
 
@@ -130,6 +131,10 @@ class LoginActivity : ComponentActivity() {
     private var profileUri by mutableStateOf<Uri?>(null)
     private var profileBmp by mutableStateOf<Bitmap?>(null)
 
+    // صورة الخلفية
+    private var bgUri by mutableStateOf<Uri?>(null)
+    private var bgBmp by mutableStateOf<Bitmap?>(null)
+
     private var selectedLang by mutableStateOf(0)
 
     private val pickProfile =
@@ -148,6 +153,23 @@ class LoginActivity : ComponentActivity() {
             }
         }
 
+    private val pickBg =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) {
+                bgUri = uri
+                bgBmp = null
+            }
+        }
+
+    private val shotBg =
+        registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bmp ->
+            if (bmp != null) {
+                bgBmp = bmp
+                bgUri = null
+            }
+        }
+
+    private var pendingMediaAction: (() -> Unit)? = null
     private val MEDIA_PERM_REQUEST = 102
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -199,9 +221,12 @@ class LoginActivity : ComponentActivity() {
             ) needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
         if (needed.isEmpty()) action()
-        else ActivityCompat.requestPermissions(
-            this, needed.toTypedArray(), MEDIA_PERM_REQUEST
-        )
+        else {
+            pendingMediaAction = action
+            ActivityCompat.requestPermissions(
+                this, needed.toTypedArray(), MEDIA_PERM_REQUEST
+            )
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -214,15 +239,16 @@ class LoginActivity : ComponentActivity() {
             if (grantResults.isNotEmpty() &&
                 grantResults.all { it == PackageManager.PERMISSION_GRANTED }
             ) {
-                pickProfile.launch("image/*")
+                pendingMediaAction?.invoke()
             } else {
                 showToast("يجب السماح بالوصول للصور")
             }
+            pendingMediaAction = null
         }
     }
 
     // =================================================
-    // شاشة اختيار اللغة — الأعلام مرسومة برمجياً
+    // شاشة اختيار اللغة
     // =================================================
 
     @Composable
@@ -328,9 +354,7 @@ class LoginActivity : ComponentActivity() {
 
     // =================================================
     // شاشة تسجيل الدخول
-    // -------------------------------------------------
-    // اللوجو من GitHub (avataro.png)
-    // -------------------------------------------------
+    // =================================================
 
     @Composable
     fun LoginScreen() {
@@ -413,7 +437,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // رأس صفحة تسجيل الدخول — اللوجو من GitHub
     @Composable
     fun LoginHeader() {
         Column(
@@ -458,10 +481,7 @@ class LoginActivity : ComponentActivity() {
 
     // =================================================
     // شاشة إنشاء الحساب
-    // -------------------------------------------------
-    // الأعلى: نفس مكان اللوجو = دائرة اختيار صورة
-    // الاسم: CREFTEX
-    // -------------------------------------------------
+    // =================================================
 
     @Composable
     fun RegisterScreen() {
@@ -490,7 +510,6 @@ class LoginActivity : ComponentActivity() {
                 { regP2Visible = !regP2Visible }, "تأكيد كلمة المرور")
             Spacer(Modifier.height(12.dp))
 
-            // حقل كود التحقق مع زر الإرسال + العدّاد
             VerifyCodeField(
                 value = regVerifyCode,
                 onValueChange = { regVerifyCode = it },
@@ -513,6 +532,11 @@ class LoginActivity : ComponentActivity() {
                     showToast("تم إرسال كود التحقق")
                 }
             )
+
+            Spacer(Modifier.height(20.dp))
+
+            // قسم صورة الخلفية
+            BackgroundImageCard()
 
             Spacer(Modifier.height(26.dp))
 
@@ -568,9 +592,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // رأس صفحة الإنشاء — نفس مكان اللوجو والاسم
-    // اللوجو = دائرة اختيار صورة
-    // الاسم = CREFTEX
     @Composable
     fun RegisterHeader() {
         Column(
@@ -606,7 +627,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // دائرة اختيار الصورة
     @Composable
     fun ProfileImageCircle() {
         val ctx = LocalContext.current
@@ -645,13 +665,97 @@ class LoginActivity : ComponentActivity() {
                         modifier = Modifier.size(28.dp)
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        "صورة",
-                        color = Neon.Hint,
-                        fontSize = 11.sp
-                    )
+                    Text("صورة", color = Neon.Hint, fontSize = 11.sp)
                 }
             }
+        }
+    }
+
+    @Composable
+    fun BackgroundImageCard() {
+        val ctx = LocalContext.current
+        val bmp = remember(bgUri, bgBmp) {
+            bgBmp ?: bgUri?.let { uriToBitmap(ctx, it) }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Neon.FieldBg)
+                .border(1.dp, Neon.FieldBorder, RoundedCornerShape(20.dp))
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .width(78.dp)
+                            .height(64.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF131B45))
+                            .border(1.dp, Neon.FieldBorder,
+                                RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(Icons.Default.Image, null,
+                                tint = Neon.Hint,
+                                modifier = Modifier.size(26.dp))
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(14.dp))
+
+                Column {
+                    Text("صورة الخلفية", color = Neon.Txt,
+                        fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("اختر صورة خلفية", color = Neon.Hint, fontSize = 11.5.sp)
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PickerButton("من المعرض", Icons.Default.Image) {
+                    requestMediaPermissionThen { pickBg.launch("image/*") }
+                }
+                PickerButton("التقاط", Icons.Default.PhotoCamera) {
+                    shotBg.launch(null)
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun PickerButton(
+        text: String,
+        icon: ImageVector,
+        onClick: () -> Unit
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(Color(0x40131B45))
+                .border(1.dp, Neon.FieldBorder, RoundedCornerShape(50))
+                .clickable { onClick() }
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null,
+                tint = Neon.Cyan, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(text, color = Neon.Txt, fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold)
         }
     }
 
@@ -971,28 +1075,20 @@ class LoginActivity : ComponentActivity() {
             val h = size.height
             when (code) {
                 "sa" -> {
-                    // علم السعودية
                     drawRect(Color(0xFF165B33))
-                    // شهادة (خط أبيض مبسّط)
                     val stroke = h * 0.045f
-                    drawLine(
-                        color = Color.White,
+                    drawLine(color = Color.White,
                         start = Offset(w * 0.20f, h * 0.38f),
                         end = Offset(w * 0.80f, h * 0.38f),
-                        strokeWidth = stroke
-                    )
-                    drawLine(
-                        color = Color.White,
+                        strokeWidth = stroke)
+                    drawLine(color = Color.White,
                         start = Offset(w * 0.22f, h * 0.50f),
                         end = Offset(w * 0.78f, h * 0.50f),
-                        strokeWidth = stroke
-                    )
-                    drawLine(
-                        color = Color.White,
+                        strokeWidth = stroke)
+                    drawLine(color = Color.White,
                         start = Offset(w * 0.24f, h * 0.62f),
                         end = Offset(w * 0.76f, h * 0.62f),
-                        strokeWidth = stroke
-                    )
+                        strokeWidth = stroke)
                 }
                 "us" -> {
                     val stripe = h / 13f
@@ -1022,21 +1118,16 @@ class LoginActivity : ComponentActivity() {
                 }
                 "cn" -> {
                     drawRect(Color(0xFFDE2910))
-                    drawPath(
-                        starPath(w * 0.22f, h * 0.32f, h * 0.22f),
-                        Color(0xFFFFDE00)
-                    )
+                    drawPath(starPath(w * 0.22f, h * 0.32f, h * 0.22f),
+                        Color(0xFFFFDE00))
                 }
                 "tw" -> {
                     drawRect(Color(0xFFFE0000))
-                    drawRect(Color(0xFF000095),
-                        topLeft = Offset.Zero,
+                    drawRect(Color(0xFF000095), topLeft = Offset.Zero,
                         size = Size(w * 0.5f, h * 0.5f))
-                    drawCircle(Color.White,
-                        radius = h * 0.12f,
+                    drawCircle(Color.White, radius = h * 0.12f,
                         center = Offset(w * 0.25f, h * 0.25f))
-                    drawCircle(Color(0xFF000095),
-                        radius = h * 0.08f,
+                    drawCircle(Color(0xFF000095), radius = h * 0.08f,
                         center = Offset(w * 0.25f, h * 0.25f))
                 }
                 "jp" -> {
@@ -1047,11 +1138,9 @@ class LoginActivity : ComponentActivity() {
                 }
                 "tr" -> {
                     drawRect(Color(0xFFE30A17))
-                    drawCircle(Color.White,
-                        radius = h * 0.3f,
+                    drawCircle(Color.White, radius = h * 0.3f,
                         center = Offset(w * 0.38f, h / 2f))
-                    drawCircle(Color(0xFFE30A17),
-                        radius = h * 0.25f,
+                    drawCircle(Color(0xFFE30A17), radius = h * 0.25f,
                         center = Offset(w * 0.44f, h / 2f))
                     drawPath(
                         starPath(w * 0.6f, h / 2f, h * 0.13f, startDeg = 180),
@@ -1091,23 +1180,19 @@ class LoginActivity : ComponentActivity() {
                 "pk" -> {
                     drawRect(Color(0xFF01411C))
                     drawRect(Color.White, size = Size(w * 0.25f, h))
-                    drawCircle(Color.White,
-                        radius = h * 0.28f,
+                    drawCircle(Color.White, radius = h * 0.28f,
                         center = Offset(w * 0.62f, h * 0.45f))
-                    drawCircle(Color(0xFF01411C),
-                        radius = h * 0.24f,
+                    drawCircle(Color(0xFF01411C), radius = h * 0.24f,
                         center = Offset(w * 0.68f, h * 0.4f))
                 }
                 "ir" -> {
                     drawRect(Color(0xFF239F40), size = Size(w, h / 3f))
-                    drawRect(Color.White,
-                        topLeft = Offset(0f, h / 3f),
+                    drawRect(Color.White, topLeft = Offset(0f, h / 3f),
                         size = Size(w, h / 3f))
                     drawRect(Color(0xFFDA0000),
                         topLeft = Offset(0f, 2f * h / 3f),
                         size = Size(w, h / 3f))
-                    drawCircle(Color(0xFFDA0000),
-                        radius = h * 0.11f,
+                    drawCircle(Color(0xFFDA0000), radius = h * 0.11f,
                         center = Offset(w / 2f, h / 2f))
                 }
                 "th" -> {
@@ -1151,35 +1236,81 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // الخلفية والتحميل
+    // الخلفية — تحمّل background.png من assets
     // =================================================
 
     @Composable
     fun NeonBackground() {
+        val ctx = LocalContext.current
+        val bg = remember { loadAssetBitmap(ctx, "background.png") }
+        val stars = remember {
+            List(60) { Offset(Random.nextFloat(), Random.nextFloat() * 0.7f) }
+        }
+
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawRect(
-                brush = Brush.verticalGradient(
-                    listOf(Neon.DeepTop, Neon.DeepMid, Neon.DeepBottom)
+            // 1. الصورة من assets (إن وُجدت)
+            if (bg != null) {
+                val scale = maxOf(
+                    size.width / bg.width,
+                    size.height / bg.height
                 )
-            )
+                val dw = bg.width * scale
+                val dh = bg.height * scale
+                drawImage(
+                    image = bg.asImageBitmap(),
+                    dstOffset = IntOffset(
+                        ((size.width - dw) / 2).roundToInt(),
+                        ((size.height - dh) / 2).roundToInt()
+                    ),
+                    dstSize = IntSize(dw.roundToInt(), dh.roundToInt())
+                )
+                // تعتيم فوق الصورة
+                drawRect(Brush.verticalGradient(
+                    listOf(Color(0x99060021), Color(0xCC040018))
+                ))
+            } else {
+                // بديل: تدرج لوني
+                drawRect(Brush.verticalGradient(
+                    listOf(Neon.DeepTop, Neon.DeepMid, Neon.DeepBottom)
+                ))
+            }
+
+            // 2. هالة بنفسجية
             drawCircle(
                 brush = Brush.radialGradient(
-                    listOf(Neon.Magenta.copy(alpha = 0.28f), Color.Transparent),
+                    listOf(
+                        Neon.Magenta.copy(alpha = 0.28f),
+                        Color.Transparent
+                    ),
                     center = Offset(size.width * 0.85f, size.height * 0.07f),
                     radius = size.width * 0.55f
                 ),
                 radius = size.width * 0.55f,
                 center = Offset(size.width * 0.85f, size.height * 0.07f)
             )
+
+            // 3. هالة سماوية
             drawCircle(
                 brush = Brush.radialGradient(
-                    listOf(Neon.Cyan.copy(alpha = 0.22f), Color.Transparent),
+                    listOf(
+                        Neon.Cyan.copy(alpha = 0.22f),
+                        Color.Transparent
+                    ),
                     center = Offset(size.width * 0.06f, size.height * 0.30f),
                     radius = size.width * 0.60f
                 ),
                 radius = size.width * 0.60f,
                 center = Offset(size.width * 0.06f, size.height * 0.30f)
             )
+
+            // 4. نجوم
+            stars.forEach {
+                drawCircle(
+                    Neon.Cyan.copy(alpha = 0.45f),
+                    radius = 1.4.dp.toPx(),
+                    center = Offset(it.x * size.width, it.y * size.height)
+                )
+            }
         }
     }
 
@@ -1211,6 +1342,10 @@ fun uriToBitmap(ctx: Context, uri: Uri): Bitmap? = try {
         @Suppress("DEPRECATION")
         MediaStore.Images.Media.getBitmap(ctx.contentResolver, uri)
     }
+} catch (_: Exception) { null }
+
+fun loadAssetBitmap(context: Context, path: String): Bitmap? = try {
+    context.assets.open(path).use { BitmapFactory.decodeStream(it) }
 } catch (_: Exception) { null }
 
 @Composable

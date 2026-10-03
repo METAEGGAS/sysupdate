@@ -2,15 +2,12 @@
 
 package com.sys.update2
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.content.Intent
 import android.os.Bundle
-import android.util.Base64
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,7 +16,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,11 +34,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,21 +63,10 @@ private object SahraColors {
     val Purple = Color(0xFF7932DC)
     val Pink = Color(0xFFFF63A4)
     val Gold = Color(0xFFFFD866)
+    val Warning = Color(0xFFFFA726)
 
     val Navigation = Color(0xFF001014)
 }
-
-private data class SahraUser(
-    val id: String,
-    val name: String,
-    val age: Int,
-    val country: String,
-    val avatar: Int,
-    val photos: List<Int> = emptyList(),
-    val status: String = "",
-    val vip: Boolean = false,
-    val joinRoom: Boolean = false
-)
 
 private data class SahraNotice(
     val title: String,
@@ -85,37 +78,21 @@ private data class SahraTab(
     val remoteName: String
 )
 
-private val sahraUsers = listOf(
-    SahraUser(
-        id = "aseel",
-        name = "🪽 ❶❶ اسيل",
-        age = 18,
-        country = "🇸🇾",
-        avatar = 5,
-        photos = listOf(8, 9, 10, 11),
-        vip = true
-    ),
-    SahraUser(
-        id = "sara",
-        name = "🌙Sàra🌙",
-        age = 23,
-        country = "🇸🇾",
-        avatar = 6,
-        status = "💚⚔313⚔💚",
-        joinRoom = true
-    ),
-    SahraUser(
-        id = "roro",
-        name = "💄 ›🅂🅁 رورو",
-        age = 18,
-        country = "🇹🇷",
-        avatar = 7,
-        photos = listOf(12, 13, 14, 15),
-        status = "🙂🤭🌚"
-    )
+private data class SahraRoom(
+    val id: String,
+    val name: String,
+    val color: Color
 )
 
-// أيقونات التنقل السفلي تُحمَّل الآن من GitHub
+// بيانات تجريبية للغرف
+private val sahraRooms = listOf(
+    SahraRoom("r1", "سهرة وأصحاب ✨", Color(0xFF6A4CFF)),
+    SahraRoom("r2", "غرفة الموسيقى 🎵", Color(0xFF00A8A8)),
+    SahraRoom("r3", "دردشة عربية 💜", Color(0xFFB14CFF)),
+    SahraRoom("r4", "قهوة آخر الليل ☕", Color(0xFFA87A3D))
+)
+
+// أيقونات التنقل السفلي — من GitHub
 private val sahraTabs = listOf(
     SahraTab("الرئيسية", "tab_home"),
     SahraTab("الغرف", "tab_rooms"),
@@ -183,37 +160,46 @@ private fun SahraTheme(
 }
 
 // ----------------------------------------------------
-// الشاشة الرئيسية وحالة التنقل
+// SahraApp — الشاشة الرئيسية
 // ----------------------------------------------------
 
 @Composable
 private fun SahraApp() {
+    val context = LocalContext.current
+
     var selectedTab by rememberSaveable {
         mutableStateOf("الرئيسية")
     }
 
     var unreadMessages by rememberSaveable {
-        mutableStateOf(1)
+        mutableStateOf(0)
     }
 
     var notice by remember {
         mutableStateOf<SahraNotice?>(null)
     }
 
-    var selectedUserId by rememberSaveable {
-        mutableStateOf<String?>(null)
-    }
-
-    val artwork = remember {
-        SahraArtwork.decode()
-    }
-
-    val selectedUser = sahraUsers.firstOrNull {
-        it.id == selectedUserId
-    }
-
     val openNotice: (String, String) -> Unit = { title, message ->
         notice = SahraNotice(title, message)
+    }
+
+    val openLocationSettings: () -> Unit = {
+        try {
+            val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                val intent = Intent(Settings.ACTION_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                openNotice(
+                    "تعذّر فتح الإعدادات",
+                    "لم نتمكن من فتح إعدادات الموقع على هذا الجهاز."
+                )
+            }
+        }
     }
 
     Box(
@@ -238,7 +224,6 @@ private fun SahraApp() {
                 when (selectedTab) {
                     "الرئيسية" -> {
                         SahraHome(
-                            artwork = artwork,
                             onRooms = {
                                 selectedTab = "الغرف"
                             },
@@ -271,32 +256,15 @@ private fun SahraApp() {
 
                                 openNotice(title, message)
                             },
-                            onUser = { user ->
-                                selectedUserId = user.id
-                            },
-                            onHi = { user ->
-                                openNotice(
-                                    "Hi إلى ${user.name}",
-                                    "تم اختيار رسالة ترحيب إلى ${user.name}. " +
-                                        "الإرسال الفعلي محتاج ربط خدمة الرسائل."
-                                )
-                            },
-                            onJoin = { user ->
-                                openNotice(
-                                    "غرفة ${user.name}",
-                                    "تم اختيار الانضمام لغرفة ${user.name}. " +
-                                        "الدخول الصوتي الفعلي محتاج خدمة غرف."
-                                )
-                            }
+                            onOpenLocationSettings = openLocationSettings
                         )
                     }
 
                     "الغرف" -> {
                         SahraRoomsPage(
-                            artwork = artwork,
                             onJoin = { room ->
                                 openNotice(
-                                    room,
+                                    room.name,
                                     "دي غرفة تجريبية لعرض التصميم. " +
                                         "مفيش اتصال صوتي أو دخول لسيرفر."
                                 )
@@ -305,40 +273,23 @@ private fun SahraApp() {
                     }
 
                     "يستكشف" -> {
-                        SahraExplorePage(
-                            artwork = artwork,
-                            onUser = { user ->
-                                selectedUserId = user.id
-                            },
-                            onHi = { user ->
-                                openNotice(
-                                    "التواصل مع ${user.name}",
-                                    "زر التواصل شغال كمعاينة محلية. " +
-                                        "الإرسال الحقيقي محتاج خدمة دردشة."
-                                )
-                            }
+                        SahraPlaceholderPage(
+                            title = "يستكشف",
+                            subtitle = "قيد الإنشاء",
+                            message = "هذا القسم قيد الإنشاء حاليًا."
                         )
                     }
 
                     "الرسائل" -> {
-                        SahraMessagesPage(
-                            artwork = artwork,
-                            onOpen = { user ->
-                                unreadMessages = 0
-
-                                openNotice(
-                                    "رسائل ${user.name}",
-                                    "أهلًا بيك في SahraChat ✨\n\n" +
-                                        "دي رسالة تجريبية محلية، " +
-                                        "مش رسالة جاية من سيرفر."
-                                )
-                            }
+                        SahraPlaceholderPage(
+                            title = "الرسائل",
+                            subtitle = "قيد الإنشاء",
+                            message = "قسم الرسائل قيد الإنشاء حاليًا."
                         )
                     }
 
                     "أنا" -> {
                         SahraProfilePage(
-                            artwork = artwork,
                             onAction = { title ->
                                 openNotice(
                                     title,
@@ -363,9 +314,7 @@ private fun SahraApp() {
 
     notice?.let { current ->
         AlertDialog(
-            onDismissRequest = {
-                notice = null
-            },
+            onDismissRequest = { notice = null },
             containerColor = Color(0xFF131222),
             titleContentColor = SahraColors.Text,
             textContentColor = SahraColors.Muted,
@@ -382,102 +331,10 @@ private fun SahraApp() {
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        notice = null
-                    }
-                ) {
+                TextButton(onClick = { notice = null }) {
                     Text(
                         text = "تمام",
                         color = SahraColors.Pink
-                    )
-                }
-            }
-        )
-    }
-
-    selectedUser?.let { user ->
-        AlertDialog(
-            onDismissRequest = {
-                selectedUserId = null
-            },
-            containerColor = Color(0xFF131222),
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SahraAvatar(
-                        artwork = artwork,
-                        index = user.avatar,
-                        modifier = Modifier.size(64.dp),
-                        ring = SahraColors.Purple
-                    )
-
-                    Column {
-                        Text(
-                            text = user.name,
-                            color = SahraColors.Text,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.height(5.dp))
-
-                        Text(
-                            text = "${user.country}  •  ${user.age} سنة",
-                            color = SahraColors.Muted,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    if (user.photos.isNotEmpty()) {
-                        SahraPhotoStrip(
-                            artwork = artwork,
-                            photos = user.photos,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    Text(
-                        text = user.status.ifBlank {
-                            "أهلًا بيك في SahraChat ✨"
-                        },
-                        color = SahraColors.Text
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        selectedUserId = null
-
-                        openNotice(
-                            "بدء الدردشة",
-                            "تم اختيار ${user.name}. " +
-                                "الدردشة الفعلية محتاجة ربط خدمة الرسائل."
-                        )
-                    }
-                ) {
-                    Text(
-                        text = "دردشة",
-                        color = SahraColors.Pink
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        selectedUserId = null
-                    }
-                ) {
-                    Text(
-                        text = "إغلاق",
-                        color = SahraColors.Muted
                     )
                 }
             }
@@ -491,9 +348,7 @@ private fun SahraApp() {
 
 @Composable
 private fun SahraBackground() {
-    Canvas(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
         drawRect(
             brush = Brush.verticalGradient(
                 colors = listOf(
@@ -508,7 +363,6 @@ private fun SahraBackground() {
             x = size.width * 0.45f,
             y = 0f
         )
-
         val glowRadius = size.width * 0.85f
 
         drawCircle(
@@ -557,13 +411,10 @@ private fun SahraHeader() {
 
 @Composable
 private fun SahraHome(
-    artwork: List<ImageBitmap>,
     onRooms: () -> Unit,
     onMatch: () -> Unit,
     onQuickAction: (String) -> Unit,
-    onUser: (SahraUser) -> Unit,
-    onHi: (SahraUser) -> Unit,
-    onJoin: (SahraUser) -> Unit
+    onOpenLocationSettings: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -577,54 +428,19 @@ private fun SahraHome(
     ) {
         item {
             SahraFeatureCards(
-                artwork = artwork,
                 onRooms = onRooms,
                 onMatch = onMatch
             )
         }
 
         item {
-            SahraQuickActions(
-                artwork = artwork,
-                onAction = onQuickAction
-            )
+            SahraQuickActions(onAction = onQuickAction)
         }
 
+        // قسم التفعيل بدل المستخدمين الموصى بهم
         item {
-            Text(
-                text = "المستخدمين الموصى بهم",
-                color = SahraColors.Text,
-                fontSize = 19.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Start,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        top = 3.dp,
-                        bottom = 1.dp,
-                        start = 12.dp,
-                        end = 7.dp
-                    )
-            )
-        }
-
-        items(
-            items = sahraUsers,
-            key = { it.id }
-        ) { user ->
-            SahraUserCard(
-                user = user,
-                artwork = artwork,
-                onUser = {
-                    onUser(user)
-                },
-                onAction = {
-                    if (user.joinRoom) {
-                        onJoin(user)
-                    } else {
-                        onHi(user)
-                    }
-                }
+            SahraActivationCard(
+                onOpenLocationSettings = onOpenLocationSettings
             )
         }
     }
@@ -636,7 +452,6 @@ private fun SahraHome(
 
 @Composable
 private fun SahraFeatureCards(
-    artwork: List<ImageBitmap>,
     onRooms: () -> Unit,
     onMatch: () -> Unit
 ) {
@@ -647,6 +462,7 @@ private fun SahraFeatureCards(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
+            // بطاقة الغرف الصوتية
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -670,7 +486,6 @@ private fun SahraFeatureCards(
             ) {
                 BannerStars()
 
-                // غرف صوتية — من GitHub
                 RemoteImage(
                     name = "banner_rooms",
                     modifier = Modifier
@@ -705,6 +520,7 @@ private fun SahraFeatureCards(
                 }
             }
 
+            // بطاقة التوافق الصوتي — أفاتار برمجي
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -735,18 +551,14 @@ private fun SahraFeatureCards(
                         .width(66.dp)
                         .height(39.dp)
                 ) {
-                    SahraAvatar(
-                        artwork = artwork,
-                        index = 16,
+                    ProgrammaticAvatar(
                         ring = Color(0xFFE856FF),
                         modifier = Modifier
                             .align(Alignment.CenterStart)
                             .size(35.dp)
                     )
 
-                    SahraAvatar(
-                        artwork = artwork,
-                        index = 17,
+                    ProgrammaticAvatar(
                         ring = Color(0xFFE856FF),
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
@@ -806,9 +618,7 @@ private fun SahraFeatureCards(
 
 @Composable
 private fun BannerStars() {
-    Canvas(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
         repeat(16) { index ->
             val x = (((index * 37 + 17) % 100) / 100f) * size.width
             val y = (((index * 29 + 11) % 100) / 100f) * size.height
@@ -830,12 +640,11 @@ private fun BannerStars() {
 
 // ----------------------------------------------------
 // الأنشطة — طريق القمة — الشحن — LUDO
-// (تبقى من atlas — لم نرفعها لـ GitHub بعد)
+// الأيقونات من GitHub
 // ----------------------------------------------------
 
 @Composable
 private fun SahraQuickActions(
-    artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
     CompositionLocalProvider(
@@ -847,8 +656,7 @@ private fun SahraQuickActions(
         ) {
             SahraQuickTile(
                 title = "الأنشطة",
-                artIndex = 1,
-                artwork = artwork,
+                remoteIconName = "icon_activities",
                 colors = listOf(
                     Color(0xFF754219),
                     Color(0xFF291C16),
@@ -856,54 +664,43 @@ private fun SahraQuickActions(
                 ),
                 notification = true,
                 modifier = Modifier.weight(1f),
-                onClick = {
-                    onAction("الأنشطة")
-                }
+                onClick = { onAction("الأنشطة") }
             )
 
             SahraQuickTile(
                 title = "طريق القمة",
-                artIndex = 2,
-                artwork = artwork,
+                remoteIconName = "icon_road_top",
                 colors = listOf(
                     Color(0xFF1B80BE),
                     Color(0xFF123C70),
                     Color(0xFF09132C)
                 ),
                 modifier = Modifier.weight(1f),
-                onClick = {
-                    onAction("طريق القمة")
-                }
+                onClick = { onAction("طريق القمة") }
             )
 
             SahraQuickTile(
                 title = "الشحن",
-                artIndex = 3,
-                artwork = artwork,
+                remoteIconName = "icon_recharge",
                 colors = listOf(
                     Color(0xFF9538EB),
                     Color(0xFF5522A3),
                     Color(0xFF201340)
                 ),
                 modifier = Modifier.weight(1f),
-                onClick = {
-                    onAction("الشحن")
-                }
+                onClick = { onAction("الشحن") }
             )
 
             SahraQuickTile(
                 title = "LUDO",
-                artIndex = 4,
-                artwork = artwork,
+                remoteIconName = "icon_ludo",
                 colors = listOf(
                     Color(0xFF20A98D),
                     Color(0xFF086954),
                     Color(0xFF072C32)
                 ),
                 modifier = Modifier.weight(1f),
-                onClick = {
-                    onAction("LUDO")
-                }
+                onClick = { onAction("LUDO") }
             )
         }
     }
@@ -912,25 +709,20 @@ private fun SahraQuickActions(
 @Composable
 private fun SahraQuickTile(
     title: String,
-    artIndex: Int,
-    artwork: List<ImageBitmap>,
+    remoteIconName: String,
     colors: List<Color>,
     modifier: Modifier = Modifier,
     notification: Boolean = false,
     onClick: () -> Unit
 ) {
-    Box(
-        modifier = modifier.height(87.dp)
-    ) {
+    Box(modifier = modifier.height(87.dp)) {
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .height(72.dp)
                 .clip(RoundedCornerShape(13.dp))
-                .background(
-                    Brush.verticalGradient(colors)
-                )
+                .background(Brush.verticalGradient(colors))
                 .border(
                     width = 1.dp,
                     color = colors.first().copy(alpha = 0.75f),
@@ -949,9 +741,8 @@ private fun SahraQuickTile(
             )
         }
 
-        SahraArt(
-            artwork = artwork,
-            index = artIndex,
+        RemoteImage(
+            name = remoteIconName,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .size(57.dp)
@@ -976,479 +767,143 @@ private fun SahraQuickTile(
 }
 
 // ----------------------------------------------------
-// بطاقة المستخدم
+// بطاقة "يجب تفعيل الموقع"
 // ----------------------------------------------------
 
 @Composable
-private fun SahraUserCard(
-    user: SahraUser,
-    artwork: List<ImageBitmap>,
-    onUser: () -> Unit,
-    onAction: () -> Unit
+private fun SahraActivationCard(
+    onOpenLocationSettings: () -> Unit
 ) {
-    val shape = RoundedCornerShape(15.dp)
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
+            .clip(RoundedCornerShape(18.dp))
             .background(
                 Brush.linearGradient(
                     listOf(
-                        Color(0xFF10111B),
-                        Color(0xFF090D19)
+                        Color(0xFF2A1B0F),
+                        Color(0xFF1B1108)
                     )
                 )
             )
             .border(
                 width = 1.dp,
-                color = SahraColors.CardBorder.copy(alpha = 0.65f),
-                shape = shape
+                color = SahraColors.Warning.copy(alpha = 0.45f),
+                shape = RoundedCornerShape(18.dp)
             )
-            .padding(
-                horizontal = 8.dp,
-                vertical = 12.dp
-            )
+            .padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        CompositionLocalProvider(
-            LocalLayoutDirection provides LayoutDirection.Ltr
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(SahraColors.Warning.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (user.joinRoom) {
-                    SahraPill(
-                        text = "انضمام",
-                        background = Color(0xFF30215D),
-                        onClick = onAction,
-                        modifier = Modifier.padding(start = 3.dp)
-                    )
-                } else {
-                    SahraHiButton(
-                        onClick = onAction
-                    )
-                }
-
-                Spacer(
-                    modifier = Modifier
-                        .weight(1f)
-                        .widthIn(min = 6.dp)
-                )
-
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides LayoutDirection.Rtl
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .widthIn(max = 195.dp)
-                            .clickable(onClick = onUser),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = user.name,
-                            color = SahraColors.Text,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Spacer(Modifier.height(5.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            SahraCountryBadge(
-                                country = user.country
-                            )
-
-                            SahraAgeBadge(
-                                age = user.age
-                            )
-
-                            if (user.vip) {
-                                SahraVipBadge()
-                            }
-                        }
-
-                        if (user.status.isNotBlank()) {
-                            Spacer(Modifier.height(6.dp))
-
-                            Text(
-                                text = user.status,
-                                color = SahraColors.Muted,
-                                fontSize = 14.sp,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                SahraAvatar(
-                    artwork = artwork,
-                    index = user.avatar,
-                    modifier = Modifier
-                        .size(57.dp)
-                        .clickable(onClick = onUser),
-                    ring = if (user.vip) {
-                        Color(0xFFD6D1BD)
-                    } else {
-                        Color(0xFF503888)
-                    }
-                )
-            }
-
-            if (user.photos.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-
-                SahraPhotoStrip(
-                    artwork = artwork,
-                    photos = user.photos,
-                    modifier = Modifier
-                        .fillMaxWidth(0.84f),
-                    onClick = onUser
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = SahraColors.Warning,
+                modifier = Modifier.size(28.dp)
+            )
         }
-    }
-}
 
-@Composable
-private fun SahraHiButton(
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .padding(start = 3.dp)
-            .width(48.dp)
-            .height(34.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color(0xFF2B173D),
-                        Color(0xFF171221)
+        Spacer(Modifier.height(14.dp))
+
+        Text(
+            text = "يجب تفعيل الموقع",
+            color = SahraColors.Warning,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "لأفضل تجربة، فعّل خدمة الموقع من إعدادات الجهاز.",
+            color = SahraColors.Muted,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+
+        Spacer(Modifier.height(18.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color(0xFFFFA726),
+                            Color(0xFFFF8A00)
+                        )
                     )
                 )
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Hi",
-            color = Color(0xFFFF69CF),
-            fontSize = 22.sp,
-            fontWeight = FontWeight.ExtraBold,
-            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-        )
-    }
-}
-
-@Composable
-private fun SahraAgeBadge(
-    age: Int
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(SahraColors.Pink)
-            .padding(
-                horizontal = 6.dp,
-                vertical = 1.dp
-            )
-    ) {
-        CompositionLocalProvider(
-            LocalLayoutDirection provides LayoutDirection.Ltr
+                .clickable(onClick = onOpenLocationSettings),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = null,
+                tint = Color.Black,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(8.dp))
             Text(
-                text = "♀ $age",
-                color = Color.White,
-                fontSize = 12.sp,
+                text = "فتح الإعدادات",
+                color = Color.Black,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
             )
         }
     }
 }
 
-@Composable
-private fun SahraCountryBadge(
-    country: String
-) {
-    Text(
-        text = country,
-        fontSize = 17.sp,
-        maxLines = 1
-    )
-}
-
-@Composable
-private fun SahraVipBadge() {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(
-                        Color(0xFF67522B),
-                        Color(0xFF25211B)
-                    )
-                )
-            )
-            .border(
-                width = 0.5.dp,
-                color = Color(0xFFBBA76B),
-                shape = RoundedCornerShape(6.dp)
-            )
-            .padding(
-                horizontal = 6.dp,
-                vertical = 1.dp
-            )
-    ) {
-        Text(
-            text = "♛ VIP1",
-            color = Color(0xFFFFF1C7),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
 // ----------------------------------------------------
-// الصور والأفاتار
+// SahraAvatar البرمجي (بدون صور)
 // ----------------------------------------------------
 
 @Composable
-private fun SahraAvatar(
-    artwork: List<ImageBitmap>,
-    index: Int,
+private fun ProgrammaticAvatar(
     modifier: Modifier = Modifier,
-    ring: Color = SahraColors.Purple
+    ring: Color = SahraColors.Purple,
+    fill: Color = Color(0xFF181529)
 ) {
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .background(Color(0xFF181529))
+            .background(fill)
             .border(
                 width = 2.dp,
                 color = ring,
                 shape = CircleShape
             )
-            .padding(3.dp)
-    ) {
-        SahraArt(
-            artwork = artwork,
-            index = index,
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-        )
-    }
-}
-
-@Composable
-private fun SahraArt(
-    artwork: List<ImageBitmap>,
-    index: Int,
-    modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
-) {
-    Image(
-        bitmap = artwork[index],
-        contentDescription = null,
-        modifier = modifier,
-        contentScale = contentScale
-    )
-}
-
-@Composable
-private fun SahraPhotoStrip(
-    artwork: List<ImageBitmap>,
-    photos: List<Int>,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
-) {
-    CompositionLocalProvider(
-        LocalLayoutDirection provides LayoutDirection.Ltr
-    ) {
-        Row(
-            modifier = modifier,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            photos.forEach { index ->
-                val imageModifier = Modifier
-                    .weight(1f)
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(7.dp))
-
-                SahraArt(
-                    artwork = artwork,
-                    index = index,
-                    modifier = if (onClick != null) {
-                        imageModifier.clickable(onClick = onClick)
-                    } else {
-                        imageModifier
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SahraPill(
-    text: String,
-    background: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(30.dp))
-            .background(background)
-            .clickable(onClick = onClick)
-            .padding(
-                horizontal = 13.dp,
-                vertical = 5.dp
-            ),
+            .padding(3.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            color = Color.White,
-            fontSize = 13.sp,
-            maxLines = 1
+        Icon(
+            imageVector = Icons.Default.Person,
+            contentDescription = null,
+            tint = ring.copy(alpha = 0.75f),
+            modifier = Modifier.fillMaxSize().padding(4.dp)
         )
     }
 }
 
 // ----------------------------------------------------
-// شريط التنقل السفلي — الأيقونات من GitHub
-// ----------------------------------------------------
-
-@Composable
-private fun SahraBottomNavigation(
-    selectedTab: String,
-    unreadMessages: Int,
-    onSelect: (String) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(SahraColors.Navigation)
-            .padding(
-                top = 5.dp,
-                bottom = 5.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        sahraTabs.forEach { tab ->
-            val selected = tab.title == selectedTab
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable {
-                        onSelect(tab.title)
-                    }
-                    .padding(vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier.size(39.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (selected) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .background(
-                                    brush = Brush.radialGradient(
-                                        listOf(
-                                            SahraColors.Purple.copy(alpha = 0.35f),
-                                            Color.Transparent
-                                        )
-                                    ),
-                                    shape = CircleShape
-                                )
-                        )
-                    }
-
-                    // الأيقونة من GitHub
-                    RemoteImage(
-                        name = tab.remoteName,
-                        contentDescription = tab.title,
-                        modifier = Modifier
-                            .size(if (selected) 35.dp else 31.dp)
-                            .clip(RoundedCornerShape(9.dp)),
-                        contentScale = ContentScale.Fit
-                    )
-
-                    if (
-                        tab.title == "الرسائل" &&
-                        unreadMessages > 0
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .size(18.dp)
-                                .background(
-                                    color = Color(0xFFFF4A58),
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = unreadMessages.toString(),
-                                color = Color.White,
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(3.dp))
-
-                Text(
-                    text = tab.title,
-                    color = if (selected) {
-                        Color.White
-                    } else {
-                        Color(0xFF777A91)
-                    },
-                    fontSize = 11.sp,
-                    fontWeight = if (selected) {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Normal
-                    },
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
-
-// ----------------------------------------------------
-// صفحة الغرف — بيانات تجريبية
+// صفحة الغرف
 // ----------------------------------------------------
 
 @Composable
 private fun SahraRoomsPage(
-    artwork: List<ImageBitmap>,
-    onJoin: (String) -> Unit
+    onJoin: (SahraRoom) -> Unit
 ) {
-    val rooms = listOf(
-        "سهرة وأصحاب ✨",
-        "غرفة الموسيقى 🎵",
-        "دردشة عربية 💜",
-        "قهوة آخر الليل ☕"
-    )
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
@@ -1461,25 +916,37 @@ private fun SahraRoomsPage(
             )
         }
 
-        items(rooms) { room ->
+        items(sahraRooms, key = { it.id }) { room ->
             SahraPanel {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // أيقونة الغرفة — من GitHub
-                    RemoteImage(
-                        name = "banner_rooms",
+                    Box(
                         modifier = Modifier
                             .size(62.dp)
                             .clip(RoundedCornerShape(16.dp))
-                    )
-
-                    Column(
-                        modifier = Modifier.weight(1f)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        room.color,
+                                        room.color.copy(alpha = 0.5f)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = room,
+                            text = room.name.take(1),
+                            color = Color.White,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = room.name,
                             color = SahraColors.Text,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -1497,9 +964,7 @@ private fun SahraRoomsPage(
                     SahraPill(
                         text = "انضمام",
                         background = Color(0xFF40216B),
-                        onClick = {
-                            onJoin(room)
-                        }
+                        onClick = { onJoin(room) }
                     )
                 }
             }
@@ -1508,155 +973,64 @@ private fun SahraRoomsPage(
 }
 
 // ----------------------------------------------------
-// صفحة الاستكشاف
+// صفحة بديلة للصفحات قيد الإنشاء
 // ----------------------------------------------------
 
 @Composable
-private fun SahraExplorePage(
-    artwork: List<ImageBitmap>,
-    onUser: (SahraUser) -> Unit,
-    onHi: (SahraUser) -> Unit
+private fun SahraPlaceholderPage(
+    title: String,
+    subtitle: String,
+    message: String
 ) {
-    var filter by rememberSaveable {
-        mutableStateOf("الكل")
-    }
-
-    val filters = listOf(
-        "الكل",
-        "صور",
-        "غرف"
-    )
-
-    val visibleUsers = when (filter) {
-        "صور" -> sahraUsers.filter {
-            it.photos.isNotEmpty()
-        }
-
-        "غرف" -> sahraUsers.filter {
-            it.joinRoom
-        }
-
-        else -> sahraUsers
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        item {
-            SahraPageTitle(
-                title = "يستكشف",
-                subtitle = "اكتشف المستخدمين والغرف"
+        Box(
+            modifier = Modifier
+                .size(90.dp)
+                .clip(CircleShape)
+                .background(SahraColors.Purple.copy(alpha = 0.15f))
+                .border(2.dp, SahraColors.Purple, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = null,
+                tint = SahraColors.Purple,
+                modifier = Modifier.size(40.dp)
             )
         }
 
-        item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                filters.forEach { label ->
-                    SahraPill(
-                        text = label,
-                        background = if (label == filter) {
-                            SahraColors.Purple
-                        } else {
-                            Color(0xFF1D1930)
-                        },
-                        onClick = {
-                            filter = label
-                        }
-                    )
-                }
-            }
-        }
+        Spacer(Modifier.height(22.dp))
 
-        items(
-            items = visibleUsers,
-            key = { it.id }
-        ) { user ->
-            SahraUserCard(
-                user = user,
-                artwork = artwork,
-                onUser = {
-                    onUser(user)
-                },
-                onAction = {
-                    onHi(user)
-                }
-            )
-        }
-    }
-}
+        Text(
+            text = title,
+            color = SahraColors.Text,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold
+        )
 
-// ----------------------------------------------------
-// صفحة الرسائل
-// ----------------------------------------------------
+        Spacer(Modifier.height(8.dp))
 
-@Composable
-private fun SahraMessagesPage(
-    artwork: List<ImageBitmap>,
-    onOpen: (SahraUser) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            SahraPageTitle(
-                title = "الرسائل",
-                subtitle = "محادثات تجريبية"
-            )
-        }
+        Text(
+            text = subtitle,
+            color = SahraColors.Muted,
+            fontSize = 14.sp
+        )
 
-        items(
-            items = sahraUsers,
-            key = { it.id }
-        ) { user ->
-            SahraPanel {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onOpen(user)
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SahraAvatar(
-                        artwork = artwork,
-                        index = user.avatar,
-                        modifier = Modifier.size(54.dp)
-                    )
+        Spacer(Modifier.height(16.dp))
 
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = user.name,
-                            color = SahraColors.Text,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.height(6.dp))
-
-                        Text(
-                            text = "أهلًا بيك في SahraChat ✨",
-                            color = SahraColors.Muted,
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    Text(
-                        text = "عرض",
-                        color = SahraColors.Pink,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-        }
+        Text(
+            text = message,
+            color = SahraColors.Muted,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp
+        )
     }
 }
 
@@ -1666,7 +1040,6 @@ private fun SahraMessagesPage(
 
 @Composable
 private fun SahraProfilePage(
-    artwork: List<ImageBitmap>,
     onAction: (String) -> Unit
 ) {
     LazyColumn(
@@ -1687,27 +1060,10 @@ private fun SahraProfilePage(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(82.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        SahraColors.Purple,
-                                        SahraColors.Pink
-                                    )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "أنا",
-                            color = Color.White,
-                            fontSize = 27.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    ProgrammaticAvatar(
+                        modifier = Modifier.size(82.dp),
+                        ring = SahraColors.Pink
+                    )
 
                     Spacer(Modifier.height(12.dp))
 
@@ -1739,13 +1095,11 @@ private fun SahraProfilePage(
                     value = "0",
                     modifier = Modifier.weight(1f)
                 )
-
                 SahraProfileStat(
                     title = "متابَعين",
                     value = "0",
                     modifier = Modifier.weight(1f)
                 )
-
                 SahraProfileStat(
                     title = "أصدقاء",
                     value = "0",
@@ -1766,9 +1120,7 @@ private fun SahraProfilePage(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            onAction(title)
-                        },
+                        .clickable { onAction(title) },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -1867,135 +1219,126 @@ private fun SahraPanel(
 }
 
 // ----------------------------------------------------
-// atlas الأيقونات — للأيقونات التي لم تُرفع بعد
-// 5 أعمدة × 5 صفوف، حجم كل قطعة 48×48
+// شريط التنقل السفلي — الأيقونات من GitHub
 // ----------------------------------------------------
 
-private object SahraArtwork {
+@Composable
+private fun SahraBottomNavigation(
+    selectedTab: String,
+    unreadMessages: Int,
+    onSelect: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SahraColors.Navigation)
+            .padding(
+                top = 5.dp,
+                bottom = 5.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        sahraTabs.forEach { tab ->
+            val selected = tab.title == selectedTab
 
-    fun decode(): List<ImageBitmap> {
-        val bytes = Base64.decode(
-            EMBEDDED_ART,
-            Base64.DEFAULT
-        )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onSelect(tab.title) }
+                    .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier.size(39.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selected) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(
+                                    brush = Brush.radialGradient(
+                                        listOf(
+                                            SahraColors.Purple.copy(alpha = 0.35f),
+                                            Color.Transparent
+                                        )
+                                    ),
+                                    shape = CircleShape
+                                )
+                        )
+                    }
 
-        val atlas = requireNotNull(
-            BitmapFactory.decodeByteArray(
-                bytes,
-                0,
-                bytes.size
-            )
-        ) {
-            "تعذر قراءة الصور المضمّنة. انسخ النص بالكامل بدون تغييره."
-        }
+                    RemoteImage(
+                        name = tab.remoteName,
+                        contentDescription = tab.title,
+                        modifier = Modifier
+                            .size(if (selected) 35.dp else 31.dp)
+                            .clip(RoundedCornerShape(9.dp)),
+                        contentScale = ContentScale.Fit
+                    )
 
-        return List(23) { index ->
-            Bitmap.createBitmap(
-                atlas,
-                (index % 5) * 48,
-                (index / 5) * 48,
-                48,
-                48
-            ).asImageBitmap()
+                    if (tab.title == "الرسائل" && unreadMessages > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(18.dp)
+                                .background(
+                                    color = Color(0xFFFF4A58),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = unreadMessages.toString(),
+                                color = Color.White,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(3.dp))
+
+                Text(
+                    text = tab.title,
+                    color = if (selected) Color.White else Color(0xFF777A91),
+                    fontSize = 11.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1
+                )
+            }
         }
     }
+}
 
-    private const val EMBEDDED_ART = """
-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
-YR7AAAAAAAAA
-"""
+// ----------------------------------------------------
+// SahraPill — زر صغير دائري
+// ----------------------------------------------------
+
+@Composable
+private fun SahraPill(
+    text: String,
+    background: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(30.dp))
+            .background(background)
+            .clickable(onClick = onClick)
+            .padding(
+                horizontal = 13.dp,
+                vertical = 5.dp
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 13.sp,
+            maxLines = 1
+        )
+    }
 }

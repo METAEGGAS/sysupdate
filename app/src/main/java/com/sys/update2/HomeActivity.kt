@@ -148,7 +148,7 @@ private fun SahraTheme(content: @Composable () -> Unit) {
 }
 
 // ----------------------------------------------------
-// Root — يبدّل بين الشاشة الرئيسية وشاشة التوافق
+// Root
 // ----------------------------------------------------
 
 @Composable
@@ -208,9 +208,7 @@ private fun SahraApp(onVoiceMatchClick: () -> Unit) {
         ) {
             SahraHeader()
 
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth()
-            ) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (selectedTab) {
                     "الرئيسية" -> {
                         SahraHome(
@@ -377,7 +375,6 @@ private fun SahraHome(
 private fun SahraFeatureCards(onRooms: () -> Unit, onMatch: () -> Unit) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            // بطاقة الغرف
             Box(
                 modifier = Modifier.weight(1f).height(108.dp)
                     .clip(RoundedCornerShape(15.dp))
@@ -401,7 +398,6 @@ private fun SahraFeatureCards(onRooms: () -> Unit, onMatch: () -> Unit) {
                     SahraPill("انضمام", Color(0xFF081443), onClick = onRooms)
                 }
             }
-            // بطاقة التوافق
             Box(
                 modifier = Modifier.weight(1f).height(108.dp)
                     .clip(RoundedCornerShape(15.dp))
@@ -460,7 +456,7 @@ private fun BannerStars() {
 }
 
 // ----------------------------------------------------
-// الأيقونات الأربع من GitHub
+// الأيقونات الأربع — بأسماء GitHub الصحيحة
 // ----------------------------------------------------
 
 @Composable
@@ -469,7 +465,7 @@ private fun SahraQuickActions(onAction: (String) -> Unit) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SahraQuickTile(
                 title = "الأنشطة",
-                remoteIconName = "ic_action_activities",
+                remoteIconName = "icon_activities",
                 colors = listOf(Color(0xFF754219), Color(0xFF291C16), Color(0xFF101019)),
                 notification = true,
                 modifier = Modifier.weight(1f),
@@ -484,14 +480,14 @@ private fun SahraQuickActions(onAction: (String) -> Unit) {
             )
             SahraQuickTile(
                 title = "الشحن",
-                remoteIconName = "ic_action_recharge",
+                remoteIconName = "icon_recharge",
                 colors = listOf(Color(0xFF9538EB), Color(0xFF5522A3), Color(0xFF201340)),
                 modifier = Modifier.weight(1f),
                 onClick = { onAction("الشحن") }
             )
             SahraQuickTile(
                 title = "LUDO",
-                remoteIconName = "ic_action_ludo",
+                remoteIconName = "icon_ludo",
                 colors = listOf(Color(0xFF20A98D), Color(0xFF086954), Color(0xFF072C32)),
                 modifier = Modifier.weight(1f),
                 onClick = { onAction("LUDO") }
@@ -539,7 +535,7 @@ private fun SahraQuickTile(
 }
 
 // ----------------------------------------------------
-// شاشة التوافق الصوتي (نفس التصميم)
+// شاشة التوافق الصوتي
 // ----------------------------------------------------
 
 @Composable
@@ -657,7 +653,6 @@ private fun PlanetaryIcon(modifier: Modifier = Modifier) {
             ),
             radius = planetRadius * 2.2f, center = Offset(cx, cy)
         )
-
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(Color(0xFF8BC5FF), Color(0xFF5A8FEB), Color(0xFF2E4FB0)),
@@ -666,7 +661,6 @@ private fun PlanetaryIcon(modifier: Modifier = Modifier) {
             ),
             radius = planetRadius, center = Offset(cx, cy)
         )
-
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(Color(0x99A661FF), Color.Transparent),
@@ -676,7 +670,6 @@ private fun PlanetaryIcon(modifier: Modifier = Modifier) {
             radius = planetRadius * 0.7f,
             center = Offset(cx + planetRadius * 0.25f, cy + planetRadius * 0.15f)
         )
-
         val backRing = Path().apply {
             addOval(Rect(
                 cx - planetRadius * 1.75f, cy - planetRadius * 0.52f,
@@ -739,7 +732,7 @@ private fun DrawScope.drawStar(center: Offset, outerRadius: Float, color: Color)
 }
 
 // ----------------------------------------------------
-// صفحات أخرى
+// الصفحات
 // ----------------------------------------------------
 
 @Composable
@@ -894,10 +887,6 @@ private fun ProgrammaticAvatar(
             modifier = Modifier.fillMaxSize().padding(4.dp))
     }
 }
-
-// ----------------------------------------------------
-// شريط التنقل السفلي
-// ----------------------------------------------------
 
 @Composable
 private fun SahraBottomNavigation(

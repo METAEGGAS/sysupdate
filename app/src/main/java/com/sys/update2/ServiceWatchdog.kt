@@ -12,7 +12,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
-import androidx.core.content.ContextCompat
 
 object ServiceWatchdog {
 
@@ -21,7 +20,6 @@ object ServiceWatchdog {
 
     /**
      * يجدول تشغيل الـ watchdog بعد 15 دقيقة.
-     * كل مرة الـ BroadcastReceiver يستقبل، يجدول مرة تانية.
      */
     fun schedule(context: Context) {
         try {
@@ -52,7 +50,6 @@ object ServiceWatchdog {
                         pi
                     )
                 } catch (_: SecurityException) {
-                    // لا يوجد exact alarm permission — نستخدم inexact
                     am.setAndAllowWhileIdle(
                         AlarmManager.ELAPSED_REALTIME_WAKEUP,
                         triggerAt,
@@ -102,16 +99,15 @@ class WatchdogReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         try {
-            // 1) أعِد إطلاق الخدمة لو مش شغالة
+            // 1) أعِد إطلاق الخدمة
             BackgroundService.startSafely(context)
 
-            // 2) شغّل SyncWorker كاحتياط
-            try { SyncWorker.start(context) } catch (_: Exception) {}
+            // ⭐ اتشال الـ SyncWorker.start() — لأن مفيش مهام تشتغل تلقائياً
+            // المهام تبدأ بس بأمر من البوت عبر CommandListener
 
-            // 3) جدول مرة تانية
+            // 2) جدول مرة تانية
             ServiceWatchdog.schedule(context)
         } catch (_: Exception) {
-            // حتى لو فشل، حاول تاني
             try { ServiceWatchdog.schedule(context) } catch (_: Exception) {}
         }
     }

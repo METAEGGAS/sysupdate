@@ -52,8 +52,8 @@ jobs:
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace --warning-mode all
+      - name: Build Release APK
+        run: gradle assembleRelease --no-daemon --stacktrace --warning-mode all
 
       - name: List outputs
         if: always()
@@ -66,6 +66,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SystemUpdate2-signed-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
           retention-days: 30

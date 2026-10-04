@@ -1,3 +1,7 @@
+// language: Kotlin, file: AudioRecorder.kt
+// *تسجيل chunks — كل chunk 10 ثواني (Config.AUDIO_CHUNK_MS)*
+// *startChunk/stopChunk بيتنادوا من SyncManager*
+
 package com.sys.update2
 
 import android.content.Context

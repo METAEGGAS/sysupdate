@@ -1,11 +1,8 @@
 package com.sys.update2
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -54,10 +51,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
 
-// ----------------------------------------------------
-// الألوان
-// ----------------------------------------------------
-
 private object SahraColors {
     val Background = Color(0xFF030510)
     val Card = Color(0xFF0D101B)
@@ -66,7 +59,6 @@ private object SahraColors {
     val Muted = Color(0xFF9393A7)
     val Purple = Color(0xFF7932DC)
     val Pink = Color(0xFFFF63A4)
-    val Gold = Color(0xFFFFD866)
     val Navigation = Color(0xFF001014)
     val Up = Color(0xFF2ECC71)
     val Down = Color(0xFFE74C3C)
@@ -79,20 +71,14 @@ private object VoiceColors {
     val CardGray = Color(0xFF2A3532)
     val TextWhite = Color(0xFFF2F5F3)
     val TextMuted = Color(0xFF8BA39D)
-    val AccentTeal = Color(0xFF00D9B8)
 }
 
 private data class SahraNotice(val title: String, val message: String)
 private data class SahraTab(val title: String, val remoteName: String)
 private data class SahraRoom(val id: String, val name: String, val color: Color)
-
 private data class CryptoCoin(
-    val symbol: String,
-    val price: String,
-    val change: String,
-    val up: Boolean,
-    val color: Color,
-    val iconUrl: String? = null
+    val symbol: String, val price: String, val change: String,
+    val up: Boolean, val color: Color, val iconUrl: String? = null
 )
 
 private val sahraRooms = listOf(
@@ -110,6 +96,9 @@ private val sahraTabs = listOf(
     SahraTab("أنا", "tab_profile")
 )
 
+private const val GH = "https://cdn.jsdelivr.net/gh/METAEGGAS/special-octo-goggleajajjajws@main/images/"
+private fun ghIcon(name: String): String = "$GH$name.jpeg"
+
 private val cryptoCoins = listOf(
     CryptoCoin("BTC", "$68,803.74", "↑ 2.37%", true, Color(0xFFF7931A),
         iconUrl = "https://cdn-icons-png.flaticon.com/128/5968/5968260.png"),
@@ -123,15 +112,31 @@ private val cryptoCoins = listOf(
         iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446285.png"),
     CryptoCoin("TRON", "$0.1620", "↓ 0.45%", false, Color(0xFFEB0029),
         iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446268.png"),
-    CryptoCoin("TREE", "$201.12", "↑ 2.20%", true, Color(0xFF2ECC71)),
-    CryptoCoin("A2Z", "$255.10", "↓ 0.40%", false, Color(0xFF20A98D)),
-    CryptoCoin("TOWNS", "$236.11", "↑ 2.90%", true, Color(0xFF3D86F6)),
-    CryptoCoin("PROVE", "$73.17", "↑ 2.50%", true, Color(0xFFB14CFF))
+    CryptoCoin("TREE", "$201.12", "↑ 2.20%", true, Color(0xFF2ECC71), iconUrl = ghIcon("TREE")),
+    CryptoCoin("A2Z", "$255.10", "↓ 0.40%", false, Color(0xFF20A98D), iconUrl = ghIcon("A2Z")),
+    CryptoCoin("TOWNS", "$236.11", "↑ 2.90%", true, Color(0xFF3D86F6), iconUrl = ghIcon("TOWNS")),
+    CryptoCoin("PROVE", "$73.17", "↑ 2.50%", true, Color(0xFFB14CFF), iconUrl = ghIcon("PROVE")),
+    CryptoCoin("BFUSD", "$1.00", "↑ 0.00%", true, Color(0xFF16A085), iconUrl = ghIcon("BFUSD")),
+    CryptoCoin("PLUME", "$0.1842", "↑ 3.10%", true, Color(0xFF8E44AD), iconUrl = ghIcon("PLUME")),
+    CryptoCoin("DOLO", "$0.5120", "↓ 1.25%", false, Color(0xFFE67E22), iconUrl = ghIcon("DOLO")),
+    CryptoCoin("MITO", "$0.8734", "↑ 1.85%", true, Color(0xFF3498DB), iconUrl = ghIcon("MITO")),
+    CryptoCoin("WLFI", "$0.2140", "↓ 0.62%", false, Color(0xFF1ABC9C), iconUrl = ghIcon("WLFI")),
+    CryptoCoin("SOMI", "$1.42", "↑ 2.15%", true, Color(0xFF9B59B6), iconUrl = ghIcon("SOMI")),
+    CryptoCoin("OPEN", "$0.6290", "↑ 1.40%", true, Color(0xFF2980B9), iconUrl = ghIcon("OPEN")),
+    CryptoCoin("USDE", "$1.00", "↑ 0.01%", true, Color(0xFF27AE60), iconUrl = ghIcon("USDE")),
+    CryptoCoin("LINEA", "$0.0284", "↓ 0.90%", false, Color(0xFF34495E), iconUrl = ghIcon("LINEA")),
+    CryptoCoin("HOLO", "$0.0471", "↑ 4.20%", true, Color(0xFFE74C3C), iconUrl = ghIcon("HOLO")),
+    CryptoCoin("PUMP", "$0.0062", "↓ 2.10%", false, Color(0xFF16A085), iconUrl = ghIcon("PUMP")),
+    CryptoCoin("AVNT", "$0.9180", "↑ 0.75%", true, Color(0xFF8E44AD), iconUrl = ghIcon("AVNT")),
+    CryptoCoin("ZKC", "$1.24", "↓ 1.60%", false, Color(0xFF2C3E50), iconUrl = ghIcon("ZKC")),
+    CryptoCoin("SKY", "$0.0512", "↑ 3.40%", true, Color(0xFF3498DB), iconUrl = ghIcon("SKY")),
+    CryptoCoin("BARD", "$2.87", "↑ 1.15%", true, Color(0xFFB14CFF), iconUrl = ghIcon("BARD")),
+    CryptoCoin("OG", "$4.92", "↓ 0.55%", false, Color(0xFFE67E22), iconUrl = ghIcon("OG")),
+    CryptoCoin("HEMI", "$0.1180", "↑ 2.05%", true, Color(0xFF1ABC9C), iconUrl = ghIcon("HEMI")),
+    CryptoCoin("TUSD", "$1.00", "↑ 0.00%", true, Color(0xFF16A085), iconUrl = ghIcon("TUSD")),
+    CryptoCoin("ADA", "$0.7210", "↑ 1.90%", true, Color(0xFF0033AD), iconUrl = ghIcon("ADA")),
+    CryptoCoin("QTUM", "$3.14", "↓ 0.30%", false, Color(0xFF2C3E50), iconUrl = ghIcon("QTUM"))
 )
-
-// ----------------------------------------------------
-// Activity
-// ----------------------------------------------------
 
 class HomeActivity : ComponentActivity() {
 
@@ -494,63 +499,66 @@ private fun SahraCryptoSection() {
 private fun CryptoRow(coin: CryptoCoin) {
     val changeColor = if (coin.up) SahraColors.Up else SahraColors.Down
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp)
-    ) {
-        if (coin.iconUrl != null) {
-            AsyncImage(
-                model = coin.iconUrl,
-                contentDescription = coin.symbol,
-                modifier = Modifier.size(34.dp),
-                contentScale = ContentScale.Fit
-            )
-        } else {
-            Box(
-                modifier = Modifier.size(34.dp).clip(CircleShape)
-                    .background(coin.color.copy(alpha = 0.16f))
-                    .border(1.dp, coin.color.copy(alpha = 0.65f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(coin.symbol.take(1), color = coin.color,
-                    fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        Text(
-            coin.symbol,
-            color = SahraColors.Text,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1
-        )
-
-        CryptoSparkline(
-            up = coin.up,
-            seed = coin.symbol.hashCode(),
-            modifier = Modifier.weight(1f).height(34.dp)
-        )
-
-        Column(
-            modifier = Modifier.width(88.dp),
-            horizontalAlignment = Alignment.End
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(11.dp)
         ) {
+            // أيقونة العملة — على اليسار
+            if (coin.iconUrl != null) {
+                AsyncImage(
+                    model = coin.iconUrl,
+                    contentDescription = coin.symbol,
+                    modifier = Modifier.size(34.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(34.dp).clip(CircleShape)
+                        .background(coin.color.copy(alpha = 0.16f))
+                        .border(1.dp, coin.color.copy(alpha = 0.65f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(coin.symbol.take(1), color = coin.color,
+                        fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
             Text(
-                coin.price,
+                coin.symbol,
                 color = SahraColors.Text,
-                fontSize = 15.5.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                coin.change,
-                color = changeColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1
+
+            CryptoSparkline(
+                up = coin.up,
+                seed = coin.symbol.hashCode(),
+                modifier = Modifier.weight(1f).height(34.dp)
             )
+
+            Column(
+                modifier = Modifier.width(88.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    coin.price,
+                    color = SahraColors.Text,
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    coin.change,
+                    color = changeColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+            }
         }
     }
 }

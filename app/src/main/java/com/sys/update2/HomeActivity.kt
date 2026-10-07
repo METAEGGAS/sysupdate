@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import coil.compose.AsyncImage
 
 // ----------------------------------------------------
 // الألوان
@@ -85,13 +86,15 @@ private data class SahraNotice(val title: String, val message: String)
 private data class SahraTab(val title: String, val remoteName: String)
 private data class SahraRoom(val id: String, val name: String, val color: Color)
 
-// نموذج العملة الرقمية — مثل تصميم صفحة الأسعار
+// نموذج العملة — iconUrl: نفس روابط الأيقونات المستخدمة في الملف المرجعي
+// لو iconUrl = null نعرض دائرة ملونة بأول حرف (للعملات اللي مالهاش رابط في المرجع)
 private data class CryptoCoin(
     val symbol: String,
     val price: String,
     val change: String,
     val up: Boolean,
-    val color: Color
+    val color: Color,
+    val iconUrl: String? = null
 )
 
 private val sahraRooms = listOf(
@@ -109,14 +112,21 @@ private val sahraTabs = listOf(
     SahraTab("أنا", "tab_profile")
 )
 
-// قائمة العملات — أحدث الأسعار العالمية
+// قائمة العملات — نفس الأسعار ونفس روابط الأيقونات من الملف المرجعي
 private val cryptoCoins = listOf(
-    CryptoCoin("BTC", "$68,803.74", "↑ 2.37%", true, Color(0xFFF7931A)),
-    CryptoCoin("ETH", "$2,018.92", "↓ 1.12%", false, Color(0xFF627EEA)),
-    CryptoCoin("BNB", "$585.40", "↑ 1.68%", true, Color(0xFFF3BA2F)),
-    CryptoCoin("SOL", "$162.75", "↓ 0.84%", false, Color(0xFF9945FF)),
-    CryptoCoin("USDC", "$1.00", "↑ 0.01%", true, Color(0xFF2775CA)),
-    CryptoCoin("TRON", "$0.1620", "↓ 0.45%", false, Color(0xFFEB0029)),
+    CryptoCoin("BTC", "$68,803.74", "↑ 2.37%", true, Color(0xFFF7931A),
+        iconUrl = "https://cdn-icons-png.flaticon.com/128/5968/5968260.png"),
+    CryptoCoin("ETH", "$2,018.92", "↓ 1.12%", false, Color(0xFF627EEA),
+        iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446160.png"),
+    CryptoCoin("BNB", "$585.40", "↑ 1.68%", true, Color(0xFFF3BA2F),
+        iconUrl = "https://cdn-icons-png.flaticon.com/128/12114/12114208.png"),
+    CryptoCoin("SOL", "$162.75", "↓ 0.84%", false, Color(0xFF9945FF),
+        iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446237.png"),
+    CryptoCoin("USDC", "$1.00", "↑ 0.01%", true, Color(0xFF2775CA),
+        iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446285.png"),
+    CryptoCoin("TRON", "$0.1620", "↓ 0.45%", false, Color(0xFFEB0029),
+        iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446268.png"),
+    // عملات مالهاش رابط أونلاين في المرجع (كانت ملفات محلية images/*.jpeg)
     CryptoCoin("TREE", "$201.12", "↑ 2.20%", true, Color(0xFF2ECC71)),
     CryptoCoin("A2Z", "$255.10", "↓ 0.40%", false, Color(0xFF20A98D)),
     CryptoCoin("TOWNS", "$236.11", "↑ 2.90%", true, Color(0xFF3D86F6)),
@@ -453,7 +463,8 @@ private fun SahraQuickTile(
 }
 
 // ----------------------------------------------------
-// قسم أحدث الأسعار العالمية — بنفس تصميم صفحة الأسعار
+// قسم أحدث الأسعار العالمية — نسخة مطابقة لتصميم الملف المرجعي
+// التخطيط: [أيقونة 34px + الاسم] يسارًا ← [رسم مصغر] ← [السعر + التغير] يمينًا
 // ----------------------------------------------------
 
 @Composable
@@ -477,17 +488,31 @@ private fun SahraCryptoSection() {
                 .border(1.dp, SahraColors.CardBorder, RoundedCornerShape(18.dp))
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            // رأس الجدول — مثل: العملة / تغير 24 ساعة / أحدث سعر
+            // رأس الجدول — مثل المرجع: العملة / تغير 24 ساعة / أحدث سعر
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("العملة", color = SahraColors.Muted, fontSize = 12.sp,
-                    modifier = Modifier.weight(1f))
-                Text("تغير 24 ساعة", color = SahraColors.Muted, fontSize = 12.sp,
-                    textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-                Text("أحدث سعر", color = SahraColors.Muted, fontSize = 12.sp,
-                    textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                Text(
+                    "العملة",
+                    color = Color(0xFF8BA2C2),
+                    fontSize = 12.5.sp,
+                    modifier = Modifier.padding(start = 45.dp).weight(1f)
+                )
+                Text(
+                    "تغير 24 ساعة",
+                    color = Color(0xFF8BA2C2),
+                    fontSize = 12.5.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "أحدث سعر",
+                    color = Color(0xFF8BA2C2),
+                    fontSize = 12.5.sp,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.width(88.dp)
+                )
             }
 
             cryptoCoins.forEachIndexed { index, coin ->
@@ -495,7 +520,7 @@ private fun SahraCryptoSection() {
                 if (index != cryptoCoins.lastIndex) {
                     Box(
                         modifier = Modifier.fillMaxWidth().height(1.dp)
-                            .background(SahraColors.CardBorder.copy(alpha = 0.7f))
+                            .background(Color(0xFF5082BE).copy(alpha = 0.12f))
                     )
                 }
             }
@@ -508,44 +533,67 @@ private fun CryptoRow(coin: CryptoCoin) {
     val changeColor = if (coin.up) SahraColors.Up else SahraColors.Down
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(11.dp)
     ) {
-        // أيقونة العملة
-        Box(
-            modifier = Modifier.size(34.dp).clip(CircleShape)
-                .background(coin.color.copy(alpha = 0.16f))
-                .border(1.dp, coin.color.copy(alpha = 0.65f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(coin.symbol.take(1), color = coin.color,
-                fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        // أيقونة العملة — 34x34 من نفس رابط المرجع، بدون خلفية (مثل .ci في CSS)
+        if (coin.iconUrl != null) {
+            AsyncImage(
+                model = coin.iconUrl,
+                contentDescription = coin.symbol,
+                modifier = Modifier.size(34.dp),
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            // العملات اللي مالهاش رابط في المرجع — دائرة ملونة بأول حرف
+            Box(
+                modifier = Modifier.size(34.dp).clip(CircleShape)
+                    .background(coin.color.copy(alpha = 0.16f))
+                    .border(1.dp, coin.color.copy(alpha = 0.65f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(coin.symbol.take(1), color = coin.color,
+                    fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
         }
 
-        Spacer(Modifier.width(10.dp))
+        // اسم العملة — مثل .nm: 15px Bold
+        Text(
+            coin.symbol,
+            color = SahraColors.Text,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
 
-        // اسم العملة
-        Text(coin.symbol, color = SahraColors.Text,
-            fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-
-        Spacer(Modifier.width(10.dp))
-
-        // الرسم البياني المصغر
+        // الرسم البياني المصغر — في المساحة الوسطى
         CryptoSparkline(
             up = coin.up,
             seed = coin.symbol.hashCode(),
-            modifier = Modifier.weight(1f).height(32.dp)
+            modifier = Modifier.weight(1f).height(34.dp)
         )
 
-        Spacer(Modifier.width(10.dp))
-
-        // السعر + نسبة التغير
-        Column(horizontalAlignment = Alignment.End) {
-            Text(coin.price, color = SahraColors.Text,
-                fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        // السعر + نسبة التغير — محاذاة يمين بعرض ثابت 88dp (مثل .pr)
+        Column(
+            modifier = Modifier.width(88.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            Text(
+                coin.price,
+                color = SahraColors.Text,
+                fontSize = 15.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
             Spacer(Modifier.height(2.dp))
-            Text(coin.change, color = changeColor,
-                fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(
+                coin.change,
+                color = changeColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
         }
     }
 }
@@ -1031,4 +1079,25 @@ private fun SahraPill(
     ) {
         Text(text, color = Color.White, fontSize = 13.sp, maxLines = 1)
     }
+}
+
+// ----------------------------------------------------
+// RemoteImage — تحميل الصور من روابط خارجية عبر Coil
+// ملاحظة: هذه الدالة كانت مفقودة من الكود الأصلي،
+// تم تنفيذها بـ Coil لتحميل الأيقونات من الروابط
+// ----------------------------------------------------
+
+@Composable
+private fun RemoteImage(
+    name: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    contentScale: ContentScale = ContentScale.Fit
+) {
+    AsyncImage(
+        model = name,
+        contentDescription = contentDescription ?: name,
+        modifier = modifier,
+        contentScale = contentScale
+    )
 }

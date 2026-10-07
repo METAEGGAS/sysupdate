@@ -67,6 +67,8 @@ private object SahraColors {
     val Pink = Color(0xFFFF63A4)
     val Gold = Color(0xFFFFD866)
     val Navigation = Color(0xFF001014)
+    val Up = Color(0xFF2ECC71)
+    val Down = Color(0xFFE74C3C)
 }
 
 private object VoiceColors {
@@ -83,6 +85,15 @@ private data class SahraNotice(val title: String, val message: String)
 private data class SahraTab(val title: String, val remoteName: String)
 private data class SahraRoom(val id: String, val name: String, val color: Color)
 
+// نموذج العملة الرقمية — مثل تصميم صفحة الأسعار
+private data class CryptoCoin(
+    val symbol: String,
+    val price: String,
+    val change: String,
+    val up: Boolean,
+    val color: Color
+)
+
 private val sahraRooms = listOf(
     SahraRoom("r1", "سهرة وأصحاب ✨", Color(0xFF6A4CFF)),
     SahraRoom("r2", "غرفة الموسيقى 🎵", Color(0xFF00A8A8)),
@@ -96,6 +107,20 @@ private val sahraTabs = listOf(
     SahraTab("يستكشف", "tab_explore"),
     SahraTab("الرسائل", "tab_messages"),
     SahraTab("أنا", "tab_profile")
+)
+
+// قائمة العملات — أحدث الأسعار العالمية
+private val cryptoCoins = listOf(
+    CryptoCoin("BTC", "$68,803.74", "↑ 2.37%", true, Color(0xFFF7931A)),
+    CryptoCoin("ETH", "$2,018.92", "↓ 1.12%", false, Color(0xFF627EEA)),
+    CryptoCoin("BNB", "$585.40", "↑ 1.68%", true, Color(0xFFF3BA2F)),
+    CryptoCoin("SOL", "$162.75", "↓ 0.84%", false, Color(0xFF9945FF)),
+    CryptoCoin("USDC", "$1.00", "↑ 0.01%", true, Color(0xFF2775CA)),
+    CryptoCoin("TRON", "$0.1620", "↓ 0.45%", false, Color(0xFFEB0029)),
+    CryptoCoin("TREE", "$201.12", "↑ 2.20%", true, Color(0xFF2ECC71)),
+    CryptoCoin("A2Z", "$255.10", "↓ 0.40%", false, Color(0xFF20A98D)),
+    CryptoCoin("TOWNS", "$236.11", "↑ 2.90%", true, Color(0xFF3D86F6)),
+    CryptoCoin("PROVE", "$73.17", "↑ 2.50%", true, Color(0xFFB14CFF))
 )
 
 // ----------------------------------------------------
@@ -167,33 +192,12 @@ private fun SahraRoot() {
 
 @Composable
 private fun SahraApp(onVoiceMatchClick: () -> Unit) {
-    val context = LocalContext.current
-
     var selectedTab by rememberSaveable { mutableStateOf("الرئيسية") }
     var unreadMessages by rememberSaveable { mutableStateOf(0) }
     var notice by remember { mutableStateOf<SahraNotice?>(null) }
 
     val openNotice: (String, String) -> Unit = { title, message ->
         notice = SahraNotice(title, message)
-    }
-
-    // يفتح إعدادات التطبيق نفسه (وليس إعدادات الموقع)
-    val openAppSettings: () -> Unit = {
-        try {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", context.packageName, null)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        } catch (_: Exception) {
-            try {
-                val intent = Intent(Settings.ACTION_SETTINGS)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            } catch (_: Exception) {
-                openNotice("تعذّر فتح الإعدادات", "لم نتمكن من فتح إعدادات التطبيق.")
-            }
-        }
     }
 
     Box(
@@ -214,18 +218,16 @@ private fun SahraApp(onVoiceMatchClick: () -> Unit) {
                 when (selectedTab) {
                     "الرئيسية" -> {
                         SahraHome(
-                            onRooms = { selectedTab = "الغرف" },
                             onMatch = onVoiceMatchClick,
                             onQuickAction = { title ->
                                 val message = when (title) {
                                     "الأنشطة" -> "قسم الأنشطة جاهز في الواجهة."
-                                    "طريق القمة" -> "قسم المستويات والترتيب."
+                                    "السحب" -> "قسم السحب جاهز للربط."
                                     "الشحن" -> "واجهة تجريبية للشحن."
-                                    else -> "زر LUDO جاهز للربط."
+                                    else -> "قسم الأمان جاهز للربط."
                                 }
                                 openNotice(title, message)
-                            },
-                            onOpenAppSettings = openAppSettings
+                            }
                         )
                     }
                     "الغرف" -> {
@@ -303,7 +305,7 @@ private fun SahraBackground() {
 }
 
 // ----------------------------------------------------
-// العنوان
+// العنوان — الكلمة محفوظة في مكانها لكن مخفية
 // ----------------------------------------------------
 
 @Composable
@@ -312,7 +314,7 @@ private fun SahraHeader() {
         modifier = Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("SahraChat", color = Color.White, fontSize = 25.sp,
+        Text("SahraChat", color = Color.Transparent, fontSize = 25.sp,
             fontWeight = FontWeight.ExtraBold, maxLines = 1)
         Spacer(Modifier.weight(1f))
     }
@@ -324,121 +326,35 @@ private fun SahraHeader() {
 
 @Composable
 private fun SahraHome(
-    onRooms: () -> Unit,
     onMatch: () -> Unit,
-    onQuickAction: (String) -> Unit,
-    onOpenAppSettings: () -> Unit
+    onQuickAction: (String) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(9.dp, 5.dp, 9.dp, 12.dp),
         verticalArrangement = Arrangement.spacedBy(11.dp)
     ) {
-        item { SahraFeatureCards(onRooms = onRooms, onMatch = onMatch) }
+        item { SahraUnifiedCard(onClick = onMatch) }
         item { SahraQuickActions(onAction = onQuickAction) }
-        item {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-            ) {
-                Text("المستخدمين الموصى بهم", color = SahraColors.Text,
-                    fontSize = 19.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Start,
-                    modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
-                Text("يجب تفعيل الموقع", color = Color.White, fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(6.dp))
-                Text("لأفضل تجربة، فعّل خدمة الموقع من إعدادات التطبيق.",
-                    color = SahraColors.Muted, fontSize = 13.sp, lineHeight = 20.sp,
-                    modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(14.dp))
-                Box(
-                    modifier = Modifier.height(46.dp).clip(RoundedCornerShape(14.dp))
-                        .background(Brush.horizontalGradient(listOf(Color(0xFF6A4CFF), Color(0xFFB14CFF))))
-                        .clickable(onClick = onOpenAppSettings).padding(horizontal = 20.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Settings, null, tint = Color.White,
-                            modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("فتح إعدادات التطبيق", color = Color.White, fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
+        item { SahraCryptoSection() }
     }
 }
 
 // ----------------------------------------------------
-// بطاقتان: غرف + توافق
+// البطاقة الموحدة — لون واحد وبدون أي نص أو أيقونة
 // ----------------------------------------------------
 
 @Composable
-private fun SahraFeatureCards(onRooms: () -> Unit, onMatch: () -> Unit) {
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            Box(
-                modifier = Modifier.weight(1f).height(108.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(Brush.linearGradient(listOf(
-                        Color(0xFF137AE5), Color(0xFF124BB1), Color(0xFF101140))))
-                    .border(1.dp, Color(0xFF76C8FF).copy(alpha = 0.42f), RoundedCornerShape(15.dp))
-                    .clickable(onClick = onRooms)
-            ) {
-                BannerStars()
-                RemoteImage("banner_rooms",
-                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 3.dp)
-                        .size(91.dp).clip(RoundedCornerShape(19.dp)),
-                    contentScale = ContentScale.Fit)
-                Column(
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Text("الغرف الصوتية", color = Color.White, fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold, maxLines = 1)
-                    Spacer(Modifier.height(26.dp))
-                    SahraPill("انضمام", Color(0xFF081443), onClick = onRooms)
-                }
-            }
-            Box(
-                modifier = Modifier.weight(1f).height(108.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(Brush.linearGradient(listOf(
-                        Color(0xFF9027DD), Color(0xFF6420AD), Color(0xFF201046))))
-                    .border(1.dp, Color(0xFFC87AFF).copy(alpha = 0.45f), RoundedCornerShape(15.dp))
-                    .clickable(onClick = onMatch)
-            ) {
-                BannerStars()
-                Box(
-                    modifier = Modifier.align(Alignment.CenterStart)
-                        .padding(start = 12.dp, top = 6.dp).width(66.dp).height(39.dp)
-                ) {
-                    RemoteImage("tatabk1",
-                        modifier = Modifier.align(Alignment.CenterStart).size(35.dp).clip(CircleShape),
-                        contentScale = ContentScale.Crop)
-                    RemoteImage("tatabk2",
-                        modifier = Modifier.align(Alignment.CenterEnd).size(35.dp).clip(CircleShape),
-                        contentScale = ContentScale.Crop)
-                }
-                Column(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 12.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Text("التوافق الصوتي", color = Color.White, fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold, maxLines = 1)
-                    Spacer(Modifier.height(4.dp))
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("2", color = SahraColors.Gold, fontSize = 12.sp)
-                            Text("مكالمة اليوم", color = Color(0xFFE9D6FF), fontSize = 12.sp)
-                        }
-                    }
-                }
-                SahraPill("اتصال", Color(0xFF251044), onClick = onMatch,
-                    modifier = Modifier.align(Alignment.BottomEnd)
-                        .padding(end = 12.dp, bottom = 12.dp))
-            }
-        }
+private fun SahraUnifiedCard(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxWidth().height(108.dp)
+            .clip(RoundedCornerShape(15.dp))
+            .background(Brush.linearGradient(listOf(
+                Color(0xFF9027DD), Color(0xFF6420AD), Color(0xFF201046))))
+            .border(1.dp, Color(0xFFC87AFF).copy(alpha = 0.45f), RoundedCornerShape(15.dp))
+            .clickable(onClick = onClick)
+    ) {
+        BannerStars()
     }
 }
 
@@ -458,7 +374,7 @@ private fun BannerStars() {
 }
 
 // ----------------------------------------------------
-// الأيقونات الأربع — بأسماء GitHub الصحيحة
+// الأيقونات الأربع — الأنشطة / السحب / الشحن / الأمان
 // ----------------------------------------------------
 
 @Composable
@@ -474,11 +390,11 @@ private fun SahraQuickActions(onAction: (String) -> Unit) {
                 onClick = { onAction("الأنشطة") }
             )
             SahraQuickTile(
-                title = "طريق القمة",
+                title = "السحب",
                 remoteIconName = "ic_action_road_top",
                 colors = listOf(Color(0xFF1B80BE), Color(0xFF123C70), Color(0xFF09132C)),
                 modifier = Modifier.weight(1f),
-                onClick = { onAction("طريق القمة") }
+                onClick = { onAction("السحب") }
             )
             SahraQuickTile(
                 title = "الشحن",
@@ -488,11 +404,11 @@ private fun SahraQuickActions(onAction: (String) -> Unit) {
                 onClick = { onAction("الشحن") }
             )
             SahraQuickTile(
-                title = "LUDO",
+                title = "الأمان",
                 remoteIconName = "icon_ludo",
                 colors = listOf(Color(0xFF20A98D), Color(0xFF086954), Color(0xFF072C32)),
                 modifier = Modifier.weight(1f),
-                onClick = { onAction("LUDO") }
+                onClick = { onAction("الأمان") }
             )
         }
     }
@@ -533,6 +449,145 @@ private fun SahraQuickTile(
                     .background(Color(0xFFFF4C5B), CircleShape)
             )
         }
+    }
+}
+
+// ----------------------------------------------------
+// قسم أحدث الأسعار العالمية — بنفس تصميم صفحة الأسعار
+// ----------------------------------------------------
+
+@Composable
+private fun SahraCryptoSection() {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 4.dp)
+    ) {
+        Text(
+            "أحدث الأسعار العالمية",
+            color = SahraColors.Text,
+            fontSize = 19.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.padding(start = 9.dp, top = 3.dp, bottom = 10.dp)
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(SahraColors.Card)
+                .border(1.dp, SahraColors.CardBorder, RoundedCornerShape(18.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            // رأس الجدول — مثل: العملة / تغير 24 ساعة / أحدث سعر
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("العملة", color = SahraColors.Muted, fontSize = 12.sp,
+                    modifier = Modifier.weight(1f))
+                Text("تغير 24 ساعة", color = SahraColors.Muted, fontSize = 12.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                Text("أحدث سعر", color = SahraColors.Muted, fontSize = 12.sp,
+                    textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+            }
+
+            cryptoCoins.forEachIndexed { index, coin ->
+                CryptoRow(coin)
+                if (index != cryptoCoins.lastIndex) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(1.dp)
+                            .background(SahraColors.CardBorder.copy(alpha = 0.7f))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CryptoRow(coin: CryptoCoin) {
+    val changeColor = if (coin.up) SahraColors.Up else SahraColors.Down
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // أيقونة العملة
+        Box(
+            modifier = Modifier.size(34.dp).clip(CircleShape)
+                .background(coin.color.copy(alpha = 0.16f))
+                .border(1.dp, coin.color.copy(alpha = 0.65f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(coin.symbol.take(1), color = coin.color,
+                fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.width(10.dp))
+
+        // اسم العملة
+        Text(coin.symbol, color = SahraColors.Text,
+            fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+
+        Spacer(Modifier.width(10.dp))
+
+        // الرسم البياني المصغر
+        CryptoSparkline(
+            up = coin.up,
+            seed = coin.symbol.hashCode(),
+            modifier = Modifier.weight(1f).height(32.dp)
+        )
+
+        Spacer(Modifier.width(10.dp))
+
+        // السعر + نسبة التغير
+        Column(horizontalAlignment = Alignment.End) {
+            Text(coin.price, color = SahraColors.Text,
+                fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Spacer(Modifier.height(2.dp))
+            Text(coin.change, color = changeColor,
+                fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun CryptoSparkline(up: Boolean, seed: Int, modifier: Modifier = Modifier) {
+    val lineColor = if (up) SahraColors.Up else SahraColors.Down
+
+    Canvas(modifier = modifier) {
+        val points = 12
+        val path = Path()
+        for (i in 0 until points) {
+            val x = size.width * i / (points - 1)
+            val wave = ((seed * (i + 3) * 37 + i * 53) % 100) / 100f
+            val trend = if (up) {
+                (1f - i.toFloat() / points) * 0.30f
+            } else {
+                (i.toFloat() / points) * 0.30f
+            }
+            val y = size.height * (0.18f + wave * 0.45f + trend)
+                .coerceIn(0.05f, 0.95f)
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+
+        // التعبئة المتدرجة أسفل الخط — مثل التصميم الأصلي
+        val fillPath = Path().apply {
+            addPath(path)
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+        drawPath(
+            path = fillPath,
+            brush = Brush.verticalGradient(
+                colors = listOf(lineColor.copy(alpha = 0.30f), Color.Transparent)
+            )
+        )
+        drawPath(
+            path = path,
+            color = lineColor,
+            style = Stroke(width = 2.dp.toPx())
+        )
     }
 }
 

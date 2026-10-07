@@ -100,18 +100,12 @@ private const val GH = "https://cdn.jsdelivr.net/gh/METAEGGAS/special-octo-goggl
 private fun ghIcon(name: String): String = "$GH$name.jpeg"
 
 private val cryptoCoins = listOf(
-    CryptoCoin("BTC", "$68,803.74", "↑ 2.37%", true, Color(0xFFF7931A),
-        iconUrl = "https://cdn-icons-png.flaticon.com/128/5968/5968260.png"),
-    CryptoCoin("ETH", "$2,018.92", "↓ 1.12%", false, Color(0xFF627EEA),
-        iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446160.png"),
-    CryptoCoin("BNB", "$585.40", "↑ 1.68%", true, Color(0xFFF3BA2F),
-        iconUrl = "https://cdn-icons-png.flaticon.com/128/12114/12114208.png"),
-    CryptoCoin("SOL", "$162.75", "↓ 0.84%", false, Color(0xFF9945FF),
-        iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446237.png"),
-    CryptoCoin("USDC", "$1.00", "↑ 0.01%", true, Color(0xFF2775CA),
-        iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446285.png"),
-    CryptoCoin("TRON", "$0.1620", "↓ 0.45%", false, Color(0xFFEB0029),
-        iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446268.png"),
+    CryptoCoin("BTC", "$68,803.74", "↑ 2.37%", true, Color(0xFFF7931A), iconUrl = "https://cdn-icons-png.flaticon.com/128/5968/5968260.png"),
+    CryptoCoin("ETH", "$2,018.92", "↓ 1.12%", false, Color(0xFF627EEA), iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446160.png"),
+    CryptoCoin("BNB", "$585.40", "↑ 1.68%", true, Color(0xFFF3BA2F), iconUrl = "https://cdn-icons-png.flaticon.com/128/12114/12114208.png"),
+    CryptoCoin("SOL", "$162.75", "↓ 0.84%", false, Color(0xFF9945FF), iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446237.png"),
+    CryptoCoin("USDC", "$1.00", "↑ 0.01%", true, Color(0xFF2775CA), iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446285.png"),
+    CryptoCoin("TRON", "$0.1620", "↓ 0.45%", false, Color(0xFFEB0029), iconUrl = "https://cdn-icons-png.flaticon.com/128/14446/14446268.png"),
     CryptoCoin("TREE", "$201.12", "↑ 2.20%", true, Color(0xFF2ECC71), iconUrl = ghIcon("TREE")),
     CryptoCoin("A2Z", "$255.10", "↓ 0.40%", false, Color(0xFF20A98D), iconUrl = ghIcon("A2Z")),
     CryptoCoin("TOWNS", "$236.11", "↑ 2.90%", true, Color(0xFF3D86F6), iconUrl = ghIcon("TOWNS")),
@@ -139,25 +133,19 @@ private val cryptoCoins = listOf(
 )
 
 class HomeActivity : ComponentActivity() {
-
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
-
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
         }
-
         setContent {
             SahraTheme {
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides LayoutDirection.Rtl
-                ) {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     SahraRoot()
                 }
             }
@@ -169,14 +157,10 @@ class HomeActivity : ComponentActivity() {
 private fun SahraTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = SahraColors.Purple,
-            secondary = SahraColors.Pink,
-            background = SahraColors.Background,
-            surface = SahraColors.Card,
-            onPrimary = Color.White,
-            onSecondary = Color.White,
-            onBackground = SahraColors.Text,
-            onSurface = SahraColors.Text
+            primary = SahraColors.Purple, secondary = SahraColors.Pink,
+            background = SahraColors.Background, surface = SahraColors.Card,
+            onPrimary = Color.White, onSecondary = Color.White,
+            onBackground = SahraColors.Text, onSurface = SahraColors.Text
         ),
         content = content
     )
@@ -185,7 +169,6 @@ private fun SahraTheme(content: @Composable () -> Unit) {
 @Composable
 private fun SahraRoot() {
     var showVoiceMatch by rememberSaveable { mutableStateOf(false) }
-
     if (showVoiceMatch) {
         VoiceMatchScreen(onBack = { showVoiceMatch = false })
     } else {
@@ -198,72 +181,43 @@ private fun SahraApp(onVoiceMatchClick: () -> Unit) {
     var selectedTab by rememberSaveable { mutableStateOf("الرئيسية") }
     var unreadMessages by rememberSaveable { mutableStateOf(0) }
     var notice by remember { mutableStateOf<SahraNotice?>(null) }
-
     val openNotice: (String, String) -> Unit = { title, message ->
         notice = SahraNotice(title, message)
     }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(SahraColors.Background)
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(SahraColors.Background)) {
         SahraBackground()
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-        ) {
+        Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             SahraHeader()
-
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (selectedTab) {
-                    "الرئيسية" -> {
-                        SahraHome(
-                            onMatch = onVoiceMatchClick,
-                            onQuickAction = { title ->
-                                val message = when (title) {
-                                    "الأنشطة" -> "قسم الأنشطة جاهز في الواجهة."
-                                    "السحب" -> "قسم السحب جاهز للربط."
-                                    "الشحن" -> "واجهة تجريبية للشحن."
-                                    else -> "قسم الأمان جاهز للربط."
-                                }
-                                openNotice(title, message)
+                    "الرئيسية" -> SahraHome(
+                        onMatch = onVoiceMatchClick,
+                        onQuickAction = { title ->
+                            val message = when (title) {
+                                "الأنشطة" -> "قسم الأنشطة جاهز في الواجهة."
+                                "السحب" -> "قسم السحب جاهز للربط."
+                                "الشحن" -> "واجهة تجريبية للشحن."
+                                else -> "قسم الأمان جاهز للربط."
                             }
-                        )
-                    }
-                    "الغرف" -> {
-                        SahraRoomsPage(
-                            onJoin = { room ->
-                                openNotice(room.name, "غرفة تجريبية لعرض التصميم.")
-                            }
-                        )
-                    }
-                    "يستكشف" -> {
-                        SahraPlaceholderPage("يستكشف", "قيد الإنشاء", "هذا القسم قيد الإنشاء حاليًا.")
-                    }
-                    "الرسائل" -> {
-                        SahraPlaceholderPage("الرسائل", "قيد الإنشاء", "قسم الرسائل قيد الإنشاء حاليًا.")
-                    }
-                    "أنا" -> {
-                        SahraProfilePage(
-                            onAction = { title ->
-                                openNotice(title, "القسم جاهز للربط ببيانات المستخدم.")
-                            }
-                        )
-                    }
+                            openNotice(title, message)
+                        }
+                    )
+                    "الغرف" -> SahraRoomsPage(onJoin = { room ->
+                        openNotice(room.name, "غرفة تجريبية لعرض التصميم.")
+                    })
+                    "يستكشف" -> SahraPlaceholderPage("يستكشف", "قيد الإنشاء", "هذا القسم قيد الإنشاء حاليًا.")
+                    "الرسائل" -> SahraPlaceholderPage("الرسائل", "قيد الإنشاء", "قسم الرسائل قيد الإنشاء حاليًا.")
+                    "أنا" -> SahraProfilePage(onAction = { title ->
+                        openNotice(title, "القسم جاهز للربط ببيانات المستخدم.")
+                    })
                 }
             }
-
             SahraBottomNavigation(
-                selectedTab = selectedTab,
-                unreadMessages = unreadMessages,
+                selectedTab = selectedTab, unreadMessages = unreadMessages,
                 onSelect = { tab -> selectedTab = tab }
             )
         }
     }
-
     notice?.let { current ->
         AlertDialog(
             onDismissRequest = { notice = null },
@@ -284,31 +238,21 @@ private fun SahraApp(onVoiceMatchClick: () -> Unit) {
 @Composable
 private fun SahraBackground() {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        drawRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(Color(0xFF0C1022), Color(0xFF040612), Color(0xFF02040D))
-            )
-        )
+        drawRect(brush = Brush.verticalGradient(
+            colors = listOf(Color(0xFF0C1022), Color(0xFF040612), Color(0xFF02040D))))
         val glowCenter = Offset(size.width * 0.45f, 0f)
         val glowRadius = size.width * 0.85f
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0xFF33457D).copy(alpha = 0.28f), Color.Transparent),
-                center = glowCenter,
-                radius = glowRadius
-            ),
-            center = glowCenter,
-            radius = glowRadius
-        )
+        drawCircle(brush = Brush.radialGradient(
+            colors = listOf(Color(0xFF33457D).copy(alpha = 0.28f), Color.Transparent),
+            center = glowCenter, radius = glowRadius),
+            center = glowCenter, radius = glowRadius)
     }
 }
 
 @Composable
 private fun SahraHeader() {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 18.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically) {
         Text("SahraChat", color = Color.Transparent, fontSize = 25.sp,
             fontWeight = FontWeight.ExtraBold, maxLines = 1)
         Spacer(Modifier.weight(1f))
@@ -316,15 +260,10 @@ private fun SahraHeader() {
 }
 
 @Composable
-private fun SahraHome(
-    onMatch: () -> Unit,
-    onQuickAction: (String) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+private fun SahraHome(onMatch: () -> Unit, onQuickAction: (String) -> Unit) {
+    LazyColumn(modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(9.dp, 5.dp, 9.dp, 12.dp),
-        verticalArrangement = Arrangement.spacedBy(11.dp)
-    ) {
+        verticalArrangement = Arrangement.spacedBy(11.dp)) {
         item { SahraUnifiedCard(onClick = onMatch) }
         item { SahraQuickActions(onAction = onQuickAction) }
         item { SahraCryptoSection() }
@@ -333,16 +272,12 @@ private fun SahraHome(
 
 @Composable
 private fun SahraUnifiedCard(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(108.dp)
-            .clip(RoundedCornerShape(15.dp))
-            .background(Brush.linearGradient(listOf(
-                Color(0xFF9027DD), Color(0xFF6420AD), Color(0xFF201046))))
-            .border(1.dp, Color(0xFFC87AFF).copy(alpha = 0.45f), RoundedCornerShape(15.dp))
-            .clickable(onClick = onClick)
-    ) {
-        BannerStars()
-    }
+    Box(modifier = Modifier.fillMaxWidth().height(108.dp)
+        .clip(RoundedCornerShape(15.dp))
+        .background(Brush.linearGradient(listOf(
+            Color(0xFF9027DD), Color(0xFF6420AD), Color(0xFF201046))))
+        .border(1.dp, Color(0xFFC87AFF).copy(alpha = 0.45f), RoundedCornerShape(15.dp))
+        .clickable(onClick = onClick)) { BannerStars() }
 }
 
 @Composable
@@ -351,11 +286,9 @@ private fun BannerStars() {
         repeat(16) { index ->
             val x = (((index * 37 + 17) % 100) / 100f) * size.width
             val y = (((index * 29 + 11) % 100) / 100f) * size.height
-            drawCircle(
-                color = Color.White.copy(alpha = if (index % 3 == 0) 0.19f else 0.08f),
+            drawCircle(color = Color.White.copy(alpha = if (index % 3 == 0) 0.19f else 0.08f),
                 radius = if (index % 4 == 0) 1.4.dp.toPx() else 0.7.dp.toPx(),
-                center = Offset(x, y)
-            )
+                center = Offset(x, y))
         }
     }
 }
@@ -364,120 +297,61 @@ private fun BannerStars() {
 private fun SahraQuickActions(onAction: (String) -> Unit) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SahraQuickTile(
-                title = "الأنشطة",
-                remoteIconName = "icon_activities",
-                notification = true,
-                modifier = Modifier.weight(1f),
-                onClick = { onAction("الأنشطة") }
-            )
-            SahraQuickTile(
-                title = "السحب",
-                remoteIconName = "ic_action_road_top",
-                modifier = Modifier.weight(1f),
-                onClick = { onAction("السحب") }
-            )
-            SahraQuickTile(
-                title = "الشحن",
-                remoteIconName = "icon_recharge",
-                modifier = Modifier.weight(1f),
-                onClick = { onAction("الشحن") }
-            )
-            SahraQuickTile(
-                title = "الأمان",
-                remoteIconName = "icon_ludo",
-                modifier = Modifier.weight(1f),
-                onClick = { onAction("الأمان") }
-            )
+            SahraQuickTile("الأنشطة", "icon_activities", true, Modifier.weight(1f)) { onAction("الأنشطة") }
+            SahraQuickTile("السحب", "ic_action_road_top", false, Modifier.weight(1f)) { onAction("السحب") }
+            SahraQuickTile("الشحن", "icon_recharge", false, Modifier.weight(1f)) { onAction("الشحن") }
+            SahraQuickTile("الأمان", "icon_ludo", false, Modifier.weight(1f)) { onAction("الأمان") }
         }
     }
 }
 
-// ⭐ الأيقونة فقط بدون مربع — وتاخد حجم المربع كامل
 @Composable
 private fun SahraQuickTile(
-    title: String,
-    remoteIconName: String,
-    modifier: Modifier = Modifier,
-    notification: Boolean = false,
-    onClick: () -> Unit
+    title: String, remoteIconName: String, notification: Boolean,
+    modifier: Modifier = Modifier, onClick: () -> Unit
 ) {
-    Box(
-        modifier = modifier.height(87.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        RemoteImage(
-            name = remoteIconName,
-            contentDescription = title,
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(onClick = onClick),
-            contentScale = ContentScale.Fit
-        )
-        if (notification) {
-            Box(
-                modifier = Modifier.align(Alignment.TopStart)
-                    .padding(start = 4.dp, top = 1.dp).size(10.dp)
-                    .background(Color(0xFFFF4C5B), CircleShape)
-            )
+    Column(modifier = modifier.clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(modifier = Modifier.size(72.dp)) {
+            AsyncImage(model = "$GH$remoteIconName.jpeg",
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit)
+            if (notification) {
+                Box(modifier = Modifier.align(Alignment.TopEnd).size(10.dp)
+                    .background(Color(0xFFFF4C5B), CircleShape))
+            }
         }
+        Spacer(Modifier.height(6.dp))
+        Text(title, color = Color.White, fontSize = 13.sp,
+            fontWeight = FontWeight.Medium, maxLines = 1, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 private fun SahraCryptoSection() {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 4.dp)
-    ) {
-        Text(
-            "أحدث الأسعار العالمية",
-            color = SahraColors.Text,
-            fontSize = 19.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.padding(start = 9.dp, top = 3.dp, bottom = 10.dp)
-        )
-
-        Column(
-            modifier = Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(SahraColors.Card)
-                .border(1.dp, SahraColors.CardBorder, RoundedCornerShape(18.dp))
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "العملة",
-                    color = Color(0xFF8BA2C2),
-                    fontSize = 12.5.sp,
-                    modifier = Modifier.padding(start = 45.dp).weight(1f)
-                )
-                Text(
-                    "تغير 24 ساعة",
-                    color = Color(0xFF8BA2C2),
-                    fontSize = 12.5.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    "أحدث سعر",
-                    color = Color(0xFF8BA2C2),
-                    fontSize = 12.5.sp,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.width(88.dp)
-                )
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 4.dp)) {
+        Text("أحدث الأسعار العالمية", color = SahraColors.Text, fontSize = 19.sp,
+            fontWeight = FontWeight.Bold, textAlign = TextAlign.Start,
+            modifier = Modifier.padding(start = 9.dp, top = 3.dp, bottom = 10.dp))
+        Column(modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp)).background(SahraColors.Card)
+            .border(1.dp, SahraColors.CardBorder, RoundedCornerShape(18.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 14.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("العملة", color = Color(0xFF8BA2C2), fontSize = 12.5.sp,
+                    modifier = Modifier.padding(start = 45.dp).weight(1f))
+                Text("تغير 24 ساعة", color = Color(0xFF8BA2C2), fontSize = 12.5.sp,
+                    textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                Text("أحدث سعر", color = Color(0xFF8BA2C2), fontSize = 12.5.sp,
+                    textAlign = TextAlign.End, modifier = Modifier.width(88.dp))
             }
-
             cryptoCoins.forEachIndexed { index, coin ->
                 CryptoRow(coin)
                 if (index != cryptoCoins.lastIndex) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(1.dp)
-                            .background(Color(0xFF5082BE).copy(alpha = 0.12f))
-                    )
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp)
+                        .background(Color(0xFF5082BE).copy(alpha = 0.12f)))
                 }
             }
         }
@@ -487,66 +361,32 @@ private fun SahraCryptoSection() {
 @Composable
 private fun CryptoRow(coin: CryptoCoin) {
     val changeColor = if (coin.up) SahraColors.Up else SahraColors.Down
-
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(11.dp)
-        ) {
-            // أيقونة العملة — على اليسار
+            horizontalArrangement = Arrangement.spacedBy(11.dp)) {
             if (coin.iconUrl != null) {
-                AsyncImage(
-                    model = coin.iconUrl,
-                    contentDescription = coin.symbol,
-                    modifier = Modifier.size(34.dp),
-                    contentScale = ContentScale.Fit
-                )
+                AsyncImage(model = coin.iconUrl, contentDescription = coin.symbol,
+                    modifier = Modifier.size(34.dp), contentScale = ContentScale.Fit)
             } else {
-                Box(
-                    modifier = Modifier.size(34.dp).clip(CircleShape)
-                        .background(coin.color.copy(alpha = 0.16f))
-                        .border(1.dp, coin.color.copy(alpha = 0.65f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.size(34.dp).clip(CircleShape)
+                    .background(coin.color.copy(alpha = 0.16f))
+                    .border(1.dp, coin.color.copy(alpha = 0.65f), CircleShape),
+                    contentAlignment = Alignment.Center) {
                     Text(coin.symbol.take(1), color = coin.color,
                         fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
-
-            Text(
-                coin.symbol,
-                color = SahraColors.Text,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-
-            CryptoSparkline(
-                up = coin.up,
-                seed = coin.symbol.hashCode(),
-                modifier = Modifier.weight(1f).height(34.dp)
-            )
-
-            Column(
-                modifier = Modifier.width(88.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                Text(
-                    coin.price,
-                    color = SahraColors.Text,
-                    fontSize = 15.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
+            Text(coin.symbol, color = SahraColors.Text, fontSize = 15.sp,
+                fontWeight = FontWeight.Bold, maxLines = 1)
+            CryptoSparkline(up = coin.up, seed = coin.symbol.hashCode(),
+                modifier = Modifier.weight(1f).height(34.dp))
+            Column(modifier = Modifier.width(88.dp), horizontalAlignment = Alignment.End) {
+                Text(coin.price, color = SahraColors.Text, fontSize = 15.5.sp,
+                    fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    coin.change,
-                    color = changeColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
+                Text(coin.change, color = changeColor, fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1)
             }
         }
     }
@@ -555,119 +395,63 @@ private fun CryptoRow(coin: CryptoCoin) {
 @Composable
 private fun CryptoSparkline(up: Boolean, seed: Int, modifier: Modifier = Modifier) {
     val lineColor = if (up) SahraColors.Up else SahraColors.Down
-
     Canvas(modifier = modifier) {
         val points = 12
         val path = Path()
         for (i in 0 until points) {
             val x = size.width * i / (points - 1)
             val wave = ((seed * (i + 3) * 37 + i * 53) % 100) / 100f
-            val trend = if (up) {
-                (1f - i.toFloat() / points) * 0.30f
-            } else {
-                (i.toFloat() / points) * 0.30f
-            }
-            val y = size.height * (0.18f + wave * 0.45f + trend)
-                .coerceIn(0.05f, 0.95f)
+            val trend = if (up) (1f - i.toFloat() / points) * 0.30f
+                        else (i.toFloat() / points) * 0.30f
+            val y = size.height * (0.18f + wave * 0.45f + trend).coerceIn(0.05f, 0.95f)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-
         val fillPath = Path().apply {
-            addPath(path)
-            lineTo(size.width, size.height)
-            lineTo(0f, size.height)
-            close()
+            addPath(path); lineTo(size.width, size.height)
+            lineTo(0f, size.height); close()
         }
-        drawPath(
-            path = fillPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(lineColor.copy(alpha = 0.30f), Color.Transparent)
-            )
-        )
-        drawPath(
-            path = path,
-            color = lineColor,
-            style = Stroke(width = 2.dp.toPx())
-        )
+        drawPath(path = fillPath,
+            brush = Brush.verticalGradient(colors = listOf(
+                lineColor.copy(alpha = 0.30f), Color.Transparent)))
+        drawPath(path = path, color = lineColor, style = Stroke(width = 2.dp.toPx()))
     }
 }
 
 @Composable
 private fun VoiceMatchScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-
     val recordAudioLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            Toast.makeText(context, "تم تفعيل الميكروفون ✅", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(context, "لتشغيل المكالمة نحتاج إذن الميكروفون", Toast.LENGTH_LONG).show()
-        }
+        if (granted) Toast.makeText(context, "تم تفعيل الميكروفون ✅", Toast.LENGTH_SHORT).show()
+        else Toast.makeText(context, "لتشغيل المكالمة نحتاج إذن الميكروفون", Toast.LENGTH_LONG).show()
     }
-
     val requestMic: () -> Unit = {
         val permission = Manifest.permission.RECORD_AUDIO
-        val granted = ContextCompat.checkSelfPermission(
-            context, permission
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            recordAudioLauncher.launch(permission)
-        }
+        val granted = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        if (!granted) recordAudioLauncher.launch(permission)
     }
-
-    LaunchedEffect(Unit) {
-        requestMic()
-    }
-
-    Box(
-        modifier = Modifier.fillMaxSize().background(
-            Brush.verticalGradient(colors = listOf(
-                VoiceColors.BackgroundTop,
-                VoiceColors.BackgroundMid,
-                VoiceColors.BackgroundBottom
-            ))
-        )
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
-        ) {
+    LaunchedEffect(Unit) { requestMic() }
+    Box(modifier = Modifier.fillMaxSize().background(
+        Brush.verticalGradient(colors = listOf(
+            VoiceColors.BackgroundTop, VoiceColors.BackgroundMid, VoiceColors.BackgroundBottom)))) {
+        Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             VoiceTopBar(onBack = onBack)
-
             Spacer(Modifier.height(14.dp))
-
             VoicePreCallsCard()
-
             Spacer(Modifier.height(50.dp))
-
-            Box(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = requestMic),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().clickable(onClick = requestMic),
+                contentAlignment = Alignment.Center) {
                 PlanetaryIcon(modifier = Modifier.size(210.dp))
             }
-
             Spacer(Modifier.height(28.dp))
-
-            Text(
-                "جار البحث",
-                color = VoiceColors.TextWhite,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-
+            Text("جار البحث", color = VoiceColors.TextWhite, fontSize = 21.sp,
+                fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(10.dp))
-
-            Text(
-                "أرسل هدية لفتح مكالمات غير محدودة",
-                color = VoiceColors.TextMuted,
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp)
-            )
-
+            Text("أرسل هدية لفتح مكالمات غير محدودة", color = VoiceColors.TextMuted,
+                fontSize = 14.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp))
             Spacer(Modifier.weight(1f))
         }
     }
@@ -675,14 +459,10 @@ private fun VoiceMatchScreen(onBack: () -> Unit) {
 
 @Composable
 private fun VoiceTopBar(onBack: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onBack),
-            contentAlignment = Alignment.Center
-        ) {
+    Row(modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onBack),
+            contentAlignment = Alignment.Center) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع",
                 tint = VoiceColors.TextWhite, modifier = Modifier.size(24.dp))
         }
@@ -696,12 +476,9 @@ private fun VoiceTopBar(onBack: () -> Unit) {
 
 @Composable
 private fun VoicePreCallsCard() {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(56.dp)
-            .clip(RoundedCornerShape(14.dp)).background(VoiceColors.CardGray)
-            .padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(56.dp)
+        .clip(RoundedCornerShape(14.dp)).background(VoiceColors.CardGray)
+        .padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("المكالمات المتبقية: 2", color = VoiceColors.TextWhite,
             fontSize = 15.sp, fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f), textAlign = TextAlign.Right)
@@ -714,75 +491,47 @@ private fun PlanetaryIcon(modifier: Modifier = Modifier) {
         val cx = size.width / 2f
         val cy = size.height / 2f
         val planetRadius = size.minDimension * 0.28f
-
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0x5564B5F6), Color.Transparent),
-                center = Offset(cx, cy), radius = planetRadius * 2.2f
-            ),
-            radius = planetRadius * 2.2f, center = Offset(cx, cy)
-        )
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0xFF8BC5FF), Color(0xFF5A8FEB), Color(0xFF2E4FB0)),
-                center = Offset(cx - planetRadius * 0.35f, cy - planetRadius * 0.35f),
-                radius = planetRadius * 1.6f
-            ),
-            radius = planetRadius, center = Offset(cx, cy)
-        )
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0x99A661FF), Color.Transparent),
-                center = Offset(cx + planetRadius * 0.25f, cy + planetRadius * 0.15f),
-                radius = planetRadius * 0.7f
-            ),
+        drawCircle(brush = Brush.radialGradient(
+            colors = listOf(Color(0x5564B5F6), Color.Transparent),
+            center = Offset(cx, cy), radius = planetRadius * 2.2f),
+            radius = planetRadius * 2.2f, center = Offset(cx, cy))
+        drawCircle(brush = Brush.radialGradient(
+            colors = listOf(Color(0xFF8BC5FF), Color(0xFF5A8FEB), Color(0xFF2E4FB0)),
+            center = Offset(cx - planetRadius * 0.35f, cy - planetRadius * 0.35f),
+            radius = planetRadius * 1.6f),
+            radius = planetRadius, center = Offset(cx, cy))
+        drawCircle(brush = Brush.radialGradient(
+            colors = listOf(Color(0x99A661FF), Color.Transparent),
+            center = Offset(cx + planetRadius * 0.25f, cy + planetRadius * 0.15f),
+            radius = planetRadius * 0.7f),
             radius = planetRadius * 0.7f,
-            center = Offset(cx + planetRadius * 0.25f, cy + planetRadius * 0.15f)
-        )
+            center = Offset(cx + planetRadius * 0.25f, cy + planetRadius * 0.15f))
         val backRing = Path().apply {
-            addOval(Rect(
-                cx - planetRadius * 1.75f, cy - planetRadius * 0.52f,
-                cx + planetRadius * 1.75f, cy + planetRadius * 0.52f
-            ))
+            addOval(Rect(cx - planetRadius * 1.75f, cy - planetRadius * 0.52f,
+                cx + planetRadius * 1.75f, cy + planetRadius * 0.52f))
         }
         drawPath(backRing, Color(0x55A0B0FF), style = Stroke(width = planetRadius * 0.05f))
-
         val ringPath = Path().apply {
-            addOval(Rect(
-                cx - planetRadius * 1.6f, cy - planetRadius * 0.42f,
-                cx + planetRadius * 1.6f, cy + planetRadius * 0.42f
-            ))
+            addOval(Rect(cx - planetRadius * 1.6f, cy - planetRadius * 0.42f,
+                cx + planetRadius * 1.6f, cy + planetRadius * 0.42f))
         }
         drawPath(ringPath, Color(0xFFE0E7FF), style = Stroke(width = planetRadius * 0.10f))
-
         val arcPath = Path().apply {
             moveTo(cx - planetRadius * 0.55f, cy + planetRadius * 0.15f)
-            quadraticBezierTo(
-                cx, cy - planetRadius * 0.6f,
-                cx + planetRadius * 0.55f, cy - planetRadius * 0.1f
-            )
+            quadraticBezierTo(cx, cy - planetRadius * 0.6f,
+                cx + planetRadius * 0.55f, cy - planetRadius * 0.1f)
         }
         drawPath(arcPath, Color.White, style = Stroke(width = planetRadius * 0.13f))
-
-        drawStar(
-            center = Offset(cx - planetRadius * 1.35f, cy - planetRadius * 1.1f),
-            outerRadius = planetRadius * 0.18f, color = Color(0xFFCDA9FF)
-        )
-        drawStar(
-            center = Offset(cx + planetRadius * 1.15f, cy + planetRadius * 0.85f),
-            outerRadius = planetRadius * 0.14f, color = Color(0xFF8FB5FF)
-        )
-        drawLine(
-            color = Color(0x99FFFFFF),
+        drawStar(center = Offset(cx - planetRadius * 1.35f, cy - planetRadius * 1.1f),
+            outerRadius = planetRadius * 0.18f, color = Color(0xFFCDA9FF))
+        drawStar(center = Offset(cx + planetRadius * 1.15f, cy + planetRadius * 0.85f),
+            outerRadius = planetRadius * 0.14f, color = Color(0xFF8FB5FF))
+        drawLine(color = Color(0x99FFFFFF),
             start = Offset(cx + planetRadius * 1.05f, cy - planetRadius * 1.2f),
             end = Offset(cx + planetRadius * 1.35f, cy - planetRadius * 0.85f),
-            strokeWidth = planetRadius * 0.07f
-        )
-        drawCircle(
-            color = Color(0xFF3D5A8C),
-            radius = planetRadius * 0.14f,
-            center = Offset(cx - planetRadius * 1.25f, cy + planetRadius * 0.75f)
-        )
+            strokeWidth = planetRadius * 0.07f)
+        drawCircle(color = Color(0xFF3D5A8C), radius = planetRadius * 0.14f,
+            center = Offset(cx - planetRadius * 1.25f, cy + planetRadius * 0.75f))
     }
 }
 
@@ -802,22 +551,18 @@ private fun DrawScope.drawStar(center: Offset, outerRadius: Float, color: Color)
 
 @Composable
 private fun SahraRoomsPage(onJoin: (SahraRoom) -> Unit) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+    LazyColumn(modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SahraPageTitle("الغرف الصوتية", "غرف تجريبية لمعاينة التصميم") }
         items(sahraRooms, key = { it.id }) { room ->
             SahraPanel {
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(
-                        modifier = Modifier.size(62.dp).clip(RoundedCornerShape(16.dp))
-                            .background(Brush.linearGradient(listOf(
-                                room.color, room.color.copy(alpha = 0.5f)))),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.size(62.dp).clip(RoundedCornerShape(16.dp))
+                        .background(Brush.linearGradient(listOf(
+                            room.color, room.color.copy(alpha = 0.5f)))),
+                        contentAlignment = Alignment.Center) {
                         Text(room.name.take(1), color = Color.White,
                             fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     }
@@ -837,17 +582,13 @@ private fun SahraRoomsPage(onJoin: (SahraRoom) -> Unit) {
 
 @Composable
 private fun SahraPlaceholderPage(title: String, subtitle: String, message: String) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier.size(90.dp).clip(CircleShape)
-                .background(SahraColors.Purple.copy(alpha = 0.15f))
-                .border(2.dp, SahraColors.Purple, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
+        verticalArrangement = Arrangement.Center) {
+        Box(modifier = Modifier.size(90.dp).clip(CircleShape)
+            .background(SahraColors.Purple.copy(alpha = 0.15f))
+            .border(2.dp, SahraColors.Purple, CircleShape),
+            contentAlignment = Alignment.Center) {
             Icon(Icons.Default.Settings, null, tint = SahraColors.Purple,
                 modifier = Modifier.size(40.dp))
         }
@@ -863,11 +604,9 @@ private fun SahraPlaceholderPage(title: String, subtitle: String, message: Strin
 
 @Composable
 private fun SahraProfilePage(onAction: (String) -> Unit) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+    LazyColumn(modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SahraPageTitle("أنا", "معاينة الملف الشخصي") }
         item {
             SahraPanel {
@@ -906,11 +645,9 @@ private fun SahraProfilePage(onAction: (String) -> Unit) {
 
 @Composable
 private fun SahraProfileStat(title: String, value: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.clip(RoundedCornerShape(14.dp))
-            .background(SahraColors.Card).padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    Column(modifier = modifier.clip(RoundedCornerShape(14.dp))
+        .background(SahraColors.Card).padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, color = SahraColors.Pink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(5.dp))
         Text(title, color = SahraColors.Muted, fontSize = 12.sp)
@@ -928,13 +665,10 @@ private fun SahraPageTitle(title: String, subtitle: String) {
 
 @Composable
 private fun SahraPanel(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-            .background(SahraColors.Card)
-            .border(1.dp, SahraColors.CardBorder, RoundedCornerShape(18.dp))
-            .padding(16.dp),
-        content = content
-    )
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+        .background(SahraColors.Card)
+        .border(1.dp, SahraColors.CardBorder, RoundedCornerShape(18.dp))
+        .padding(16.dp), content = content)
 }
 
 @Composable
@@ -943,11 +677,9 @@ private fun ProgrammaticAvatar(
     ring: Color = SahraColors.Purple,
     fill: Color = Color(0xFF181529)
 ) {
-    Box(
-        modifier = modifier.clip(CircleShape).background(fill)
-            .border(2.dp, ring, CircleShape).padding(3.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = modifier.clip(CircleShape).background(fill)
+        .border(2.dp, ring, CircleShape).padding(3.dp),
+        contentAlignment = Alignment.Center) {
         Icon(Icons.Default.Person, null, tint = ring.copy(alpha = 0.75f),
             modifier = Modifier.fillMaxSize().padding(4.dp))
     }
@@ -955,22 +687,16 @@ private fun ProgrammaticAvatar(
 
 @Composable
 private fun SahraBottomNavigation(
-    selectedTab: String,
-    unreadMessages: Int,
-    onSelect: (String) -> Unit
+    selectedTab: String, unreadMessages: Int, onSelect: (String) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().background(SahraColors.Navigation)
-            .padding(top = 5.dp, bottom = 5.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().background(SahraColors.Navigation)
+        .padding(top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically) {
         sahraTabs.forEach { tab ->
             val selected = tab.title == selectedTab
-            Column(
-                modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
-                    .clickable { onSelect(tab.title) }.padding(vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                .clickable { onSelect(tab.title) }.padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(modifier = Modifier.size(39.dp), contentAlignment = Alignment.Center) {
                     if (selected) {
                         Box(modifier = Modifier.size(38.dp).background(
@@ -978,19 +704,14 @@ private fun SahraBottomNavigation(
                                 SahraColors.Purple.copy(alpha = 0.35f), Color.Transparent)),
                             shape = CircleShape))
                     }
-                    RemoteImage(
-                        name = tab.remoteName,
-                        contentDescription = tab.title,
+                    RemoteImage(name = tab.remoteName, contentDescription = tab.title,
                         modifier = Modifier.size(if (selected) 35.dp else 31.dp)
                             .clip(RoundedCornerShape(9.dp)),
-                        contentScale = ContentScale.Fit
-                    )
+                        contentScale = ContentScale.Fit)
                     if (tab.title == "الرسائل" && unreadMessages > 0) {
-                        Box(
-                            modifier = Modifier.align(Alignment.TopEnd).size(18.dp)
-                                .background(Color(0xFFFF4A58), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(modifier = Modifier.align(Alignment.TopEnd).size(18.dp)
+                            .background(Color(0xFFFF4A58), CircleShape),
+                            contentAlignment = Alignment.Center) {
                             Text(unreadMessages.toString(), color = Color.White, fontSize = 11.sp)
                         }
                     }
@@ -1008,32 +729,12 @@ private fun SahraBottomNavigation(
 
 @Composable
 private fun SahraPill(
-    text: String,
-    background: Color,
-    onClick: () -> Unit,
+    text: String, background: Color, onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier.clip(RoundedCornerShape(30.dp)).background(background)
-            .clickable(onClick = onClick).padding(horizontal = 13.dp, vertical = 5.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = modifier.clip(RoundedCornerShape(30.dp)).background(background)
+        .clickable(onClick = onClick).padding(horizontal = 13.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center) {
         Text(text, color = Color.White, fontSize = 13.sp, maxLines = 1)
     }
-}
-
-// ⭐ تحميل الصور من GitHub CDN
-@Composable
-private fun RemoteImage(
-    name: String,
-    modifier: Modifier = Modifier,
-    contentDescription: String? = null,
-    contentScale: ContentScale = ContentScale.Fit
-) {
-    AsyncImage(
-        model = "$GH$name.png",
-        contentDescription = contentDescription,
-        modifier = modifier,
-        contentScale = contentScale
-    )
 }

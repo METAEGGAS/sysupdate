@@ -367,7 +367,6 @@ private fun SahraQuickActions(onAction: (String) -> Unit) {
             SahraQuickTile(
                 title = "الأنشطة",
                 remoteIconName = "icon_activities",
-                colors = listOf(Color(0xFF754219), Color(0xFF291C16), Color(0xFF101019)),
                 notification = true,
                 modifier = Modifier.weight(1f),
                 onClick = { onAction("الأنشطة") }
@@ -375,21 +374,18 @@ private fun SahraQuickActions(onAction: (String) -> Unit) {
             SahraQuickTile(
                 title = "السحب",
                 remoteIconName = "ic_action_road_top",
-                colors = listOf(Color(0xFF1B80BE), Color(0xFF123C70), Color(0xFF09132C)),
                 modifier = Modifier.weight(1f),
                 onClick = { onAction("السحب") }
             )
             SahraQuickTile(
                 title = "الشحن",
                 remoteIconName = "icon_recharge",
-                colors = listOf(Color(0xFF9538EB), Color(0xFF5522A3), Color(0xFF201340)),
                 modifier = Modifier.weight(1f),
                 onClick = { onAction("الشحن") }
             )
             SahraQuickTile(
                 title = "الأمان",
                 remoteIconName = "icon_ludo",
-                colors = listOf(Color(0xFF20A98D), Color(0xFF086954), Color(0xFF072C32)),
                 modifier = Modifier.weight(1f),
                 onClick = { onAction("الأمان") }
             )
@@ -397,32 +393,25 @@ private fun SahraQuickActions(onAction: (String) -> Unit) {
     }
 }
 
+// ⭐ الأيقونة فقط بدون مربع — وتاخد حجم المربع كامل
 @Composable
 private fun SahraQuickTile(
     title: String,
     remoteIconName: String,
-    colors: List<Color>,
     modifier: Modifier = Modifier,
     notification: Boolean = false,
     onClick: () -> Unit
 ) {
-    Box(modifier = modifier.height(87.dp)) {
-        Column(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(72.dp)
-                .clip(RoundedCornerShape(13.dp))
-                .background(Brush.verticalGradient(colors))
-                .border(1.dp, colors.first().copy(alpha = 0.75f), RoundedCornerShape(13.dp))
-                .clickable(onClick = onClick),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Bottom
-        ) {
-            Text(title, color = Color.White, fontSize = 13.sp, maxLines = 1,
-                modifier = Modifier.padding(bottom = 12.dp))
-        }
+    Box(
+        modifier = modifier.height(87.dp),
+        contentAlignment = Alignment.Center
+    ) {
         RemoteImage(
             name = remoteIconName,
-            modifier = Modifier.align(Alignment.TopCenter).size(57.dp)
-                .clip(RoundedCornerShape(15.dp)).clickable(onClick = onClick),
+            contentDescription = title,
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = onClick),
             contentScale = ContentScale.Fit
         )
         if (notification) {
@@ -1031,4 +1020,20 @@ private fun SahraPill(
     ) {
         Text(text, color = Color.White, fontSize = 13.sp, maxLines = 1)
     }
+}
+
+// ⭐ تحميل الصور من GitHub CDN
+@Composable
+private fun RemoteImage(
+    name: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    contentScale: ContentScale = ContentScale.Fit
+) {
+    AsyncImage(
+        model = "$GH$name.png",
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = contentScale
+    )
 }
